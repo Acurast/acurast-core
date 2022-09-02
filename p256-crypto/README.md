@@ -10,7 +10,7 @@ Add the following dependency to your Cargo manifest:
 
 ```toml
 [dependencies]
-acurast-p256-crypto = { git = "https://github.com/Acurast/acurast.git", tag = "0.0.1" }
+acurast-p256-crypto = { git = "https://github.com/Acurast/acurast-core.git" }
 ```
 
 ## Integration

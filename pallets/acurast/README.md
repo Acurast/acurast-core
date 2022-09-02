@@ -44,7 +44,7 @@ Add the following dependency to your Cargo manifest:
 
 ```toml
 [dependencies]
-pallet-acurast = { git = "https://github.com/Acurast/acurast.git", tag = "0.0.1" }
+pallet-acurast = { git = "https://github.com/Acurast/acurast-core.git" }
 ```
 
 ## Parachain Integration
