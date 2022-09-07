@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod attestation;
 pub use pallet::*;
 
 #[frame_support::pallet]
@@ -17,6 +18,8 @@ pub mod pallet {
 	use scale_info::TypeInfo;
 	use sp_std::prelude::*;
 
+	use crate::attestation::asn::KeyDescription;
+
 	/// This trait provides the interface for a fulfillment router.
 	pub trait FulfillmentRouter<T: Config> {
 		fn received_fulfillment(
@@ -33,6 +36,8 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Extra structure to include in the registration of a job.
 		type RegistrationExtra: Parameter + Member + MaxEncodedLen;
+		// /// Extra structure to store along with a successful attestation.
+		// type AttestationExtra: Parameter + Member + MaxEncodedLen;
 		/// The fulfillment router to route a job fulfillment to its final destination.
 		type FulfillmentRouter: FulfillmentRouter<Self>;
 		/// The max length of the allowed sources list for a registration.
@@ -269,6 +274,38 @@ pub mod pallet {
 			));
 			Ok(info)
 		}
+
+		// /// Submits an attestation and stores its relevant contents by providing an [Attestation]. If an attestation with the same serial number was previously registered, it will be overwritten.
+		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		// pub fn submitAttestation(
+		// 	origin: OriginFor<T>,
+		// 	attestation: Attestation<T::RegistrationExtra>,
+		// ) -> DispatchResultWithPostInfo {
+		// 	let who = ensure_signed(origin)?;
+		// 	let script_len = (&attestation).script.len() as u32;
+		// 	ensure!(
+		// 		script_len == SCRIPT_LENGTH && (&attestation).script.starts_with(SCRIPT_PREFIX),
+		// 		Error::<T>::InvalidScriptValue
+		// 	);
+		// 	let allowed_sources_len = (&attestation)
+		// 		.allowed_sources
+		// 		.as_ref()
+		// 		.map(|sources| sources.len())
+		// 		.unwrap_or(0);
+		// 	let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
+		// 	ensure!(allowed_sources_len > 0, Error::<T>::TooFewAllowedSources);
+		// 	ensure!(
+		// 		allowed_sources_len <= max_allowed_sources_len,
+		// 		Error::<T>::TooManyAllowedSources
+		// 	);
+		// 	<StoredAttestation<T>>::insert(
+		// 		who.clone(),
+		// 		(&attestation).script.clone(),
+		// 		attestation.clone(),
+		// 	);
+		// 	Self::deposit_event(Event::AttestationStored(attestation, who));
+		// 	Ok(().into())
+		// }
 	}
 
 	fn ensure_source_allowed<T: Config>(
@@ -287,4 +324,48 @@ pub mod pallet {
 			})
 			.unwrap_or(Ok(()))
 	}
+
+	// /// The storage for [Attestation]s. They are stored by [AccountId] and [Script].
+	// #[pallet::storage]
+	// #[pallet::getter(fn stored_attestation)]
+	// pub type StoredAttestation<T: Config> = StorageDoubleMap<
+	// 	_,
+	// 	Blake2_128Concat,
+	// 	T::AccountId,
+	// 	Blake2_128Concat,
+	// 	BigUint,
+	// 	Attestation<T::AttestationExtra>,
+	// >;
+
+	// const CHAIN_MAX_LENGTH: u32 = 5;
+	// const CERT_MAX_LENGTH: u32 = 3000;
+
+	// /// Type representing the utf8 bytes of a string containing the value of an ipfs url.
+	// /// The ipfs url is expected to point to a script.
+	// pub type CertificateInput = BoundedVec<u8, ConstU32<CERT_MAX_LENGTH>>;
+	// pub type CertificateChainInput = BoundedVec<CertificateInput, ConstU32<CHAIN_MAX_LENGTH>>;
+
+	// /// Structure representing a submitted attestation chain.
+	// #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+	// pub struct AttestationChain<T>
+	// where
+	// 	T: Parameter + Member + MaxEncodedLen,
+	// {
+	// 	/// An ordered array of [CertificateInput]s describing a valid chain from known root certificate to attestation certificate.
+	// 	pub certificate_chain: CertificateChainInput,
+	// 	/// Extra parameters. This type can be configured through [Config::AttestationExtra].
+	// 	pub extra: T,
+	// }
+
+	// /// Structure representing a stored attestation.
+	// #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+	// pub struct Attestation<T>
+	// where
+	// 	T: Parameter + Member + MaxEncodedLen,
+	// {
+	// 	/// An ordered array of [CertificateInput]s describing a valid chain from known root certificate to attestation certificate.
+	// 	pub certificate_chain: KeyDescription<'static>,
+	// 	/// Extra parameters. This type can be configured through [Config::AttestationExtra].
+	// 	pub extra: T,
+	// }
 }
