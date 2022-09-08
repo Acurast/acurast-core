@@ -5,7 +5,7 @@ use asn1::{
 };
 use sp_std::prelude::*;
 
-#[derive(Asn1Read, Asn1Write)]
+#[derive(Asn1Read, Asn1Write, Clone)]
 /// Represents the root structure of a [X.509 v3 certificate](https://www.rfc-editor.org/rfc/rfc5280#section-4.1)
 /// See how to map these to [asn1 structs](https://docs.rs/asn1/0.11.0/asn1/#structs)
 pub struct Certificate<'a> {
@@ -33,7 +33,7 @@ pub struct AlgorithmIdentifier<'a> {
     pub parameters: Option<Tlv<'a>>,
 }
 
-#[derive(Asn1Read, Asn1Write)]
+#[derive(Asn1Read, Asn1Write, Clone)]
 pub struct TBSCertificate<'a> {
     #[explicit(0)]
     #[default(1u64)]
@@ -74,13 +74,13 @@ pub struct AttributeTypeAndValue<'a> {
     pub value: Tlv<'a>,
 }
 
-#[derive(Asn1Read, Asn1Write)]
+#[derive(Asn1Read, Asn1Write, Clone)]
 pub struct Validity {
     pub not_before: Time,
     pub not_after: Time,
 }
 
-#[derive(Asn1Read, Asn1Write)]
+#[derive(Asn1Read, Asn1Write, Clone)]
 pub enum Time {
     UTCTime(asn1::UtcTime),
     GeneralizedTime(asn1::GeneralizedTime),
