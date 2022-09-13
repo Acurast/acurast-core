@@ -25,7 +25,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             from: T::AccountId,
             fulfillment: Fulfillment,
-            registration: Registration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
             requester: <T::Lookup as StaticLookup>::Target,
         ) -> DispatchResultWithPostInfo;
     }
@@ -40,6 +40,9 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
+        /// AccountIDs that are allowed to call update_certificate_revocation_list.
+        #[pallet::constant]
+        type AllowedRevocationListUpdate: Get<Vec<Self::AccountId>>;
     }
 
     #[pallet::pallet]
@@ -65,7 +68,7 @@ pub mod pallet {
 
     /// Structure representing a job registration.
     #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-    pub struct Registration<A, T>
+    pub struct JobRegistration<A, T>
     where
         A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
         T: Parameter + Member + MaxEncodedLen,
@@ -87,14 +90,23 @@ pub mod pallet {
         A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
     {
         /// The update operation
-        pub operation: AllowedSourcesUpdateOperation,
+        pub operation: ListUpdateOperation,
         /// The [AccountId] to add or remove.
         pub account_id: A,
     }
 
+    /// Structure used to updated the certificate recovation list.
+    #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+    pub struct CertificateRevocationListUpdate {
+        /// The update operation
+        pub operation: ListUpdateOperation,
+        /// The [AccountId] to add or remove.
+        pub cert_id: CertId,
+    }
+
     /// The allowed sources update operation.
     #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
-    pub enum AllowedSourcesUpdateOperation {
+    pub enum ListUpdateOperation {
         Add,
         Remove,
     }
@@ -108,30 +120,30 @@ pub mod pallet {
         T::AccountId,
         Blake2_128Concat,
         Script,
-        Registration<T::AccountId, T::RegistrationExtra>,
+        JobRegistration<T::AccountId, T::RegistrationExtra>,
     >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully stored. [registration, who]
-        RegistrationStored(
-            Registration<T::AccountId, T::RegistrationExtra>,
+        JobRegistrationStored(
+            JobRegistration<T::AccountId, T::RegistrationExtra>,
             T::AccountId,
         ),
         /// A registration was successfully removed. [registration, who]
-        RegistrationRemoved(Script, T::AccountId),
+        JobRegistrationRemoved(Script, T::AccountId),
         /// A fulfillment has been posted. [who, fulfillment, registration, receiver]
         ReceivedFulfillment(
             T::AccountId,
             Fulfillment,
-            Registration<T::AccountId, T::RegistrationExtra>,
+            JobRegistration<T::AccountId, T::RegistrationExtra>,
             T::AccountId,
         ),
         /// The allowed sources have been updated. [who, old_registration, allowed_sources, operation]
         AllowedSourcesUpdated(
             T::AccountId,
-            Registration<T::AccountId, T::RegistrationExtra>,
+            JobRegistration<T::AccountId, T::RegistrationExtra>,
             Vec<AllowedSourcesUpdate<T::AccountId>>,
         ),
         /// An attestation was successfully stored. [attestation, who]
@@ -141,7 +153,7 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {
         /// Fulfill was executed for a not registered job.
-        RegistrationNotFound,
+        JobRegistrationNotFound,
         /// The source of the fulfill is not allowed for the job.
         FulfillSourceNotAllowed,
         /// The allowed soruces list for a registration exeeded the max length.
@@ -154,6 +166,10 @@ pub mod pallet {
         AttestationInvalid,
         /// Timestamp error
         FailedTimestampConversion,
+        /// Certificate was revoked
+        RevokedCertificate,
+        /// Origin is not allowed to update the certificate revocation list
+        CertificateRevocationListUpdateNotAllowed,
     }
 
     #[pallet::hooks]
@@ -165,7 +181,7 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
         pub fn register(
             origin: OriginFor<T>,
-            registration: Registration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let script_len = (&registration).script.len() as u32;
@@ -189,7 +205,7 @@ pub mod pallet {
                 (&registration).script.clone(),
                 registration.clone(),
             );
-            Self::deposit_event(Event::RegistrationStored(registration, who));
+            Self::deposit_event(Event::JobRegistrationStored(registration, who));
             Ok(().into())
         }
 
@@ -198,7 +214,7 @@ pub mod pallet {
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             <StoredRegistration<T>>::remove(who.clone(), script.clone());
-            Self::deposit_event(Event::RegistrationRemoved(script, who));
+            Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
 
@@ -211,7 +227,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let registration = <StoredRegistration<T>>::get(who.clone(), script.clone())
-                .ok_or(Error::<T>::RegistrationNotFound)?;
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             let mut current_allowed_sources =
                 (&registration).allowed_sources.clone().unwrap_or(vec![]);
@@ -220,10 +236,10 @@ pub mod pallet {
                     .iter()
                     .position(|value| value == &update.account_id);
                 match (position, update.operation) {
-                    (None, AllowedSourcesUpdateOperation::Add) => {
+                    (None, ListUpdateOperation::Add) => {
                         current_allowed_sources.push(update.account_id.clone())
                     }
-                    (Some(pos), AllowedSourcesUpdateOperation::Remove) => {
+                    (Some(pos), ListUpdateOperation::Remove) => {
                         current_allowed_sources.remove(pos);
                     }
                     _ => {}
@@ -237,7 +253,7 @@ pub mod pallet {
             <StoredRegistration<T>>::insert(
                 who.clone(),
                 script.clone(),
-                Registration {
+                JobRegistration {
                     script,
                     allowed_sources,
                     extra: (&registration).extra.clone(),
@@ -251,7 +267,7 @@ pub mod pallet {
         }
 
         /// Fulfills a previously registered job.
-        #[pallet::weight(10_000 + T::DbWeight::get().reads(1))]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads(7))]
         pub fn fulfill(
             origin: OriginFor<T>,
             fulfillment: Fulfillment,
@@ -262,7 +278,7 @@ pub mod pallet {
 
             let registration =
                 <StoredRegistration<T>>::get(requester.clone(), (&fulfillment).script.clone())
-                    .ok_or(Error::<T>::RegistrationNotFound)?;
+                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
@@ -335,11 +351,31 @@ pub mod pallet {
             Self::deposit_event(Event::AttestationStored(attestation, who));
             Ok(().into())
         }
+
+        #[pallet::weight(0)]
+        pub fn update_certificate_revocation_list(
+            origin: OriginFor<T>,
+            update: CertificateRevocationListUpdate,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            if !T::AllowedRevocationListUpdate::get().contains(&who) {
+                return Err(Error::<T>::CertificateRevocationListUpdateNotAllowed)?;
+            }
+            match &update.operation {
+                ListUpdateOperation::Add => {
+                    <StoredRevokedCertificate<T>>::insert(update.cert_id, ());
+                }
+                ListUpdateOperation::Remove => {
+                    <StoredRevokedCertificate<T>>::remove(update.cert_id);
+                }
+            }
+            Ok(().into())
+        }
     }
 
     fn ensure_source_allowed<T: Config>(
         source: &T::AccountId,
-        registration: &Registration<T::AccountId, T::RegistrationExtra>,
+        registration: &JobRegistration<T::AccountId, T::RegistrationExtra>,
     ) -> Result<(), Error<T>> {
         registration
             .allowed_sources
@@ -356,25 +392,39 @@ pub mod pallet {
         if registration.allow_only_verified_sources {
             let attestation =
                 <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotAllowed)?;
-            let expire_date_time = (&attestation)
-                .key_description
-                .tee_enforced
-                .usage_expire_date_time
-                .unwrap_or(
-                    (&attestation)
-                        .key_description
-                        .software_enforced
-                        .usage_expire_date_time
-                        .unwrap_or_default(),
-                );
-            let now: u64 = <pallet_timestamp::Pallet<T>>::now()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedTimestampConversion)?;
-            if now >= expire_date_time {
-                return Err(Error::<T>::FulfillSourceNotAllowed);
-            }
+            ensure_not_expired(&attestation)?;
+            ensure_not_revoked(&attestation)?;
         }
 
+        Ok(())
+    }
+
+    fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
+        let expire_date_time = (&attestation)
+            .key_description
+            .tee_enforced
+            .usage_expire_date_time
+            .unwrap_or(
+                (&attestation)
+                    .key_description
+                    .software_enforced
+                    .usage_expire_date_time
+                    .unwrap_or_default(),
+            );
+        let now: u64 = <pallet_timestamp::Pallet<T>>::now()
+            .try_into()
+            .map_err(|_| Error::<T>::FailedTimestampConversion)?;
+        if now >= expire_date_time {
+            return Err(Error::<T>::FulfillSourceNotAllowed);
+        }
+        Ok(())
+    }
+
+    fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
+        let ids = &attestation.cert_ids;
+        for id in ids {
+            _ = <StoredRevokedCertificate<T>>::get(id).ok_or(Error::<T>::RevokedCertificate)?;
+        }
         Ok(())
     }
 
@@ -383,6 +433,10 @@ pub mod pallet {
     #[pallet::getter(fn stored_attestation)]
     pub type StoredAttestation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, Attestation>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn stored_revoked_certificate)]
+    pub type StoredRevokedCertificate<T: Config> = StorageMap<_, Blake2_128Concat, CertId, ()>;
 
     /// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.2
     const ISSUER_NAME_MAX_LENGTH: u32 = 64;
