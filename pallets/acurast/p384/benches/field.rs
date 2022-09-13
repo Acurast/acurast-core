@@ -4,7 +4,7 @@ use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, Criterion,
 };
 use hex_literal::hex;
-use p384::FieldElement;
+use p384_vendored::FieldElement;
 
 fn test_field_element_x() -> FieldElement {
     FieldElement::from_sec1(

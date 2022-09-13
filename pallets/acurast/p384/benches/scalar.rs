@@ -4,7 +4,7 @@ use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, Criterion,
 };
 use hex_literal::hex;
-use p384::{elliptic_curve::group::ff::PrimeField, ProjectivePoint, Scalar};
+use p384_vendored::{elliptic_curve::group::ff::PrimeField, ProjectivePoint, Scalar};
 
 fn test_scalar_x() -> Scalar {
     Scalar::from_repr(

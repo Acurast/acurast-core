@@ -31,7 +31,7 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen;
@@ -134,6 +134,8 @@ pub mod pallet {
             Registration<T::AccountId, T::RegistrationExtra>,
             Vec<AllowedSourcesUpdate<T::AccountId>>,
         ),
+        /// An attestation was successfully stored. [attestation, who]
+        AttestationStored(Attestation, T::AccountId),
     }
 
     #[pallet::error]
@@ -150,6 +152,8 @@ pub mod pallet {
         InvalidScriptValue,
         /// The provided attestation could not be parsed or is invalid.
         AttestationInvalid,
+        /// Timestamp error
+        FailedTimestampConversion,
     }
 
     #[pallet::hooks]
@@ -294,7 +298,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             ensure!(
-                (&attestation_chain).certificate_chain.len() < 2,
+                (&attestation_chain).certificate_chain.len() >= 2,
                 Error::<T>::AttestationInvalid
             );
 
@@ -308,27 +312,27 @@ pub mod pallet {
                 extract_attestation(cert.extensions).map_err(|_| Error::<T>::AttestationInvalid)?;
 
             let cert_ids_bounded = cert_ids
-                .iter()
+                .into_iter()
                 .map(|cert_id| {
                     let (iss, sn) = cert_id;
-                    let iss_bounded = IssuerName::try_from(iss.clone())
-                        .map_err(|_| Error::<T>::AttestationInvalid)?;
-                    let sn_bounded = SerialNumber::try_from(sn.clone())
-                        .map_err(|_| Error::<T>::AttestationInvalid)?;
+                    let iss_bounded =
+                        IssuerName::try_from(iss).map_err(|_| Error::<T>::AttestationInvalid)?;
+                    let sn_bounded =
+                        SerialNumber::try_from(sn).map_err(|_| Error::<T>::AttestationInvalid)?;
                     Ok((iss_bounded, sn_bounded))
                 })
                 .collect::<Result<Vec<CertId>, Error<T>>>()?;
             let cert_ids_bounded_vec = ValidatingCertIds::try_from(cert_ids_bounded)
                 .map_err(|_| Error::<T>::AttestationInvalid)?;
 
-            <StoredAttestation<T>>::insert(
-                who.clone(),
-                Attestation {
-                    cert_ids: cert_ids_bounded_vec,
-                    key_description: key_description.into(),
-                },
-            );
-            // Self::deposit_event(Event::AttestationStored(attestation, who));
+            let attestation = Attestation {
+                cert_ids: cert_ids_bounded_vec,
+                key_description: key_description
+                    .try_into()
+                    .map_err(|_| Error::<T>::AttestationInvalid)?,
+            };
+            <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
+            Self::deposit_event(Event::AttestationStored(attestation, who));
             Ok(().into())
         }
     }
@@ -347,10 +351,34 @@ pub mod pallet {
                     .map(|_| ())
                     .ok_or(Error::<T>::FulfillSourceNotAllowed)
             })
-            .unwrap_or(Ok(()))
+            .unwrap_or(Ok(()))?;
+
+        if registration.allow_only_verified_sources {
+            let attestation =
+                <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotAllowed)?;
+            let expire_date_time = (&attestation)
+                .key_description
+                .tee_enforced
+                .usage_expire_date_time
+                .unwrap_or(
+                    (&attestation)
+                        .key_description
+                        .software_enforced
+                        .usage_expire_date_time
+                        .unwrap_or_default(),
+                );
+            let now: u64 = <pallet_timestamp::Pallet<T>>::now()
+                .try_into()
+                .map_err(|_| Error::<T>::FailedTimestampConversion)?;
+            if now >= expire_date_time {
+                return Err(Error::<T>::FulfillSourceNotAllowed);
+            }
+        }
+
+        Ok(())
     }
 
-    /// The storage for [Attestation]s. They are stored by [AccountId] and [Attestation::serial_number].
+    /// The storage for [Attestation]s. They are stored by [AccountId].
     #[pallet::storage]
     #[pallet::getter(fn stored_attestation)]
     pub type StoredAttestation<T: Config> =
@@ -407,14 +435,16 @@ pub mod pallet {
 
     use crate::attestation::asn;
 
-    impl From<asn::KeyDescription<'_>> for BoundedKeyDescription {
-        fn from(data: asn::KeyDescription) -> Self {
-            BoundedKeyDescription {
+    impl TryFrom<asn::KeyDescription<'_>> for BoundedKeyDescription {
+        type Error = ();
+
+        fn try_from(data: asn::KeyDescription) -> Result<Self, Self::Error> {
+            Ok(BoundedKeyDescription {
                 attestation_security_level: data.attestation_security_level.into(),
                 key_mint_security_level: data.key_mint_security_level.into(),
-                software_enforced: data.software_enforced.into(),
-                tee_enforced: data.tee_enforced.into(),
-            }
+                software_enforced: data.software_enforced.try_into()?,
+                tee_enforced: data.tee_enforced.try_into()?,
+            })
         }
     }
 
@@ -480,19 +510,31 @@ pub mod pallet {
         pub device_unique_attestation: bool,
     }
 
-    impl From<asn::AuthorizationList<'_>> for BoundedAuthorizationList {
-        fn from(data: asn::AuthorizationList) -> Self {
-            BoundedAuthorizationList {
-                purpose: data.purpose.map(|v| (Purpose::truncate_from(v.collect()))),
+    impl TryFrom<asn::AuthorizationList<'_>> for BoundedAuthorizationList {
+        type Error = ();
+
+        fn try_from(data: asn::AuthorizationList) -> Result<Self, Self::Error> {
+            Ok(BoundedAuthorizationList {
+                purpose: data
+                    .purpose
+                    .map(|v| Purpose::try_from(v.collect::<Vec<u8>>()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 algorithm: data.algorithm,
                 key_size: data.key_size,
-                digest: data.digest.map(|v| (Digest::truncate_from(v.collect()))),
-                padding: data.padding.map(|v| (Padding::truncate_from(v.collect()))),
+                digest: data
+                    .digest
+                    .map(|v| Digest::try_from(v.collect::<Vec<u8>>()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                padding: data
+                    .padding
+                    .map(|v| Padding::try_from(v.collect::<Vec<u8>>()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 ec_curve: data.ec_curve,
                 rsa_public_exponent: data.rsa_public_exponent,
                 mgf_digest: data
                     .mgf_digest
-                    .map(|v| (MgfDigest::truncate_from(v.collect()))),
+                    .map(|v| MgfDigest::try_from(v.collect::<Vec<u8>>()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 rollback_resistance: data.rollback_resistance.is_some(),
                 early_boot_only: data.early_boot_only.is_some(),
                 active_date_time: data.active_date_time,
@@ -513,35 +555,44 @@ pub mod pallet {
                 os_patch_level: data.os_patch_level,
                 attestation_application_id: data
                     .attestation_application_id
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_brand: data
                     .attestation_id_brand
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_device: data
                     .attestation_id_device
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_product: data
                     .attestation_id_product
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_serial: data
                     .attestation_id_serial
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_imei: data
                     .attestation_id_imei
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_meid: data
                     .attestation_id_meid
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_manufacturer: data
                     .attestation_id_manufacturer
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 attestation_id_model: data
                     .attestation_id_model
-                    .map(|v| (AttestationIdProperty::truncate_from(v.to_vec()))),
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 vendor_patch_level: data.vendor_patch_level,
                 boot_patch_level: data.boot_patch_level,
                 device_unique_attestation: data.device_unique_attestation.is_some(),
-            }
+            })
         }
     }
 

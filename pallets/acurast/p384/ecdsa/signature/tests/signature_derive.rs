@@ -5,9 +5,9 @@
 use digest::{generic_array::GenericArray, Digest, OutputSizeUser};
 use hex_literal::hex;
 use sha2::Sha256;
-use signature::{
-    DigestSigner, DigestVerifier, Error, PrehashSignature, Signature, Signer, Verifier,
-};
+use signature::{DigestSigner, DigestVerifier, Error, PrehashSignature, Signature};
+use signature_derive::{Signer, Verifier};
+use signature_vendored as signature;
 
 /// Test vector to compute SHA-256 digest of
 const INPUT_STRING: &[u8] = b"abc";
@@ -65,12 +65,12 @@ impl DigestVerifier<Sha256, DummySignature> for DummyVerifier {
 
 #[test]
 fn derived_signer_impl() {
-    let sig: DummySignature = DummySigner::default().sign(INPUT_STRING);
+    let sig: DummySignature = signature::Signer::sign(&DummySigner::default(), INPUT_STRING);
     assert_eq!(sig.as_ref(), INPUT_STRING_DIGEST.as_ref())
 }
 
 #[test]
 fn derived_verifier_impl() {
-    let sig: DummySignature = DummySigner::default().sign(INPUT_STRING);
-    assert!(DummyVerifier::default().verify(INPUT_STRING, &sig).is_ok());
+    let sig: DummySignature = signature::Signer::sign(&DummySigner::default(), INPUT_STRING);
+    assert!(signature::Verifier::verify(&DummyVerifier::default(), INPUT_STRING, &sig).is_ok());
 }

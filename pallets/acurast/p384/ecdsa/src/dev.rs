@@ -91,7 +91,7 @@ macro_rules! new_verification_test {
                 let q = AffinePoint::<$curve>::from_encoded_point(&q_encoded).unwrap();
                 let z = GenericArray::clone_from_slice(vector.m);
 
-                let sig = signature_vendored::from_scalars(
+                let sig = Signature::from_scalars(
                     GenericArray::clone_from_slice(vector.r),
                     GenericArray::clone_from_slice(vector.s),
                 )
@@ -119,7 +119,7 @@ macro_rules! new_verification_test {
                 s_tweaked[0] ^= 1;
 
                 let sig =
-                    signature_vendored::from_scalars(GenericArray::clone_from_slice(vector.r), s_tweaked)
+                    Signature::from_scalars(GenericArray::clone_from_slice(vector.r), s_tweaked)
                         .unwrap();
 
                 let result = q.verify_prehashed(z, &sig);
@@ -180,7 +180,7 @@ macro_rules! new_wycheproof_test {
                 let verifying_key =
                     $crate::VerifyingKey::<$curve>::from_encoded_point(&q_encoded).unwrap();
 
-                let sig = match signature_vendored::from_der(sig) {
+                let sig = match Signature::from_der(sig) {
                     Ok(s) => s,
                     Err(_) if !pass => return None,
                     Err(_) => return Some("failed to parse signature ASN.1"),

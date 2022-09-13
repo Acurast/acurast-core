@@ -274,7 +274,6 @@ where
 #[cfg(all(test, feature = "arithmetic"))]
 mod tests {
     use elliptic_curve::dev::MockCurve;
-    use signature_vendored::Signature as _;
 
     type Signature = crate::Signature<MockCurve>;
 
@@ -288,21 +287,22 @@ mod tests {
 
     #[test]
     fn test_fixed_to_asn1_signature_roundtrip() {
-        let signature1 = signature_vendored::from_bytes(&EXAMPLE_SIGNATURE).unwrap();
+        let signature1 =
+            <Signature as signature_vendored::Signature>::from_bytes(&EXAMPLE_SIGNATURE).unwrap();
 
         // Convert to ASN.1 DER and back
         let asn1_signature = signature1.to_der();
-        let signature2 = signature_vendored::from_der(asn1_signature.as_ref()).unwrap();
+        let signature2 = Signature::from_der(asn1_signature.as_ref()).unwrap();
 
         assert_eq!(signature1, signature2);
     }
 
     #[test]
     fn test_asn1_too_short_signature() {
-        assert!(signature_vendored::from_der(&[]).is_err());
-        assert!(signature_vendored::from_der(&[der::Tag::Sequence.into()]).is_err());
-        assert!(signature_vendored::from_der(&[der::Tag::Sequence.into(), 0x00]).is_err());
-        assert!(signature_vendored::from_der(&[
+        assert!(Signature::from_der(&[]).is_err());
+        assert!(Signature::from_der(&[der::Tag::Sequence.into()]).is_err());
+        assert!(Signature::from_der(&[der::Tag::Sequence.into(), 0x00]).is_err());
+        assert!(Signature::from_der(&[
             der::Tag::Sequence.into(),
             0x03,
             der::Tag::Integer.into(),
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn test_asn1_non_der_signature() {
         // A minimal 8-byte ASN.1 signature parses OK.
-        assert!(signature_vendored::from_der(&[
+        assert!(Signature::from_der(&[
             der::Tag::Sequence.into(),
             0x06, // length of below
             der::Tag::Integer.into(),
@@ -330,7 +330,7 @@ mod tests {
         // But length fields that are not minimally encoded should be rejected, as they are not
         // valid DER, cf.
         // https://github.com/google/wycheproof/blob/2196000605e4/testvectors/ecdsa_secp256k1_sha256_test.json#L57-L66
-        assert!(signature_vendored::from_der(&[
+        assert!(Signature::from_der(&[
             der::Tag::Sequence.into(),
             0x81, // extended length: 1 length byte to come
             0x06, // length of below

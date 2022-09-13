@@ -4,7 +4,7 @@ pub mod asn;
 pub mod error;
 
 use asn::*;
-use asn1::{oid, BitString, Null, ObjectIdentifier, ParseError, SequenceOf};
+use asn1::{oid, BitString, ObjectIdentifier, ParseError, SequenceOf};
 use core::cell::RefCell;
 use ecdsa_vendored::hazmat::VerifyPrimitive;
 use error::ValidationError;
@@ -31,14 +31,13 @@ fn parse_cert_payload(serialized: &[u8]) -> Result<&[u8], ParseError> {
     Ok(payload.tbs_certificate.full_data())
 }
 
-type CertificateId = (Vec<u8>, Vec<u8>);
+pub type CertificateId = (Vec<u8>, Vec<u8>);
 
 pub fn unique_id<'a>(
     issuer: &Name,
     serial_number: &asn1::BigUint,
 ) -> Result<CertificateId, ValidationError> {
-    let issuer_encoded =
-        asn1::write_single(issuer).map_err(|_| ValidationError::InvalidIssuer())?;
+    let issuer_encoded = asn1::write_single(issuer).map_err(|_| ValidationError::InvalidIssuer)?;
     let serial_number_encoded = serial_number.as_bytes().to_vec();
     Ok((issuer_encoded, serial_number_encoded))
 }
@@ -51,13 +50,13 @@ pub fn extract_attestation<'a>(
     extensions: Option<SequenceOf<'a, Extension<'a>>>,
 ) -> Result<KeyDescription<'a>, ValidationError> {
     let extension = extensions
-        .ok_or(ValidationError::ExtensionMissing())?
+        .ok_or(ValidationError::ExtensionMissing)?
         .find(|e| e.extn_id == KEY_ATTESTATION_OID)
-        .ok_or(ValidationError::ExtensionMissing())?;
+        .ok_or(ValidationError::ExtensionMissing)?;
 
     match peek_attestation_version(extension.extn_value)? {
         100 => Ok(asn1::parse_single::<KeyDescription>(extension.extn_value)?),
-        _ => Err(ValidationError::UnsupportedAttestationVersion()),
+        _ => Err(ValidationError::UnsupportedAttestationVersion),
     }
 }
 
@@ -96,13 +95,13 @@ impl PublicKey {
                 let pbk_param = info
                     .algorithm
                     .parameters
-                    .ok_or(ValidationError::MissingECDSAAlgorithmTyp())?;
+                    .ok_or(ValidationError::MissingECDSAAlgorithmTyp)?;
                 let typ = asn1::parse_single::<ObjectIdentifier>(pbk_param.full_data())?;
                 match typ {
                     CURVE_P256 => {
                         let verifying_key =
                             VerifyingKey::from_sec1_bytes(&info.subject_public_key.as_bytes())
-                                .or(Err(ValidationError::ParseP256PublicKey()))?;
+                                .or(Err(ValidationError::ParseP256PublicKey))?;
                         Ok(PublicKey::ECDSA(ECDSACurve::CurveP256(verifying_key)))
                     }
                     CURVE_P384 => {
@@ -116,10 +115,10 @@ impl PublicKey {
                         };
                         Ok(PublicKey::ECDSA(ECDSACurve::CurveP384(point)))
                     }
-                    _ => Result::Err(ValidationError::UnsupportedSignatureAlgorithm())?,
+                    _ => Result::Err(ValidationError::UnsupportedSignatureAlgorithm)?,
                 }
             }
-            _ => Result::Err(ValidationError::UnsupportedPublicKeyAlgorithm()),
+            _ => Result::Err(ValidationError::UnsupportedPublicKeyAlgorithm),
         }
     }
 }
@@ -131,21 +130,21 @@ fn validate<'a>(
     cert: &Certificate<'a>,
     payload: &[u8],
     pbk: &PublicKey,
-) -> Result<Null, ValidationError> {
+) -> Result<(), ValidationError> {
     if cert.signature_algorithm.algorithm != cert.tbs_certificate.signature.algorithm {
-        return Result::Err(ValidationError::SignatureMismatch());
+        return Err(ValidationError::SignatureMismatch);
     }
 
     match cert.signature_algorithm.algorithm {
         RSA_ALGORITHM => match pbk {
             PublicKey::RSA(pbk) => validate_rsa(&payload, &cert.signature_value, &pbk),
-            _ => Result::Err(ValidationError::UnsupportedPublicKeyAlgorithm()),
+            _ => Err(ValidationError::UnsupportedPublicKeyAlgorithm),
         },
         ECDSA_ALGORITHM => match pbk {
             PublicKey::ECDSA(pbk) => validate_ecdsa(&payload, &cert.signature_value, &pbk),
-            _ => Result::Err(ValidationError::UnsupportedPublicKeyAlgorithm()),
+            _ => Err(ValidationError::UnsupportedPublicKeyAlgorithm),
         },
-        _ => Result::Err(ValidationError::UnsupportedSignatureAlgorithm()),
+        _ => Err(ValidationError::UnsupportedSignatureAlgorithm),
     }
 }
 
@@ -153,7 +152,7 @@ fn validate_rsa(
     payload: &[u8],
     signature: &BitString,
     pbk: &RSAPbk,
-) -> Result<Null, ValidationError> {
+) -> Result<(), ValidationError> {
     let computed = {
         let signature_num = BigUint::from_bytes_be(signature.as_bytes());
         let computed = signature_num.modpow(&pbk.exponent, &pbk.modulus);
@@ -166,7 +165,7 @@ fn validate_rsa(
     let unpadded = &computed[computed.len() - hashed.len()..];
 
     if hashed != unpadded {
-        return Result::Err(ValidationError::InvalidSignature());
+        return Err(ValidationError::InvalidSignature);
     }
 
     Ok(())
@@ -176,18 +175,18 @@ fn validate_ecdsa(
     payload: &[u8],
     signature: &BitString,
     curve: &ECDSACurve,
-) -> Result<Null, ValidationError> {
+) -> Result<(), ValidationError> {
     match curve {
         ECDSACurve::CurveP256(verifying_key) => {
             let signature = p256::ecdsa::Signature::from_der(&signature.as_bytes())
-                .or(Err(ValidationError::InvalidSignatureEncoding()))?;
+                .or(Err(ValidationError::InvalidSignatureEncoding))?;
             verifying_key
                 .verify(payload, &signature)
-                .or(Err(ValidationError::InvalidSignature()))?;
+                .or(Err(ValidationError::InvalidSignature))?;
         }
         ECDSACurve::CurveP384(affine_point) => {
             let signature = ecdsa_vendored::Signature::from_der(&signature.as_bytes())
-                .or(Err(ValidationError::InvalidSignatureEncoding()))?;
+                .or(Err(ValidationError::InvalidSignatureEncoding))?;
 
             let hashed = &sha2::Sha256::digest(payload);
             let mut padded: [u8; 48] = [0; 48];
@@ -196,7 +195,7 @@ fn validate_ecdsa(
 
             affine_point
                 .verify_prehashed(*payload, &signature)
-                .or(Err(ValidationError::InvalidSignature()))?;
+                .or(Err(ValidationError::InvalidSignature))?;
         }
     };
 
@@ -229,10 +228,10 @@ fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
 
 pub fn validate_certificate_chain_root(
     chain: &CertificateChainInput,
-) -> Result<Null, ValidationError> {
-    let first = chain.first().ok_or(ValidationError::ChainTooShort())?;
+) -> Result<(), ValidationError> {
+    let first = chain.first().ok_or(ValidationError::ChainTooShort)?;
     if !TRUSTED_ROOT_CERTS.contains(&first.as_slice()) {
-        return Err(ValidationError::UntrustedRoot());
+        return Err(ValidationError::UntrustedRoot);
     }
     Ok(())
 }
@@ -248,7 +247,7 @@ pub fn validate_certificate_chain<'a>(
     let mut cert_ids = Vec::<CertificateId>::new();
     let fold_result = chain.iter().try_fold::<_, _, Result<_, ValidationError>>(
         (Option::<PublicKey>::None, Option::<Certificate>::None),
-        |(prev_pbk, prev_cert), cert_data| {
+        |(prev_pbk, _), cert_data| {
             let cert = parse_cert(&cert_data)?;
             let payload = parse_cert_payload(&cert_data)?;
             let current_pbk = PublicKey::parse(&cert.tbs_certificate.subject_public_key_info)?;
@@ -267,7 +266,7 @@ pub fn validate_certificate_chain<'a>(
         },
     )?;
 
-    let last_cert = fold_result.1.ok_or(ValidationError::ChainTooShort())?;
+    let last_cert = fold_result.1.ok_or(ValidationError::ChainTooShort)?;
 
     // if the chain is non-empty as ensured above, we know that we always have Some certificate in option
     Ok((cert_ids, last_cert.tbs_certificate))
@@ -555,7 +554,7 @@ mod tests {
         validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
         let res = validate_certificate_chain(&decoded_chain);
         match res {
-            Err(e) => assert_eq!(e, ValidationError::InvalidSignature()),
+            Err(e) => assert_eq!(e, ValidationError::InvalidSignature),
             _ => return Err(()),
         };
         Ok(())
@@ -572,7 +571,7 @@ mod tests {
         let decoded_chain = decode_certificate_chain(&chain);
         let res = validate_certificate_chain_root(&decoded_chain);
         match res {
-            Err(e) => assert_eq!(e, ValidationError::UntrustedRoot()),
+            Err(e) => assert_eq!(e, ValidationError::UntrustedRoot),
             _ => return Err(()),
         };
         Ok(())

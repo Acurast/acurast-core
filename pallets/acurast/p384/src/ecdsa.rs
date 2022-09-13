@@ -36,35 +36,35 @@
 //! assert!(verifying_key.verify(message, &signature).is_ok());
 //! # }
 //! ```
-
-pub use ecdsa_vendored::signature_vendored::{self, Error};
+pub use ecdsa::signature_vendored::{self as signature, Error};
+pub use ecdsa_vendored as ecdsa;
 #[cfg(feature = "ecdsa")]
 use {
     crate::{AffinePoint, Scalar},
-    ecdsa_vendored::hazmat::{SignPrimitive, VerifyPrimitive},
+    ecdsa::hazmat::{SignPrimitive, VerifyPrimitive},
 };
 
 use super::NistP384;
 
 /// ECDSA/P-384 signature (fixed-size)
-pub type Signature = ecdsa_vendored::Signature<NistP384>;
+pub type Signature = ecdsa::Signature<NistP384>;
 
 /// ECDSA/P-384 signature (ASN.1 DER encoded)
-pub type DerSignature = ecdsa_vendored::der::Signature<NistP384>;
+pub type DerSignature = ecdsa::der::Signature<NistP384>;
 
 /// ECDSA/P-384 signing key
 #[cfg(feature = "ecdsa")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
-pub type SigningKey = ecdsa_vendored::SigningKey<NistP384>;
+pub type SigningKey = ecdsa::SigningKey<NistP384>;
 
 /// ECDSA/P-384 verification key (i.e. public key)
 #[cfg(feature = "ecdsa")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
-pub type VerifyingKey = ecdsa_vendored::VerifyingKey<NistP384>;
+pub type VerifyingKey = ecdsa::VerifyingKey<NistP384>;
 
 #[cfg(feature = "sha384")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sha384")))]
-impl ecdsa_vendored::hazmat::DigestPrimitive for NistP384 {
+impl ecdsa::hazmat::DigestPrimitive for NistP384 {
     type Digest = sha2::Sha384;
 }
 

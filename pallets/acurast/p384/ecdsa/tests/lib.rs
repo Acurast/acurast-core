@@ -4,8 +4,8 @@
 
 use elliptic_curve::dev::MockCurve;
 
-type Signature = ecdsa::Signature<MockCurve>;
-type SignatureBytes = ecdsa::SignatureBytes<MockCurve>;
+type Signature = ecdsa_vendored::Signature<MockCurve>;
+type SignatureBytes = ecdsa_vendored::SignatureBytes<MockCurve>;
 
 #[test]
 fn rejects_all_zero_signature() {
