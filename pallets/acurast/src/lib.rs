@@ -550,7 +550,10 @@ pub mod pallet {
                 unlocked_device_required: data.unlocked_device_required.is_some(),
                 creation_date_time: data.creation_date_time,
                 origin: data.origin,
-                root_of_trust: data.root_of_trust.map(|v| v.into()),
+                root_of_trust: data
+                    .root_of_trust
+                    .map(|v| v.try_into())
+                    .map_or(Ok(None), |r| r.map(Some))?,
                 os_version: data.os_version,
                 os_patch_level: data.os_patch_level,
                 attestation_application_id: data
@@ -604,16 +607,16 @@ pub mod pallet {
         pub verified_boot_hash: VerifiedBootHash,
     }
 
-    impl From<asn::RootOfTrust<'_>> for BoundedRootOfTrust {
-        fn from(data: asn::RootOfTrust) -> Self {
-            BoundedRootOfTrust {
-                verified_boot_key: VerifiedBootKey::truncate_from(data.verified_boot_key.to_vec()),
+    impl TryFrom<asn::RootOfTrust<'_>> for BoundedRootOfTrust {
+        type Error = ();
+
+        fn try_from(data: asn::RootOfTrust) -> Result<Self, Self::Error> {
+            Ok(BoundedRootOfTrust {
+                verified_boot_key: VerifiedBootKey::try_from(data.verified_boot_key.to_vec())?,
                 device_locked: data.device_locked,
                 verified_boot_state: data.verified_boot_state.into(),
-                verified_boot_hash: VerifiedBootHash::truncate_from(
-                    data.verified_boot_hash.to_vec(),
-                ),
-            }
+                verified_boot_hash: VerifiedBootHash::try_from(data.verified_boot_hash.to_vec())?,
+            })
         }
     }
 
