@@ -54,7 +54,9 @@ pub fn extract_attestation<'a>(
         .find(|e| e.extn_id == KEY_ATTESTATION_OID)
         .ok_or(ValidationError::ExtensionMissing)?;
 
-    match peek_attestation_version(extension.extn_value)? {
+    let version = peek_attestation_version(extension.extn_value)?;
+
+    match version {
         100 => Ok(asn1::parse_single::<KeyDescription>(extension.extn_value)?),
         _ => Err(ValidationError::UnsupportedAttestationVersion),
     }
@@ -487,8 +489,8 @@ mod tests {
     use crate::attestation::error::ValidationError;
 
     use super::{
-        validate_certificate_chain, validate_certificate_chain_root, CertificateChainInput,
-        CertificateInput,
+        extract_attestation, validate_certificate_chain, validate_certificate_chain_root,
+        CertificateChainInput, CertificateInput,
     };
 
     pub fn decode_certificate_chain(chain: &Vec<&str>) -> CertificateChainInput {
@@ -526,7 +528,9 @@ mod tests {
         ];
         let decoded_chain = decode_certificate_chain(&chain);
         validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
-        validate_certificate_chain(&decoded_chain).expect("validating chain failed");
+        let (_, cert) =
+            validate_certificate_chain(&decoded_chain).expect("validating chain failed");
+        let _ = extract_attestation(cert.extensions).expect("attestation extraction succeeded");
     }
 
     #[test]
@@ -539,7 +543,9 @@ mod tests {
         ];
         let decoded_chain = decode_certificate_chain(&chain);
         validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
-        validate_certificate_chain(&decoded_chain).expect("validating chain failed");
+        let (_, cert) =
+            validate_certificate_chain(&decoded_chain).expect("validating chain failed");
+        let _ = extract_attestation(cert.extensions).expect("attestation extraction succeeded");
     }
 
     #[test]

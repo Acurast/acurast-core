@@ -164,6 +164,22 @@ pub mod pallet {
         InvalidScriptValue,
         /// The provided attestation could not be parsed or is invalid.
         AttestationInvalid,
+        /// The certificate chain provided in the submit_attestation call is not long enough.
+        CertificateChainTooShort,
+        /// The submitted attestation root certificate is not valid.
+        RootCertificateValidationFailed,
+        /// The submitted attestation certificate chain is not valid.
+        CertificateChainValidationFailed,
+        /// Failed to extract the attestation.
+        AttestationExtractionFailed,
+        /// Cannot get the attestation issuer name.
+        CannotGetAttestationIssuerName,
+        /// Cannot get the attestation serial number.
+        CannotGetAttestationSerialNumber,
+        /// Cannot get the certificate ID.
+        CannotGetCertificateId,
+        /// Failed to convert the attestation to its bounded type.
+        AttestationToBoundedTypeConversionFailed,
         /// Timestamp error
         FailedTimestampConversion,
         /// Certificate was revoked
@@ -315,37 +331,39 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             ensure!(
                 (&attestation_chain).certificate_chain.len() >= 2,
-                Error::<T>::AttestationInvalid
+                Error::<T>::CertificateChainTooShort,
             );
 
             validate_certificate_chain_root(&attestation_chain.certificate_chain)
-                .map_err(|_| Error::<T>::AttestationInvalid)?;
+                .map_err(|_| Error::<T>::RootCertificateValidationFailed)?;
 
             let (cert_ids, cert) = validate_certificate_chain(&attestation_chain.certificate_chain)
-                .map_err(|_| Error::<T>::AttestationInvalid)?;
+                .map_err(|_| Error::<T>::CertificateChainValidationFailed)?;
 
-            let key_description =
-                extract_attestation(cert.extensions).map_err(|_| Error::<T>::AttestationInvalid)?;
+            let key_description = extract_attestation(cert.extensions)
+                .map_err(|_| Error::<T>::AttestationExtractionFailed)?;
 
             let cert_ids_bounded = cert_ids
                 .into_iter()
                 .map(|cert_id| {
                     let (iss, sn) = cert_id;
-                    let iss_bounded =
-                        IssuerName::try_from(iss).map_err(|_| Error::<T>::AttestationInvalid)?;
-                    let sn_bounded =
-                        SerialNumber::try_from(sn).map_err(|_| Error::<T>::AttestationInvalid)?;
+                    let iss_bounded = IssuerName::try_from(iss)
+                        .map_err(|_| Error::<T>::CannotGetAttestationIssuerName)?;
+                    let sn_bounded = SerialNumber::try_from(sn)
+                        .map_err(|_| Error::<T>::CannotGetAttestationSerialNumber)?;
                     Ok((iss_bounded, sn_bounded))
                 })
                 .collect::<Result<Vec<CertId>, Error<T>>>()?;
-            let cert_ids_bounded_vec = ValidatingCertIds::try_from(cert_ids_bounded)
-                .map_err(|_| Error::<T>::AttestationInvalid)?;
+            let cert_ids_bounded_vec =
+                ValidatingCertIds::try_from(cert_ids_bounded).map_err(|_| {
+                    Error::<T>::CannotGetCertificateId
+                })?;
 
             let attestation = Attestation {
                 cert_ids: cert_ids_bounded_vec,
-                key_description: key_description
-                    .try_into()
-                    .map_err(|_| Error::<T>::AttestationInvalid)?,
+                key_description: key_description.try_into().map_err(|_| {
+                    Error::<T>::AttestationToBoundedTypeConversionFailed
+                })?,
             };
             <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
