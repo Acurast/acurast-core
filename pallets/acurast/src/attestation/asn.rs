@@ -126,40 +126,39 @@ pub type SecurityLevel = Enumerated;
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationList<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, u8>>,
+    pub purpose: Option<SetOf<'a, i64>>,
     #[explicit(2)]
-    pub algorithm: Option<u8>,
+    pub algorithm: Option<i64>,
     #[explicit(3)]
-    pub key_size: Option<u8>,
+    pub key_size: Option<i64>,
     #[explicit(5)]
-    pub digest: Option<SetOf<'a, u8>>,
+    pub digest: Option<SetOf<'a, i64>>,
     #[explicit(6)]
-    pub padding: Option<SetOf<'a, u8>>,
+    pub padding: Option<SetOf<'a, i64>>,
     #[explicit(10)]
-    pub ec_curve: Option<u8>,
+    pub ec_curve: Option<i64>,
     #[explicit(200)]
-    pub rsa_public_exponent: Option<u64>,
+    pub rsa_public_exponent: Option<i64>,
     #[explicit(203)]
-    pub mgf_digest: Option<SetOf<'a, u8>>,
+    pub mgf_digest: Option<SetOf<'a, i64>>,
     #[explicit(303)]
     pub rollback_resistance: Option<Null>,
     #[explicit(305)]
     pub early_boot_only: Option<Null>,
     #[explicit(400)]
-    pub active_date_time: Option<u64>,
+    pub active_date_time: Option<i64>,
     #[explicit(401)]
-    pub origination_expire_date_time: Option<u64>,
+    pub origination_expire_date_time: Option<i64>,
     #[explicit(402)]
-    pub usage_expire_date_time: Option<u64>,
+    pub usage_expire_date_time: Option<i64>,
     #[explicit(405)]
-    // TODO double-check type since not listed here https://source.android.com/docs/security/keystore/tags#usage_count_limit
-    pub usage_count_limit: Option<u64>,
+    pub usage_count_limit: Option<i64>,
     #[explicit(503)]
     pub no_auth_required: Option<Null>,
     #[explicit(504)]
-    pub user_auth_type: Option<u8>,
+    pub user_auth_type: Option<i64>,
     #[explicit(505)]
-    pub auth_timeout: Option<u32>,
+    pub auth_timeout: Option<i64>,
     #[explicit(506)]
     pub allow_while_on_body: Option<Null>,
     #[explicit(507)]
@@ -169,15 +168,15 @@ pub struct AuthorizationList<'a> {
     #[explicit(509)]
     pub unlocked_device_required: Option<Null>,
     #[explicit(701)]
-    pub creation_date_time: Option<u64>,
+    pub creation_date_time: Option<i64>,
     #[explicit(702)]
-    pub origin: Option<u8>,
+    pub origin: Option<i64>,
     #[explicit(704)]
     pub root_of_trust: Option<RootOfTrust<'a>>,
     #[explicit(705)]
-    pub os_version: Option<u32>,
+    pub os_version: Option<i64>,
     #[explicit(706)]
-    pub os_patch_level: Option<u32>,
+    pub os_patch_level: Option<i64>,
     #[explicit(709)]
     pub attestation_application_id: Option<&'a [u8]>,
     #[explicit(710)]
@@ -197,9 +196,9 @@ pub struct AuthorizationList<'a> {
     #[explicit(717)]
     pub attestation_id_model: Option<&'a [u8]>,
     #[explicit(718)]
-    pub vendor_patch_level: Option<u32>,
+    pub vendor_patch_level: Option<i64>,
     #[explicit(719)]
-    pub boot_patch_level: Option<u32>,
+    pub boot_patch_level: Option<i64>,
     #[explicit(720)]
     pub device_unique_attestation: Option<Null>,
 }

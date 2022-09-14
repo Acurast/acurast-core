@@ -582,52 +582,61 @@ pub mod pallet {
         pub device_unique_attestation: bool,
     }
 
+    macro_rules! try_bound_set {
+        ( $set:expr, $target_vec_type:ty, $target_type:ty ) => {{
+            $set.map(|v| {
+                v.map(|i| <$target_type>::try_from(i))
+                    .collect::<Result<Vec<$target_type>, _>>()
+            })
+            .map_or(Ok(None), |r| r.map(Some))
+            .map_err(|_| ())?
+            .map(|v| <$target_vec_type>::try_from(v))
+            .map_or(Ok(None), |r| r.map(Some))
+        }};
+    }
+
+    macro_rules! try_bound {
+        ( $v:expr, $target_type:ty ) => {{
+            $v.map(|v| <$target_type>::try_from(v))
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())
+        }};
+    }
+
     impl TryFrom<asn::AuthorizationList<'_>> for BoundedAuthorizationList {
         type Error = ();
 
         fn try_from(data: asn::AuthorizationList) -> Result<Self, Self::Error> {
             Ok(BoundedAuthorizationList {
-                purpose: data
-                    .purpose
-                    .map(|v| Purpose::try_from(v.collect::<Vec<u8>>()))
-                    .map_or(Ok(None), |r| r.map(Some))?,
-                algorithm: data.algorithm,
-                key_size: data.key_size,
-                digest: data
-                    .digest
-                    .map(|v| Digest::try_from(v.collect::<Vec<u8>>()))
-                    .map_or(Ok(None), |r| r.map(Some))?,
-                padding: data
-                    .padding
-                    .map(|v| Padding::try_from(v.collect::<Vec<u8>>()))
-                    .map_or(Ok(None), |r| r.map(Some))?,
-                ec_curve: data.ec_curve,
-                rsa_public_exponent: data.rsa_public_exponent,
-                mgf_digest: data
-                    .mgf_digest
-                    .map(|v| MgfDigest::try_from(v.collect::<Vec<u8>>()))
-                    .map_or(Ok(None), |r| r.map(Some))?,
+                purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+                algorithm: try_bound!(data.algorithm, u8)?,
+                key_size: try_bound!(data.key_size, u8)?,
+                digest: try_bound_set!(data.digest, Digest, u8)?,
+                padding: try_bound_set!(data.padding, Padding, u8)?,
+                ec_curve: try_bound!(data.ec_curve, u8)?,
+                rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
+                mgf_digest: try_bound_set!(data.mgf_digest, MgfDigest, u8)?,
                 rollback_resistance: data.rollback_resistance.is_some(),
                 early_boot_only: data.early_boot_only.is_some(),
-                active_date_time: data.active_date_time,
-                origination_expire_date_time: data.origination_expire_date_time,
-                usage_expire_date_time: data.usage_expire_date_time,
-                usage_count_limit: data.usage_count_limit,
+                active_date_time: try_bound!(data.active_date_time, u64)?,
+                origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
+                usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
+                usage_count_limit: try_bound!(data.usage_count_limit, u64)?,
                 no_auth_required: data.no_auth_required.is_some(),
-                user_auth_type: data.user_auth_type,
-                auth_timeout: data.auth_timeout,
+                user_auth_type: try_bound!(data.user_auth_type, u8)?,
+                auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
                 trusted_user_presence_required: data.trusted_user_presence_required.is_some(),
                 trusted_confirmation_required: data.trusted_confirmation_required.is_some(),
                 unlocked_device_required: data.unlocked_device_required.is_some(),
-                creation_date_time: data.creation_date_time,
-                origin: data.origin,
+                creation_date_time: try_bound!(data.creation_date_time, u64)?,
+                origin: try_bound!(data.origin, u8)?,
                 root_of_trust: data
                     .root_of_trust
                     .map(|v| v.try_into())
                     .map_or(Ok(None), |r| r.map(Some))?,
-                os_version: data.os_version,
-                os_patch_level: data.os_patch_level,
+                os_version: try_bound!(data.os_version, u32)?,
+                os_patch_level: try_bound!(data.os_patch_level, u32)?,
                 attestation_application_id: data
                     .attestation_application_id
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
@@ -664,8 +673,8 @@ pub mod pallet {
                     .attestation_id_model
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
                     .map_or(Ok(None), |r| r.map(Some))?,
-                vendor_patch_level: data.vendor_patch_level,
-                boot_patch_level: data.boot_patch_level,
+                vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
+                boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
                 device_unique_attestation: data.device_unique_attestation.is_some(),
             })
         }
