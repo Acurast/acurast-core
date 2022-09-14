@@ -44,11 +44,11 @@ pub fn unique_id<'a>(
 
 /// The OID of the Attestation Extension to a X.509 certificate.
 /// [See docs](https://source.android.com/docs/security/keystore/attestation#tbscertificate-sequence)
-const KEY_ATTESTATION_OID: ObjectIdentifier = oid!(1, 3, 6, 1, 4, 1, 11129, 2, 1, 17);
+pub const KEY_ATTESTATION_OID: ObjectIdentifier = oid!(1, 3, 6, 1, 4, 1, 11129, 2, 1, 17);
 
 pub fn extract_attestation<'a>(
     extensions: Option<SequenceOf<'a, Extension<'a>>>,
-) -> Result<KeyDescription<'a>, ValidationError> {
+) -> Result<KeyDescription, ValidationError> {
     let extension = extensions
         .ok_or(ValidationError::ExtensionMissing)?
         .find(|e| e.extn_id == KEY_ATTESTATION_OID)
@@ -57,7 +57,16 @@ pub fn extract_attestation<'a>(
     let version = peek_attestation_version(extension.extn_value)?;
 
     match version {
-        100 => Ok(asn1::parse_single::<KeyDescription>(extension.extn_value)?),
+        4 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V4(parsed))
+        }
+        100 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV100>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V100(parsed))
+        }
         _ => Err(ValidationError::UnsupportedAttestationVersion),
     }
 }
@@ -212,7 +221,7 @@ fn parse_rsa_pbk(data: &[u8]) -> Result<RSAPbk, ParseError> {
     })
 }
 
-fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
+pub fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
     let result: asn1::ParseResult<_> = asn1::parse(data, |d| {
         // as we are not reading the sequence to the end, the parser always returns an error result
         // therefore setup a cell to store the result and ignore result
@@ -486,10 +495,10 @@ const TRUSTED_ROOT_CERTS: &'static [&[u8]] = &[
 
 #[cfg(test)]
 mod tests {
-    use crate::attestation::error::ValidationError;
+    use crate::attestation::{error::ValidationError, extract_attestation};
 
     use super::{
-        extract_attestation, validate_certificate_chain, validate_certificate_chain_root,
+        asn::KeyDescription, validate_certificate_chain, validate_certificate_chain_root,
         CertificateChainInput, CertificateInput,
     };
 
@@ -518,8 +527,16 @@ mod tests {
     const PIXEL_KEY_CERT_INVALID: &str = r"MIICnDCCAkGgAwIBAgIBATAMBggqhkjOPQQDAgUAMC8xGTAXBgNVBAUTEDk3MzUzNzc5MzZkMGRkNzQxEjAQBgNVBAwMCVN0cm9uZ0JveDAiGA8yMDIyMDcwOTEwNTE1NVoYDzIwMjgwNTIzMjM1OTU5WjAfMR0wGwYDVQQDDBRBbmRyb2lkIEtleXN0b3JlIEtleTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABLIMHRVHdmJiPs9DAQSJgAbg+BwNsbrofLlqh8d3dARlnlhdPZBXuKL/iuYfQBoHj8dc9SyMQmjoEPk3mMcp6GKjggFWMIIBUjAOBgNVHQ8BAf8EBAMCB4AwggE+BgorBgEEAdZ5AgERBIIBLjCCASoCAQQKAQICASkKAQIECHRlc3Rhc2RmBAAwbL+FPQgCBgGB4pZhH7+FRVwEWjBYMTIwMAQrY29tLnViaW5ldGljLmF0dGVzdGVkLmV4ZWN1dG9yLnRlc3QudGVzdG5ldAIBDjEiBCC9y0Vg9rPEHa2SBmgWnCi+HvnqSfI9mM2OsvN65EiP+TCBoaEFMQMCAQKiAwIBA6MEAgIBAKUFMQMCAQCqAwIBAb+DdwIFAL+FPgMCAQC/hUBMMEoEIIec0/GOp24kTU1Kw7y5wzfBO0ZnGQsZA1r+JTZVAFDxAQH/CgEABCA/QTbuNYHmq6jqM3prQ9cD3h7KJB+bfyd+zfr/96jc8b+FQQUCAwHUwL+FQgUCAwMV3r+FTgYCBAE0ir2/hU8GAgQBNIq9MAwGCCqGSM49BAMCBQADRwAwRAIgM6YTzOmm7SUCakkrZR8Kxnw8AonU5HQxaMaQPi+qC9oCIDJM01xL8mldca0Sooho5pIyESki6vDjaZ9q3YAz1SjZ";
     const PIXEL_ROOT_CERT_UNTRUSTED: &str = r"MIIFYDCCA0igAwIBAgIJAOj6GWMU0voYMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTYwNTI2MTYyODUyWhcNMjYwNTI0MTYyODUyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaOBpjCBozAdBgNVHQ4EFgQUNmHhAHyIBQlRi0RsR/8aTMnqTxIwHwYDVR0jBBgwFoAUNmHhAHyIBQlRi0RsR/8aTMnqTxIwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwQAYDVR0fBDkwNzA1oDOgMYYvaHR0cHM6Ly9hbmRyb2lkLmdvb2dsZWFwaXMuY29tL2F0dGVzdGF0aW9uL2NybC8wDQYJKoZIhvcNAQELBQADggIBACDIw41L3KlXG0aMiS//cqrG+EShHUGo8HNsw30W1kJtjn6UBwRM6jnmiwfBPb8VA91chb2vssAtX2zbTvqBJ9+LBPGCdw/E53Rbf86qhxKaiAHOjpvAy5Y3m00mqC0w/Zwvju1twb4vhLaJ5NkUJYsUS7rmJKHHBnETLi8GFqiEsqTWpG/6ibYCv7rYDBJDcR9W62BW9jfIoBQcxUCUJouMPH25lLNcDc1ssqvC2v7iUgI9LeoM1sNovqPmQUiG9rHli1vXxzCyaMTjwftkJLkf6724DFhuKug2jITV0QkXvaJWF4nUaHOTNA4uJU9WDvZLI1j83A+/xnAJUucIv/zGJ1AMH2boHqF8CY16LpsYgBt6tKxxWH00XcyDCdW2KlBCeqbQPcsFmWyWugxdcekhYsAWyoSf818NUsZdBWBaR/OukXrNLfkQ79IyZohZbvabO/X+MVT3rriAoKc8oE2Uws6DF+60PV7/WIPjNvXySdqspImSN78mflxDqwLqRBYkA3I75qppLGG9rp7UCdRjxMl8ZDBld+7yvHVgt1cVzJx9xnyGCC23UaicMDSXYrB4I4WHXPGjxhZuCuPBLTdOLU8YRvMYdEvYebWHMpvwGCF6bAx3JBpIeOQ1wDB5y0USicV3YgYGmi+NZfhA4URSh77Yd6uuJOJENRaNVTzl";
 
+    type Error = ();
+
+    impl From<ValidationError> for Error {
+        fn from(_: ValidationError) -> Self {
+            ()
+        }
+    }
+
     #[test]
-    fn test_validate_samsung_chain() -> Result<(), ValidationError> {
+    fn test_validate_samsung_chain() -> Result<(), Error> {
         let chain = vec![
             SAMSUNG_ROOT_CERT,
             SAMSUNG_INTERMEDIATE_2_CERT,
@@ -527,16 +544,20 @@ mod tests {
             SAMSUNG_KEY_CERT,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
-        let (_, cert) =
-            validate_certificate_chain(&decoded_chain).expect("validating chain failed");
+        validate_certificate_chain_root(&decoded_chain)?;
+        let (_, cert) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
-        assert_eq!(key_description.attestation_version, 100);
+        match key_description {
+            KeyDescription::V100(key_description) => {
+                assert_eq!(key_description.attestation_version, 100)
+            }
+            _ => return Err(()),
+        }
         Ok(())
     }
 
     #[test]
-    fn test_validate_pixel_chain() -> Result<(), ValidationError> {
+    fn test_validate_pixel_chain() -> Result<(), Error> {
         let chain = vec![
             PIXEL_ROOT_CERT,
             PIXEL_INTERMEDIATE_2_CERT,
@@ -547,8 +568,13 @@ mod tests {
         validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
         let (_, cert) =
             validate_certificate_chain(&decoded_chain).expect("validating chain failed");
-        // let key_description = extract_attestation(cert.extensions)?;
-        // assert_eq!(key_description.attestation_version, 100);
+        let key_description = extract_attestation(cert.extensions)?;
+        match key_description {
+            KeyDescription::V4(key_description) => {
+                assert_eq!(key_description.attestation_version, 4)
+            }
+            _ => return Err(()),
+        }
         Ok(())
     }
 

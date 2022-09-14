@@ -5,7 +5,7 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::attestation::*;
+    use crate::attestation::{asn::KeyDescription, *};
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
@@ -354,16 +354,19 @@ pub mod pallet {
                     Ok((iss_bounded, sn_bounded))
                 })
                 .collect::<Result<Vec<CertId>, Error<T>>>()?;
-            let cert_ids_bounded_vec =
-                ValidatingCertIds::try_from(cert_ids_bounded).map_err(|_| {
-                    Error::<T>::CannotGetCertificateId
-                })?;
+            let cert_ids_bounded_vec = ValidatingCertIds::try_from(cert_ids_bounded)
+                .map_err(|_| Error::<T>::CannotGetCertificateId)?;
 
             let attestation = Attestation {
                 cert_ids: cert_ids_bounded_vec,
-                key_description: key_description.try_into().map_err(|_| {
-                    Error::<T>::AttestationToBoundedTypeConversionFailed
-                })?,
+                key_description: match key_description {
+                    KeyDescription::V4(kd) => kd
+                        .try_into()
+                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
+                    KeyDescription::V100(kd) => kd
+                        .try_into()
+                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
+                },
             };
             <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
@@ -507,10 +510,23 @@ pub mod pallet {
 
     use crate::attestation::asn;
 
-    impl TryFrom<asn::KeyDescription<'_>> for BoundedKeyDescription {
+    impl TryFrom<asn::KeyDescriptionV4<'_>> for BoundedKeyDescription {
         type Error = ();
 
-        fn try_from(data: asn::KeyDescription) -> Result<Self, Self::Error> {
+        fn try_from(data: asn::KeyDescriptionV4) -> Result<Self, Self::Error> {
+            Ok(BoundedKeyDescription {
+                attestation_security_level: data.attestation_security_level.into(),
+                key_mint_security_level: data.key_mint_security_level.into(),
+                software_enforced: data.software_enforced.try_into()?,
+                tee_enforced: data.tee_enforced.try_into()?,
+            })
+        }
+    }
+
+    impl TryFrom<asn::KeyDescriptionV100<'_>> for BoundedKeyDescription {
+        type Error = ();
+
+        fn try_from(data: asn::KeyDescriptionV100) -> Result<Self, Self::Error> {
             Ok(BoundedKeyDescription {
                 attestation_security_level: data.attestation_security_level.into(),
                 key_mint_security_level: data.key_mint_security_level.into(),
@@ -563,6 +579,8 @@ pub mod pallet {
         pub trusted_user_presence_required: bool,
         pub trusted_confirmation_required: bool,
         pub unlocked_device_required: bool,
+        pub all_applications: bool,
+        pub application_id: Option<AttestationIdProperty>,
         pub creation_date_time: Option<u64>,
         pub origin: Option<u8>,
         pub root_of_trust: Option<BoundedRootOfTrust>,
@@ -603,10 +621,91 @@ pub mod pallet {
         }};
     }
 
-    impl TryFrom<asn::AuthorizationList<'_>> for BoundedAuthorizationList {
+    impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
         type Error = ();
 
-        fn try_from(data: asn::AuthorizationList) -> Result<Self, Self::Error> {
+        fn try_from(data: asn::AuthorizationListV4) -> Result<Self, Self::Error> {
+            Ok(BoundedAuthorizationList {
+                purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+                algorithm: try_bound!(data.algorithm, u8)?,
+                key_size: try_bound!(data.key_size, u8)?,
+                digest: try_bound_set!(data.digest, Digest, u8)?,
+                padding: try_bound_set!(data.padding, Padding, u8)?,
+                ec_curve: try_bound!(data.ec_curve, u8)?,
+                rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
+                mgf_digest: None,
+                rollback_resistance: data.rollback_resistance.is_some(),
+                early_boot_only: data.early_boot_only.is_some(),
+                active_date_time: try_bound!(data.active_date_time, u64)?,
+                origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
+                usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
+                usage_count_limit: None,
+                no_auth_required: data.no_auth_required.is_some(),
+                user_auth_type: try_bound!(data.user_auth_type, u8)?,
+                auth_timeout: try_bound!(data.user_auth_type, u32)?,
+                allow_while_on_body: data.allow_while_on_body.is_some(),
+                trusted_user_presence_required: data.trusted_user_presence_required.is_some(),
+                trusted_confirmation_required: data.trusted_confirmation_required.is_some(),
+                unlocked_device_required: data.unlocked_device_required.is_some(),
+                all_applications: data.all_applications.is_some(),
+                application_id: data
+                    .application_id
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                creation_date_time: try_bound!(data.creation_date_time, u64)?,
+                origin: try_bound!(data.origin, u8)?,
+                root_of_trust: data
+                    .root_of_trust
+                    .map(|v| v.try_into())
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                os_version: try_bound!(data.os_version, u32)?,
+                os_patch_level: try_bound!(data.os_patch_level, u32)?,
+                attestation_application_id: data
+                    .attestation_application_id
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_brand: data
+                    .attestation_id_brand
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_device: data
+                    .attestation_id_device
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_product: data
+                    .attestation_id_product
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_serial: data
+                    .attestation_id_serial
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_imei: data
+                    .attestation_id_imei
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_meid: data
+                    .attestation_id_meid
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_manufacturer: data
+                    .attestation_id_manufacturer
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                attestation_id_model: data
+                    .attestation_id_model
+                    .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                    .map_or(Ok(None), |r| r.map(Some))?,
+                vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
+                boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
+                device_unique_attestation: data.device_unique_attestation.is_some(),
+            })
+        }
+    }
+    impl TryFrom<asn::AuthorizationListV100<'_>> for BoundedAuthorizationList {
+        type Error = ();
+
+        fn try_from(data: asn::AuthorizationListV100) -> Result<Self, Self::Error> {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
@@ -629,6 +728,8 @@ pub mod pallet {
                 trusted_user_presence_required: data.trusted_user_presence_required.is_some(),
                 trusted_confirmation_required: data.trusted_confirmation_required.is_some(),
                 unlocked_device_required: data.unlocked_device_required.is_some(),
+                all_applications: true, // default because version 100 misses this field
+                application_id: None,   // default because version 100 misses this field
                 creation_date_time: try_bound!(data.creation_date_time, u64)?,
                 origin: try_bound!(data.origin, u8)?,
                 root_of_trust: data
