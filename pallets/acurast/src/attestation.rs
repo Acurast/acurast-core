@@ -515,7 +515,12 @@ const TRUSTED_ROOT_CERTS: &'static [&[u8]] = &[
 
 #[cfg(test)]
 mod tests {
-    use crate::attestation::{error::ValidationError, extract_attestation};
+    use core::convert::TryInto;
+
+    use crate::{
+        attestation::{error::ValidationError, extract_attestation},
+        BoundedKeyDescription,
+    };
 
     use super::{
         asn::KeyDescription, validate_certificate_chain, validate_certificate_chain_root,
@@ -567,12 +572,13 @@ mod tests {
         validate_certificate_chain_root(&decoded_chain)?;
         let (_, cert) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
-        match key_description {
+        match &key_description {
             KeyDescription::V100(key_description) => {
                 assert_eq!(key_description.attestation_version, 100)
             }
             _ => return Err(()),
         }
+        let _: BoundedKeyDescription = key_description.try_into()?;
         Ok(())
     }
 
@@ -589,12 +595,13 @@ mod tests {
         let (_, cert) =
             validate_certificate_chain(&decoded_chain).expect("validating chain failed");
         let key_description = extract_attestation(cert.extensions)?;
-        match key_description {
+        match &key_description {
             KeyDescription::V4(key_description) => {
                 assert_eq!(key_description.attestation_version, 4)
             }
             _ => return Err(()),
         }
+        let _: BoundedKeyDescription = key_description.try_into()?;
         Ok(())
     }
 

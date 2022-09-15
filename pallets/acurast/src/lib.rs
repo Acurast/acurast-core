@@ -5,6 +5,8 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use core::convert::TryFrom;
+
     use crate::attestation::{asn::KeyDescription, *};
     use codec::{Decode, Encode};
     use frame_support::{
@@ -156,6 +158,8 @@ pub mod pallet {
         JobRegistrationNotFound,
         /// The source of the fulfill is not allowed for the job.
         FulfillSourceNotAllowed,
+        /// The source of the fulfill is not verified. The source does not have a valid attestation submitted.
+        FulfillSourceNotVerified,
         /// The allowed soruces list for a registration exeeded the max length.
         TooManyAllowedSources,
         /// The allowed soruces list for a registration cannot be empty if provided.
@@ -208,14 +212,15 @@ pub mod pallet {
             let allowed_sources_len = (&registration)
                 .allowed_sources
                 .as_ref()
-                .map(|sources| sources.len())
-                .unwrap_or(0);
-            let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
-            ensure!(allowed_sources_len > 0, Error::<T>::TooFewAllowedSources);
-            ensure!(
-                allowed_sources_len <= max_allowed_sources_len,
-                Error::<T>::TooManyAllowedSources
-            );
+                .map(|sources| sources.len());
+            if let Some(allowed_sources_len) = allowed_sources_len {
+                let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
+                ensure!(allowed_sources_len > 0, Error::<T>::TooFewAllowedSources);
+                ensure!(
+                    allowed_sources_len <= max_allowed_sources_len,
+                    Error::<T>::TooManyAllowedSources
+                );
+            }
             <StoredRegistration<T>>::insert(
                 who.clone(),
                 (&registration).script.clone(),
@@ -359,26 +364,9 @@ pub mod pallet {
 
             let attestation = Attestation {
                 cert_ids: cert_ids_bounded_vec,
-                key_description: match key_description {
-                    KeyDescription::V1(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                    KeyDescription::V2(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                    KeyDescription::V3(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                    KeyDescription::V4(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                    KeyDescription::V100(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                    KeyDescription::V200(kd) => kd
-                        .try_into()
-                        .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
-                },
+                key_description: key_description
+                    .try_into()
+                    .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
             };
             <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
@@ -424,7 +412,7 @@ pub mod pallet {
 
         if registration.allow_only_verified_sources {
             let attestation =
-                <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotAllowed)?;
+                <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotVerified)?;
             ensure_not_expired(&attestation)?;
             ensure_not_revoked(&attestation)?;
         }
@@ -448,7 +436,7 @@ pub mod pallet {
             .try_into()
             .map_err(|_| Error::<T>::FailedTimestampConversion)?;
         if now >= expire_date_time {
-            return Err(Error::<T>::FulfillSourceNotAllowed);
+            return Err(Error::<T>::FulfillSourceNotVerified);
         }
         Ok(())
     }
@@ -518,6 +506,21 @@ pub mod pallet {
         pub key_mint_security_level: AttestationSecurityLevel,
         pub software_enforced: BoundedAuthorizationList,
         pub tee_enforced: BoundedAuthorizationList,
+    }
+
+    impl TryFrom<KeyDescription<'_>> for BoundedKeyDescription {
+        type Error = ();
+
+        fn try_from(value: KeyDescription) -> Result<Self, Self::Error> {
+            match value {
+                KeyDescription::V1(kd) => kd.try_into(),
+                KeyDescription::V2(kd) => kd.try_into(),
+                KeyDescription::V3(kd) => kd.try_into(),
+                KeyDescription::V4(kd) => kd.try_into(),
+                KeyDescription::V100(kd) => kd.try_into(),
+                KeyDescription::V200(kd) => kd.try_into(),
+            }
+        }
     }
 
     use crate::attestation::asn;
@@ -611,7 +614,7 @@ pub mod pallet {
     pub struct BoundedAuthorizationList {
         pub purpose: Option<Purpose>,
         pub algorithm: Option<u8>,
-        pub key_size: Option<u8>,
+        pub key_size: Option<u16>,
         pub digest: Option<Digest>,
         pub padding: Option<Padding>,
         pub ec_curve: Option<u8>,
@@ -679,7 +682,7 @@ pub mod pallet {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
-                key_size: try_bound!(data.key_size, u8)?,
+                key_size: try_bound!(data.key_size, u16)?,
                 digest: try_bound_set!(data.digest, Digest, u8)?,
                 padding: try_bound_set!(data.padding, Padding, u8)?,
                 ec_curve: try_bound!(data.ec_curve, u8)?,
@@ -734,7 +737,7 @@ pub mod pallet {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
-                key_size: try_bound!(data.key_size, u8)?,
+                key_size: try_bound!(data.key_size, u16)?,
                 digest: try_bound_set!(data.digest, Digest, u8)?,
                 padding: try_bound_set!(data.padding, Padding, u8)?,
                 ec_curve: try_bound!(data.ec_curve, u8)?,
@@ -816,7 +819,7 @@ pub mod pallet {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
-                key_size: try_bound!(data.key_size, u8)?,
+                key_size: try_bound!(data.key_size, u16)?,
                 digest: try_bound_set!(data.digest, Digest, u8)?,
                 padding: try_bound_set!(data.padding, Padding, u8)?,
                 ec_curve: try_bound!(data.ec_curve, u8)?,
@@ -898,7 +901,7 @@ pub mod pallet {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
-                key_size: try_bound!(data.key_size, u8)?,
+                key_size: try_bound!(data.key_size, u16)?,
                 digest: try_bound_set!(data.digest, Digest, u8)?,
                 padding: try_bound_set!(data.padding, Padding, u8)?,
                 ec_curve: try_bound!(data.ec_curve, u8)?,
@@ -980,7 +983,7 @@ pub mod pallet {
             Ok(BoundedAuthorizationList {
                 purpose: try_bound_set!(data.purpose, Purpose, u8)?,
                 algorithm: try_bound!(data.algorithm, u8)?,
-                key_size: try_bound!(data.key_size, u8)?,
+                key_size: try_bound!(data.key_size, u16)?,
                 digest: try_bound_set!(data.digest, Digest, u8)?,
                 padding: try_bound_set!(data.padding, Padding, u8)?,
                 ec_curve: try_bound!(data.ec_curve, u8)?,
