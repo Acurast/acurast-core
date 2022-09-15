@@ -617,8 +617,8 @@ pub mod pallet {
         pub ec_curve: Option<u8>,
         pub rsa_public_exponent: Option<u64>,
         pub mgf_digest: Option<MgfDigest>,
-        pub rollback_resistance: bool,
-        pub early_boot_only: bool,
+        pub rollback_resistance: Option<bool>,
+        pub early_boot_only: Option<bool>,
         pub active_date_time: Option<u64>,
         pub origination_expire_date_time: Option<u64>,
         pub usage_expire_date_time: Option<u64>,
@@ -627,10 +627,10 @@ pub mod pallet {
         pub user_auth_type: Option<u8>,
         pub auth_timeout: Option<u32>,
         pub allow_while_on_body: bool,
-        pub trusted_user_presence_required: bool,
-        pub trusted_confirmation_required: bool,
-        pub unlocked_device_required: bool,
-        pub all_applications: bool,
+        pub trusted_user_presence_required: Option<bool>,
+        pub trusted_confirmation_required: Option<bool>,
+        pub unlocked_device_required: Option<bool>,
+        pub all_applications: Option<bool>,
         pub application_id: Option<AttestationIdProperty>,
         pub creation_date_time: Option<u64>,
         pub origin: Option<u8>,
@@ -648,7 +648,7 @@ pub mod pallet {
         pub attestation_id_model: Option<AttestationIdProperty>,
         pub vendor_patch_level: Option<u32>,
         pub boot_patch_level: Option<u32>,
-        pub device_unique_attestation: bool,
+        pub device_unique_attestation: Option<bool>,
     }
 
     macro_rules! try_bound_set {
@@ -685,8 +685,8 @@ pub mod pallet {
                 ec_curve: try_bound!(data.ec_curve, u8)?,
                 rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
                 mgf_digest: None,
-                rollback_resistance: data.rollback_resistance.is_some(),
-                early_boot_only: false,
+                rollback_resistance: Some(data.rollback_resistance.is_some()),
+                early_boot_only: None,
                 active_date_time: try_bound!(data.active_date_time, u64)?,
                 origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
                 usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
@@ -695,10 +695,10 @@ pub mod pallet {
                 user_auth_type: try_bound!(data.user_auth_type, u8)?,
                 auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
-                trusted_user_presence_required: false,
-                trusted_confirmation_required: false,
-                unlocked_device_required: false,
-                all_applications: data.all_applications.is_some(),
+                trusted_user_presence_required: None,
+                trusted_confirmation_required: None,
+                unlocked_device_required: None,
+                all_applications: Some(data.all_applications.is_some()),
                 application_id: data
                     .application_id
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
@@ -722,7 +722,7 @@ pub mod pallet {
                 attestation_id_manufacturer: None,
                 attestation_id_model: None,
                 boot_patch_level: None,
-                device_unique_attestation: false,
+                device_unique_attestation: None,
             })
         }
     }
@@ -740,8 +740,8 @@ pub mod pallet {
                 ec_curve: try_bound!(data.ec_curve, u8)?,
                 rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
                 mgf_digest: None,
-                rollback_resistance: data.rollback_resistance.is_some(),
-                early_boot_only: false,
+                rollback_resistance: Some(data.rollback_resistance.is_some()),
+                early_boot_only: None,
                 active_date_time: try_bound!(data.active_date_time, u64)?,
                 origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
                 usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
@@ -750,10 +750,10 @@ pub mod pallet {
                 user_auth_type: try_bound!(data.user_auth_type, u8)?,
                 auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
-                trusted_user_presence_required: false,
-                trusted_confirmation_required: false,
-                unlocked_device_required: false,
-                all_applications: data.all_applications.is_some(),
+                trusted_user_presence_required: None,
+                trusted_confirmation_required: None,
+                unlocked_device_required: None,
+                all_applications: Some(data.all_applications.is_some()),
                 application_id: data
                     .application_id
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
@@ -804,7 +804,7 @@ pub mod pallet {
                     .map_or(Ok(None), |r| r.map(Some))?,
                 vendor_patch_level: None,
                 boot_patch_level: None,
-                device_unique_attestation: false,
+                device_unique_attestation: None,
             })
         }
     }
@@ -822,8 +822,8 @@ pub mod pallet {
                 ec_curve: try_bound!(data.ec_curve, u8)?,
                 rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
                 mgf_digest: None,
-                rollback_resistance: data.rollback_resistance.is_some(),
-                early_boot_only: false,
+                rollback_resistance: Some(data.rollback_resistance.is_some()),
+                early_boot_only: None,
                 active_date_time: try_bound!(data.active_date_time, u64)?,
                 origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
                 usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
@@ -832,10 +832,10 @@ pub mod pallet {
                 user_auth_type: try_bound!(data.user_auth_type, u8)?,
                 auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
-                trusted_user_presence_required: false,
-                trusted_confirmation_required: false,
-                unlocked_device_required: false,
-                all_applications: data.all_applications.is_some(),
+                trusted_user_presence_required: None,
+                trusted_confirmation_required: None,
+                unlocked_device_required: None,
+                all_applications: Some(data.all_applications.is_some()),
                 application_id: data
                     .application_id
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
@@ -886,7 +886,7 @@ pub mod pallet {
                     .map_or(Ok(None), |r| r.map(Some))?,
                 vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
                 boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
-                device_unique_attestation: false,
+                device_unique_attestation: None,
             })
         }
     }
@@ -904,8 +904,8 @@ pub mod pallet {
                 ec_curve: try_bound!(data.ec_curve, u8)?,
                 rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
                 mgf_digest: None,
-                rollback_resistance: data.rollback_resistance.is_some(),
-                early_boot_only: data.early_boot_only.is_some(),
+                rollback_resistance: Some(data.rollback_resistance.is_some()),
+                early_boot_only: Some(data.early_boot_only.is_some()),
                 active_date_time: try_bound!(data.active_date_time, u64)?,
                 origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
                 usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
@@ -914,10 +914,10 @@ pub mod pallet {
                 user_auth_type: try_bound!(data.user_auth_type, u8)?,
                 auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
-                trusted_user_presence_required: data.trusted_user_presence_required.is_some(),
-                trusted_confirmation_required: data.trusted_confirmation_required.is_some(),
-                unlocked_device_required: data.unlocked_device_required.is_some(),
-                all_applications: data.all_applications.is_some(),
+                trusted_user_presence_required: Some(data.trusted_user_presence_required.is_some()),
+                trusted_confirmation_required: Some(data.trusted_confirmation_required.is_some()),
+                unlocked_device_required: Some(data.unlocked_device_required.is_some()),
+                all_applications: Some(data.all_applications.is_some()),
                 application_id: data
                     .application_id
                     .map(|v| AttestationIdProperty::try_from(v.to_vec()))
@@ -968,7 +968,7 @@ pub mod pallet {
                     .map_or(Ok(None), |r| r.map(Some))?,
                 vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
                 boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
-                device_unique_attestation: data.device_unique_attestation.is_some(),
+                device_unique_attestation: Some(data.device_unique_attestation.is_some()),
             })
         }
     }
@@ -986,8 +986,8 @@ pub mod pallet {
                 ec_curve: try_bound!(data.ec_curve, u8)?,
                 rsa_public_exponent: try_bound!(data.rsa_public_exponent, u64)?,
                 mgf_digest: try_bound_set!(data.mgf_digest, MgfDigest, u8)?,
-                rollback_resistance: data.rollback_resistance.is_some(),
-                early_boot_only: data.early_boot_only.is_some(),
+                rollback_resistance: Some(data.rollback_resistance.is_some()),
+                early_boot_only: Some(data.early_boot_only.is_some()),
                 active_date_time: try_bound!(data.active_date_time, u64)?,
                 origination_expire_date_time: try_bound!(data.origination_expire_date_time, u64)?,
                 usage_expire_date_time: try_bound!(data.usage_expire_date_time, u64)?,
@@ -996,11 +996,11 @@ pub mod pallet {
                 user_auth_type: try_bound!(data.user_auth_type, u8)?,
                 auth_timeout: try_bound!(data.user_auth_type, u32)?,
                 allow_while_on_body: data.allow_while_on_body.is_some(),
-                trusted_user_presence_required: data.trusted_user_presence_required.is_some(),
-                trusted_confirmation_required: data.trusted_confirmation_required.is_some(),
-                unlocked_device_required: data.unlocked_device_required.is_some(),
-                all_applications: true, // default because version 100 misses this field
-                application_id: None,   // default because version 100 misses this field
+                trusted_user_presence_required: Some(data.trusted_user_presence_required.is_some()),
+                trusted_confirmation_required: Some(data.trusted_confirmation_required.is_some()),
+                unlocked_device_required: Some(data.unlocked_device_required.is_some()),
+                all_applications: None,
+                application_id: None,
                 creation_date_time: try_bound!(data.creation_date_time, u64)?,
                 origin: try_bound!(data.origin, u8)?,
                 root_of_trust: data
@@ -1047,7 +1047,7 @@ pub mod pallet {
                     .map_or(Ok(None), |r| r.map(Some))?,
                 vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
                 boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
-                device_unique_attestation: data.device_unique_attestation.is_some(),
+                device_unique_attestation: Some(data.device_unique_attestation.is_some()),
             })
         }
     }
