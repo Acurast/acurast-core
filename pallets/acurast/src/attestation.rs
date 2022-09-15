@@ -57,15 +57,35 @@ pub fn extract_attestation<'a>(
     let version = peek_attestation_version(extension.extn_value)?;
 
     match version {
+        1 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV1>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V1(parsed))
+        }
+        2 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV2>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V2(parsed))
+        }
+        3 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV3>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V3(parsed))
+        }
         4 => {
             let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)
                 .map_err(|_| ValidationError::ParseError)?;
             Ok(KeyDescription::V4(parsed))
         }
         100 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV100>(extension.extn_value)
+            let parsed = asn1::parse_single::<KeyDescriptionV100V200>(extension.extn_value)
                 .map_err(|_| ValidationError::ParseError)?;
             Ok(KeyDescription::V100(parsed))
+        }
+        200 => {
+            let parsed = asn1::parse_single::<KeyDescriptionV100V200>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V200(parsed))
         }
         _ => Err(ValidationError::UnsupportedAttestationVersion),
     }
