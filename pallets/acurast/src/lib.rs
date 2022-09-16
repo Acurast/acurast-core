@@ -425,18 +425,19 @@ pub mod pallet {
             .key_description
             .tee_enforced
             .usage_expire_date_time
-            .unwrap_or(
+            .or_else(|| {
                 (&attestation)
                     .key_description
                     .software_enforced
                     .usage_expire_date_time
-                    .unwrap_or_default(),
-            );
-        let now: u64 = <pallet_timestamp::Pallet<T>>::now()
-            .try_into()
-            .map_err(|_| Error::<T>::FailedTimestampConversion)?;
-        if now >= expire_date_time {
-            return Err(Error::<T>::FulfillSourceNotVerified);
+            });
+        if let Some(expire_date_time) = expire_date_time {
+            let now: u64 = <pallet_timestamp::Pallet<T>>::now()
+                .try_into()
+                .map_err(|_| Error::<T>::FailedTimestampConversion)?;
+            if now >= expire_date_time {
+                return Err(Error::<T>::FulfillSourceNotVerified);
+            }
         }
         Ok(())
     }
@@ -444,7 +445,9 @@ pub mod pallet {
     fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
         let ids = &attestation.cert_ids;
         for id in ids {
-            _ = <StoredRevokedCertificate<T>>::get(id).ok_or(Error::<T>::RevokedCertificate)?;
+            if <StoredRevokedCertificate<T>>::get(id).is_some() {
+                return Err(Error::<T>::RevokedCertificate);
+            }
         }
         Ok(())
     }
