@@ -103,7 +103,7 @@ pub mod pallet {
         /// The update operation
         pub operation: ListUpdateOperation,
         /// The [AccountId] to add or remove.
-        pub cert_id: CertId,
+        pub cert_serial_number: SerialNumber,
     }
 
     /// The allowed sources update operation.
@@ -167,13 +167,15 @@ pub mod pallet {
         /// The provided script value is not valid. The value needs to be and ipfs:// url.
         InvalidScriptValue,
         /// The provided attestation could not be parsed or is invalid.
-        AttestationInvalid,
+        AttestationUsageExpired,
         /// The certificate chain provided in the submit_attestation call is not long enough.
         CertificateChainTooShort,
         /// The submitted attestation root certificate is not valid.
         RootCertificateValidationFailed,
         /// The submitted attestation certificate chain is not valid.
         CertificateChainValidationFailed,
+        /// The submitted attestation certificate is not valid
+        AttestationCertificateNotValid,
         /// Failed to extract the attestation.
         AttestationExtractionFailed,
         /// Cannot get the attestation issuer name.
@@ -326,8 +328,6 @@ pub mod pallet {
         /// - If the represented chain is valid, the [Attestation] details are stored. An existing attestion for signing account gets overwritten.
         ///
         /// Revocation: Each atttestation is stored with the unique IDs of the certificates on the chain proofing the attestation's validity.
-        ///
-        /// TODO: implement revocation
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
         pub fn submit_attestation(
             origin: OriginFor<T>,
@@ -344,6 +344,11 @@ pub mod pallet {
 
             let (cert_ids, cert) = validate_certificate_chain(&attestation_chain.certificate_chain)
                 .map_err(|_| Error::<T>::CertificateChainValidationFailed)?;
+
+            let attestation_validity = AttestationValidity {
+                not_before: cert.validity.not_before.timestamp_millis(),
+                not_after: cert.validity.not_after.timestamp_millis(),
+            };
 
             let key_description = extract_attestation(cert.extensions)
                 .map_err(|_| Error::<T>::AttestationExtractionFailed)?;
@@ -367,7 +372,12 @@ pub mod pallet {
                 key_description: key_description
                     .try_into()
                     .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
+                validity: attestation_validity,
             };
+
+            ensure_not_expired::<T>(&attestation)?;
+            ensure_not_revoked::<T>(&attestation)?;
+
             <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
             Ok(().into())
@@ -384,10 +394,10 @@ pub mod pallet {
             }
             match &update.operation {
                 ListUpdateOperation::Add => {
-                    <StoredRevokedCertificate<T>>::insert(update.cert_id, ());
+                    <StoredRevokedCertificate<T>>::insert(update.cert_serial_number, ());
                 }
                 ListUpdateOperation::Remove => {
-                    <StoredRevokedCertificate<T>>::remove(update.cert_id);
+                    <StoredRevokedCertificate<T>>::remove(update.cert_serial_number);
                 }
             }
             Ok(().into())
@@ -421,6 +431,13 @@ pub mod pallet {
     }
 
     fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
+        let now: u64 = <pallet_timestamp::Pallet<T>>::now()
+            .try_into()
+            .map_err(|_| Error::<T>::FailedTimestampConversion)?;
+
+        if now >= attestation.validity.not_after || now < attestation.validity.not_before {
+            return Err(Error::<T>::AttestationCertificateNotValid);
+        }
         let expire_date_time = (&attestation)
             .key_description
             .tee_enforced
@@ -432,11 +449,8 @@ pub mod pallet {
                     .usage_expire_date_time
             });
         if let Some(expire_date_time) = expire_date_time {
-            let now: u64 = <pallet_timestamp::Pallet<T>>::now()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedTimestampConversion)?;
             if now >= expire_date_time {
-                return Err(Error::<T>::FulfillSourceNotVerified);
+                return Err(Error::<T>::AttestationUsageExpired);
             }
         }
         Ok(())
@@ -445,7 +459,7 @@ pub mod pallet {
     fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
         let ids = &attestation.cert_ids;
         for id in ids {
-            if <StoredRevokedCertificate<T>>::get(id).is_some() {
+            if <StoredRevokedCertificate<T>>::get(&id.1).is_some() {
                 return Err(Error::<T>::RevokedCertificate);
             }
         }
@@ -460,7 +474,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn stored_revoked_certificate)]
-    pub type StoredRevokedCertificate<T: Config> = StorageMap<_, Blake2_128Concat, CertId, ()>;
+    pub type StoredRevokedCertificate<T: Config> =
+        StorageMap<_, Blake2_128Concat, SerialNumber, ()>;
 
     /// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.2
     const ISSUER_NAME_MAX_LENGTH: u32 = 64;
@@ -501,6 +516,13 @@ pub mod pallet {
     pub struct Attestation {
         pub cert_ids: ValidatingCertIds,
         pub key_description: BoundedKeyDescription,
+        pub validity: AttestationValidity,
+    }
+
+    #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq)]
+    pub struct AttestationValidity {
+        pub not_before: u64,
+        pub not_after: u64,
     }
 
     #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
@@ -1111,5 +1133,301 @@ pub mod pallet {
                 _ => VerifiedBootState::Failed,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use frame_support::{assert_err, assert_ok};
+    use hex_literal::hex;
+    use sp_io;
+    use sp_runtime::{testing::Header, traits::IdentityLookup};
+
+    type AccountId = u64;
+    type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    frame_support::construct_runtime!(
+        pub enum Test where
+            Block = Block,
+            NodeBlock = Block,
+            UncheckedExtrinsic = UncheckedExtrinsic,
+        {
+            System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+            Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+            Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+            Acurast: crate::{Pallet, Call, Storage, Event<T>},
+        }
+    );
+
+    impl frame_system::Config for Test {
+        type BaseCallFilter = frame_support::traits::Everything;
+        type BlockWeights = BlockWeights;
+        type BlockLength = ();
+        type DbWeight = ();
+        type Origin = Origin;
+        type Index = u64;
+        type BlockNumber = u64;
+        type Call = Call;
+        type Hash = sp_core::H256;
+        type Hashing = ::sp_runtime::traits::BlakeTwo256;
+        type AccountId = u64;
+        type Lookup = IdentityLookup<Self::AccountId>;
+        type Header = Header;
+        type Event = Event;
+        type BlockHashCount = frame_support::traits::ConstU64<250>;
+        type Version = ();
+        type PalletInfo = PalletInfo;
+        type AccountData = ();
+        type OnNewAccount = ();
+        type OnKilledAccount = ();
+        type SystemWeightInfo = ();
+        type SS58Prefix = ();
+        type OnSetCode = ();
+        type MaxConsumers = frame_support::traits::ConstU32<16>;
+    }
+
+    frame_support::parameter_types! {
+        pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
+        pub const MinimumPeriod: u64 = 6000;
+        pub Admins: Vec<AccountId> = vec![1];
+        pub static ExistentialDeposit: u64 = 0;
+    }
+
+    impl pallet_balances::Config for Test {
+        type Balance = u64;
+        type DustRemoval = ();
+        type Event = Event;
+        type ExistentialDeposit = ExistentialDeposit;
+        type AccountStore = frame_support::traits::StorageMapShim<
+            pallet_balances::Account<Test>,
+            frame_system::Provider<Test>,
+            u64,
+            pallet_balances::AccountData<u64>,
+        >;
+        type MaxLocks = frame_support::traits::ConstU32<50>;
+        type MaxReserves = frame_support::traits::ConstU32<2>;
+        type ReserveIdentifier = [u8; 8];
+        type WeightInfo = ();
+    }
+
+    impl pallet_timestamp::Config for Test {
+        type Moment = u64;
+        type OnTimestampSet = ();
+        type MinimumPeriod = MinimumPeriod;
+        type WeightInfo = ();
+    }
+
+    impl crate::Config for Test {
+        type Event = Event;
+        type RegistrationExtra = ();
+        type FulfillmentRouter = Router;
+        type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
+        type AllowedRevocationListUpdate = Admins;
+    }
+
+    pub struct Router;
+
+    impl crate::FulfillmentRouter<Test> for Router {
+        fn received_fulfillment(
+            _origin: frame_system::pallet_prelude::OriginFor<Test>,
+            _from: <Test as frame_system::Config>::AccountId,
+            _fulfillment: crate::Fulfillment,
+            _registration: crate::JobRegistration<
+                <Test as frame_system::Config>::AccountId,
+                <Test as crate::Config>::RegistrationExtra,
+            >,
+            _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
+        ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
+            Ok(().into())
+        }
+    }
+
+    pub struct ExtBuilder;
+
+    impl ExtBuilder {
+        pub fn build(self) -> sp_io::TestExternalities {
+            let mut t = frame_system::GenesisConfig::default()
+                .build_storage::<Test>()
+                .unwrap();
+            pallet_balances::GenesisConfig::<Test> {
+                balances: vec![(1, 10), (2, 20), (3, 30), (4, 40), (12, 10)],
+            }
+            .assimilate_storage(&mut t)
+            .unwrap();
+            let mut ext = sp_io::TestExternalities::new(t);
+            ext.execute_with(|| System::set_block_number(1));
+            ext
+        }
+    }
+
+    impl Default for ExtBuilder {
+        fn default() -> Self {
+            Self {}
+        }
+    }
+
+    fn events() -> Vec<Event> {
+        let evt = System::events()
+            .into_iter()
+            .map(|evt| evt.event)
+            .collect::<Vec<_>>();
+
+        System::reset_events();
+
+        evt
+    }
+
+    #[test]
+    fn test_job_registration() {
+        let script = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec();
+        let registration = JobRegistration {
+            script: script.try_into().unwrap(),
+            allowed_sources: None,
+            allow_only_verified_sources: false,
+            extra: (),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_ok!(Acurast::register(
+                Origin::signed(1).into(),
+                registration.clone(),
+            ));
+
+            assert_eq!(
+                events(),
+                [Event::Acurast(crate::Event::JobRegistrationStored(
+                    registration,
+                    1
+                ))]
+            );
+        });
+    }
+
+    #[test]
+    fn test_job_registration_wrong_script_1() {
+        let script = hex!("597066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec();
+        let registration = JobRegistration {
+            script: script.try_into().unwrap(),
+            allowed_sources: None,
+            allow_only_verified_sources: false,
+            extra: (),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_err!(
+                Acurast::register(Origin::signed(1).into(), registration),
+                crate::Error::<Test>::InvalidScriptValue
+            );
+
+            assert_eq!(events(), []);
+        });
+    }
+
+    #[test]
+    fn test_job_registration_wrong_script_2() {
+        let script = hex!("697066733A2F2F000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec();
+        let registration = JobRegistration {
+            script: script.try_into().unwrap(),
+            allowed_sources: None,
+            allow_only_verified_sources: false,
+            extra: (),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_err!(
+                Acurast::register(Origin::signed(1).into(), registration),
+                crate::Error::<Test>::InvalidScriptValue
+            );
+
+            assert_eq!(events(), []);
+        });
+    }
+
+    #[test]
+    fn test_fulfill() {
+        let script: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<53>> = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec().try_into().unwrap();
+        let registration = JobRegistration {
+            script: script.clone(),
+            allowed_sources: None,
+            allow_only_verified_sources: false,
+            extra: (),
+        };
+        let fulfillment = Fulfillment {
+            script: script.clone(),
+            payload: hex!("00").to_vec(),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_ok!(Acurast::register(
+                Origin::signed(1).into(),
+                registration.clone(),
+            ));
+            assert_ok!(Acurast::fulfill(
+                Origin::signed(2).into(),
+                fulfillment.clone(),
+                1
+            ));
+
+            assert_eq!(
+                events(),
+                [
+                    Event::Acurast(crate::Event::JobRegistrationStored(registration.clone(), 1)),
+                    Event::Acurast(crate::Event::ReceivedFulfillment(
+                        2,
+                        fulfillment,
+                        registration,
+                        1
+                    )),
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn test_fulfill_failure_1() {
+        let script: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<53>> = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec().try_into().unwrap();
+        let fulfillment = Fulfillment {
+            script: script.clone(),
+            payload: hex!("00").to_vec(),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_err!(
+                Acurast::fulfill(Origin::signed(2).into(), fulfillment.clone(), 1),
+                crate::Error::<Test>::JobRegistrationNotFound
+            );
+
+            assert_eq!(events(), []);
+        });
+    }
+
+    #[test]
+    fn test_fulfill_faulure_2() {
+        let script: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<53>> = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec().try_into().unwrap();
+        let registration = JobRegistration {
+            script: script.clone(),
+            allowed_sources: None,
+            allow_only_verified_sources: true,
+            extra: (),
+        };
+        let fulfillment = Fulfillment {
+            script: script.clone(),
+            payload: hex!("00").to_vec(),
+        };
+        ExtBuilder::default().build().execute_with(|| {
+            assert_ok!(Acurast::register(
+                Origin::signed(1).into(),
+                registration.clone(),
+            ));
+            assert_err!(
+                Acurast::fulfill(Origin::signed(2).into(), fulfillment.clone(), 1),
+                crate::Error::<Test>::FulfillSourceNotVerified
+            );
+
+            assert_eq!(
+                events(),
+                [Event::Acurast(crate::Event::JobRegistrationStored(
+                    registration.clone(),
+                    1
+                ))]
+            );
+        });
     }
 }
