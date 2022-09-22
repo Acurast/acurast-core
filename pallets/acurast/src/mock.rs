@@ -16,7 +16,6 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Acurast: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -55,23 +54,6 @@ frame_support::parameter_types! {
     pub static ExistentialDeposit: u64 = 0;
 }
 
-impl pallet_balances::Config for Test {
-    type Balance = u64;
-    type DustRemoval = ();
-    type Event = Event;
-    type ExistentialDeposit = ExistentialDeposit;
-    type AccountStore = frame_support::traits::StorageMapShim<
-        pallet_balances::Account<Test>,
-        frame_system::Provider<Test>,
-        u64,
-        pallet_balances::AccountData<u64>,
-    >;
-    type MaxLocks = frame_support::traits::ConstU32<50>;
-    type MaxReserves = frame_support::traits::ConstU32<2>;
-    type ReserveIdentifier = [u8; 8];
-    type WeightInfo = ();
-}
-
 impl pallet_timestamp::Config for Test {
     type Moment = u64;
     type OnTimestampSet = ();
@@ -108,15 +90,9 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
+        let t = frame_system::GenesisConfig::default()
             .build_storage::<Test>()
             .unwrap();
-
-        pallet_balances::GenesisConfig::<Test> {
-            balances: vec![(1, 10), (2, 20), (3, 30), (4, 40), (12, 10)],
-        }
-        .assimilate_storage(&mut t)
-        .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
