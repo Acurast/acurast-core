@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::{
-    mock::*, validate_and_extract_attestation, AllowedSourcesUpdate,
+    mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate,
     CertificateRevocationListUpdate, Error, Fulfillment, ListUpdateOperation, SerialNumber,
 };
 use frame_support::{assert_err, assert_ok};
@@ -9,17 +9,27 @@ use hex_literal::hex;
 
 #[test]
 fn test_job_registration() {
-    let registration = job_registration(None, false);
     ExtBuilder::default().build().execute_with(|| {
+        let registration = job_registration(None, false);
         assert_ok!(Acurast::register(
             Origin::signed(1).into(),
             registration.clone(),
         ));
 
+        assert_eq!(
+            Some(registration.clone()),
+            Acurast::stored_job_registration(1, registration.script.clone())
+        );
+
         assert_ok!(Acurast::deregister(
             Origin::signed(1).into(),
             registration.script.clone()
         ));
+
+        assert_eq!(
+            None,
+            Acurast::stored_job_registration(1, registration.script.clone())
+        );
 
         assert_eq!(
             events(),
@@ -33,11 +43,16 @@ fn test_job_registration() {
 
 #[test]
 fn test_job_registration_failure_1() {
-    let registration = invalid_job_registration_1();
     ExtBuilder::default().build().execute_with(|| {
+        let registration = invalid_job_registration_1();
         assert_err!(
-            Acurast::register(Origin::signed(1).into(), registration),
+            Acurast::register(Origin::signed(1).into(), registration.clone()),
             Error::<Test>::InvalidScriptValue
+        );
+
+        assert_eq!(
+            None,
+            Acurast::stored_job_registration(1, registration.script)
         );
 
         assert_eq!(events(), []);
@@ -46,11 +61,16 @@ fn test_job_registration_failure_1() {
 
 #[test]
 fn test_job_registration_failure_2() {
-    let registration = invalid_job_registration_2();
     ExtBuilder::default().build().execute_with(|| {
+        let registration = invalid_job_registration_2();
         assert_err!(
-            Acurast::register(Origin::signed(1).into(), registration),
+            Acurast::register(Origin::signed(1).into(), registration.clone()),
             Error::<Test>::InvalidScriptValue
+        );
+
+        assert_eq!(
+            None,
+            Acurast::stored_job_registration(1, registration.script)
         );
 
         assert_eq!(events(), []);
@@ -59,17 +79,27 @@ fn test_job_registration_failure_2() {
 
 #[test]
 fn test_job_registration_failure_3() {
-    let registration_1 = job_registration(Some(vec![1, 2, 3, 4, 12]), false);
-    let registration_2 = job_registration(Some(vec![]), false);
     ExtBuilder::default().build().execute_with(|| {
+        let registration_1 = job_registration(Some(vec![1, 2, 3, 4, 12]), false);
+        let registration_2 = job_registration(Some(vec![]), false);
         assert_err!(
-            Acurast::register(Origin::signed(1).into(), registration_1),
+            Acurast::register(Origin::signed(1).into(), registration_1.clone()),
             Error::<Test>::TooManyAllowedSources
         );
 
+        assert_eq!(
+            None,
+            Acurast::stored_job_registration(1, registration_1.script)
+        );
+
         assert_err!(
-            Acurast::register(Origin::signed(1).into(), registration_2),
+            Acurast::register(Origin::signed(1).into(), registration_2.clone()),
             Error::<Test>::TooFewAllowedSources
+        );
+
+        assert_eq!(
+            None,
+            Acurast::stored_job_registration(1, registration_2.script)
         );
 
         assert_eq!(events(), []);
@@ -78,29 +108,29 @@ fn test_job_registration_failure_3() {
 
 #[test]
 fn test_update_allowed_sources() {
-    let registration_1 = job_registration(None, false);
-    let registration_2 = job_registration(Some(vec![1, 2]), false);
-    let updates_1 = vec![
-        AllowedSourcesUpdate {
-            operation: ListUpdateOperation::Add,
-            account_id: 1,
-        },
-        AllowedSourcesUpdate {
-            operation: ListUpdateOperation::Add,
-            account_id: 2,
-        },
-    ];
-    let updates_2 = vec![
-        AllowedSourcesUpdate {
-            operation: ListUpdateOperation::Remove,
-            account_id: 1,
-        },
-        AllowedSourcesUpdate {
-            operation: ListUpdateOperation::Remove,
-            account_id: 2,
-        },
-    ];
     ExtBuilder::default().build().execute_with(|| {
+        let registration_1 = job_registration(None, false);
+        let registration_2 = job_registration(Some(vec![1, 2]), false);
+        let updates_1 = vec![
+            AllowedSourcesUpdate {
+                operation: ListUpdateOperation::Add,
+                account_id: 1,
+            },
+            AllowedSourcesUpdate {
+                operation: ListUpdateOperation::Add,
+                account_id: 2,
+            },
+        ];
+        let updates_2 = vec![
+            AllowedSourcesUpdate {
+                operation: ListUpdateOperation::Remove,
+                account_id: 1,
+            },
+            AllowedSourcesUpdate {
+                operation: ListUpdateOperation::Remove,
+                account_id: 2,
+            },
+        ];
         assert_ok!(Acurast::register(
             Origin::signed(1).into(),
             registration_1.clone(),
@@ -112,11 +142,21 @@ fn test_update_allowed_sources() {
             updates_1.clone()
         ));
 
+        assert_eq!(
+            Some(registration_2.clone()),
+            Acurast::stored_job_registration(1, &registration_1.script)
+        );
+
         assert_ok!(Acurast::update_allowed_sources(
             Origin::signed(1).into(),
             registration_1.script.clone(),
             updates_2.clone()
         ));
+
+        assert_eq!(
+            Some(registration_1.clone()),
+            Acurast::stored_job_registration(1, &registration_1.script)
+        );
 
         assert_eq!(
             events(),
@@ -160,6 +200,11 @@ fn test_update_allowed_sources_failure() {
                 updates.clone()
             ),
             Error::<Test>::TooManyAllowedSources
+        );
+
+        assert_eq!(
+            Some(registration.clone()),
+            Acurast::stored_job_registration(1, &registration.script)
         );
 
         assert_eq!(
@@ -281,6 +326,8 @@ fn test_submit_attestation() {
 
         let attestation = validate_and_extract_attestation::<Test>(&chain).unwrap();
 
+        assert_eq!(Some(attestation.clone()), Acurast::stored_attestation(1));
+
         assert_eq!(
             events(),
             [Event::Acurast(crate::Event::AttestationStored(
@@ -337,6 +384,8 @@ fn test_submit_attestation_failure_1() {
             Error::<Test>::CertificateChainTooShort
         );
 
+        assert_eq!(None, Acurast::stored_attestation(1));
+
         let chain = invalid_attestation_chain_2();
 
         assert_err!(
@@ -344,12 +393,16 @@ fn test_submit_attestation_failure_1() {
             Error::<Test>::RootCertificateValidationFailed
         );
 
+        assert_eq!(None, Acurast::stored_attestation(1));
+
         let chain = invalid_attestation_chain_3();
 
         assert_err!(
             Acurast::submit_attestation(Origin::signed(1).into(), chain.clone()),
             Error::<Test>::CertificateChainValidationFailed
         );
+
+        assert_eq!(None, Acurast::stored_attestation(1));
 
         assert_eq!(events(), []);
     });
@@ -366,6 +419,8 @@ fn test_submit_attestation_failure_2() {
             Error::<Test>::AttestationCertificateNotValid
         );
 
+        assert_eq!(None, Acurast::stored_attestation(1));
+
         assert_eq!(events(), []);
     });
 }
@@ -380,6 +435,8 @@ fn test_submit_attestation_failure_3() {
             Acurast::submit_attestation(Origin::signed(1).into(), chain.clone()),
             Error::<Test>::AttestationCertificateNotValid
         );
+
+        assert_eq!(None, Acurast::stored_attestation(1));
 
         assert_eq!(events(), []);
     });

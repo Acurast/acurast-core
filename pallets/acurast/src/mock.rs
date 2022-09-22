@@ -51,7 +51,7 @@ impl frame_system::Config for Test {
 frame_support::parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
     pub const MinimumPeriod: u64 = 6000;
-    pub Admins: Vec<AccountId> = vec![1];
+    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![1];
     pub static ExistentialDeposit: u64 = 0;
 }
 
@@ -84,7 +84,7 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type AllowedRevocationListUpdate = Admins;
+    type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
 }
 
 pub struct Router;
