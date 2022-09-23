@@ -1,5 +1,7 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std"), not(test)), no_std)]
 
+use core::convert::TryInto;
+
 use asn1::{
     Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv,
 };
@@ -82,6 +84,15 @@ pub struct Validity {
 pub enum Time {
     UTCTime(asn1::UtcTime),
     GeneralizedTime(asn1::GeneralizedTime),
+}
+
+impl Time {
+    pub fn timestamp_millis(&self) -> u64 {
+        match self {
+            Time::UTCTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
+            Time::GeneralizedTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
+        }
+    }
 }
 
 #[derive(Asn1Read, Asn1Write, Clone)]

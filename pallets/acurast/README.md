@@ -3,7 +3,7 @@
 
 ## Introduction
 
-The Acurast Pallet allows a Parachain to integrate the Acurast functionality to be able to securly receive real world data posted by the Acurast Data Transmitters.
+The Acurast Pallet allows a Parachain to integrate the Acurast functionality to be able to securly receive real world data posted by the Acurast Processors.
 
 The Pallet exposes a number of extrinsic.
 
@@ -12,7 +12,7 @@ The Pallet exposes a number of extrinsic.
 Allows the registration of a job. A registration consists of:
 
 - An ipfs URL to a `script` (written in Javascript).
-    - The script will be run in the Acurast Trusted Virtual Machine that uses a Trusted Execution Environment (TEE) on the Acurast Data Transmitter.
+    - The script will be run in the Acurast Trusted Virtual Machine that uses a Trusted Execution Environment (TEE) on the Acurast Processor.
 - An optional `allowedSources` list of allowed sources.
     - A list of `AccountId`s that are allowed to `fulfill` the job. If no list is provided, all sources are accepted.
 - An `allowOnlyVerifiedSources` boolean indicating if only verified source can fulfill the job.
@@ -37,6 +37,14 @@ Allows to post the fulfillment of a registered job. The fulfillment structure co
 - The `payload` bytes representing the output of the `script`.
 
 In addition to the `fulfillment` structure, `fulfill` expects the `AccountId` of the `requester` of the job.
+
+### submitAttestation
+
+Allows an Acurast Processor to submit a key attestation proving its integrity. The extrinsic parameter is a valid attestation certificate chain.
+
+### updateCertificateRevocationList
+
+Allows to update the certificate recovation list used during attestation validation.
 
 ## Setup
 
@@ -71,10 +79,15 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 	}
 }
 
+parameter_types! {
+    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![];
+}
+
 impl pallet_acurast::Config for Runtime {
 	type Event = Event;
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
+	type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -219,7 +232,7 @@ contract SimpleFulfill {
 
 ## P256 signatures
 
-Acurast Data Transmitters will sign extrinsics (the `fulfill` call) using a P256 (a.k.a secp256r1) private key.
+Acurast Processors will sign extrinsics (the `fulfill` call) using a P256 (a.k.a secp256r1) private key.
 
 By default, Substrate does not support the P256 curve. Use the `acurast-p256-crypto` crate to add support for P256 signature verification.
 
