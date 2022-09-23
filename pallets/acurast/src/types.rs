@@ -1,6 +1,7 @@
 use frame_support::{
     pallet_prelude::*, sp_runtime::traits::MaybeDisplay, storage::bounded_vec::BoundedVec,
 };
+use sp_std::prelude::*;
 
 use crate::attestation::{
     asn::{self, KeyDescription},

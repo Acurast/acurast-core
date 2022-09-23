@@ -1,3 +1,5 @@
+use sp_std::prelude::*;
+
 use crate::attestation::{
     extract_attestation, validate_certificate_chain, validate_certificate_chain_root,
 };
