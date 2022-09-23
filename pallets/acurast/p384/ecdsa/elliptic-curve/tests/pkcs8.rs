@@ -2,7 +2,7 @@
 
 #![cfg(all(feature = "dev", feature = "pkcs8"))]
 
-use elliptic_curve::{
+use elliptic_curve_vendored::{
     dev::{PublicKey, SecretKey},
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey},
     sec1::ToEncodedPoint,
