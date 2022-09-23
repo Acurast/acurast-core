@@ -48,5 +48,11 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"sp-std/std",
+	"pallet-timestamp/std",
+	"asn1/std",
+	"p256/std",
+	"sha2/std",
+	"num-bigint/std",
+	"ecdsa-vendored/std",
 ]
 try-runtime = [ "frame-support/try-runtime" ]
