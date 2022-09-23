@@ -32,24 +32,40 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 	// Storage: Assets Asset (r:1 w:1)
 	// Storage: Assets Account (r:2 w:2)
 	// Storage: System Account (r:1 w:1)
-	// Storage: Acurast StoredJobRegistration (r:0 w:1)
+	// Storage: Acurast StoredJob (r:0 w:1)
 	fn register() -> Weight {
 		Weight::from_ref_time(45_000_000 as u64)
 			.saturating_add(T::DbWeight::get().reads(4 as u64))
 			.saturating_add(T::DbWeight::get().writes(5 as u64))
 	}
-	// Storage: Acurast StoredJobRegistration (r:0 w:1)
+	// Storage: Acurast StoredJob (r:0 w:1)
 	fn deregister() -> Weight {
 		Weight::from_ref_time(13_000_000 as u64)
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
-	// Storage: Acurast StoredJobRegistration (r:1 w:1)
+	// Storage: Acurast StoredJob (r:1 w:1)
 	fn update_allowed_sources() -> Weight {
 		Weight::from_ref_time(22_000_000 as u64)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
-	// Storage: Acurast StoredJobRegistration (r:1 w:0)
+	// Storage: Acurast StoredAdvertisement (r:1 w:1)
+	// Storage: Acurast StoredCapacity (r:1 w:1)
+	// Storage: Acurast StoredAdIndex (r:1 w:1)
+	fn advertise() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	// Storage: Acurast StoredAdvertisement (r:1 w:1)
+	// Storage: Acurast StoredCapacity (r:0 w:1)
+	// Storage: Acurast StoredAdIndex (r:1 w:1)
+	fn delete_advertisement() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(2 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	// Storage: Acurast StoredJob (r:1 w:0)
 	// Storage: Acurast StoredJobAssignment (r:1 w:1)
 	fn update_job_assignments() -> Weight {
 		Weight::from_ref_time(21_000_000 as u64)
@@ -57,7 +73,7 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Acurast StoredJobAssignment (r:1 w:1)
-	// Storage: Acurast StoredJobRegistration (r:1 w:0)
+	// Storage: Acurast StoredJob (r:1 w:0)
 	// Storage: Assets Asset (r:1 w:1)
 	// Storage: Assets Account (r:2 w:2)
 	// Storage: System Account (r:2 w:2)

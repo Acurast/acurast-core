@@ -73,7 +73,7 @@ pub mod acurast_runtime {
                 pallet_acurast::JobAssignmentUpdate<<Runtime as frame_system::Config>::AccountId>,
             >,
         ) -> bool {
-            updates.iter().all(|update| &update.job_id.0 == origin)
+            updates.iter().all(|update| &update.requester == origin)
         }
     }
 

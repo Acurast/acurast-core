@@ -1,5 +1,7 @@
 use frame_support::{
-    pallet_prelude::*, sp_runtime::traits::MaybeDisplay, storage::bounded_vec::BoundedVec,
+    pallet_prelude::*,
+    sp_runtime::traits::{MaybeDisplay, StaticLookup},
+    storage::bounded_vec::BoundedVec,
 };
 use sp_std::prelude::*;
 
@@ -7,6 +9,78 @@ use crate::attestation::{
     asn::{self, KeyDescription},
     CertificateChainInput, CHAIN_MAX_LENGTH,
 };
+
+use crate::Config;
+use sp_std::prelude::*;
+use xcm::latest::prelude::*;
+
+pub const MAX_PRICING_VARIANTS: u32 = 100;
+
+/// The resource advertisement by a source containing pricing and capacity announcements.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct Advertisement<C>
+where
+    C: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
+{
+    /// The reward token accepted. Understood as one-of per job assigned.
+    pub pricing: BoundedVec<PricingVariant, ConstU32<MAX_PRICING_VARIANTS>>,
+    // Capacity not too be exceeded in matching.
+    pub capacity: u32,
+    /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
+    pub allowed_consumers: Option<Vec<C>>,
+}
+
+/// A type to dynamically describe an asset used for rewarding.
+/// The same asset is also used for slashing.
+/// TODO maybe this can be generalized to AssetId
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct RewardAssetId(pub MultiLocation);
+
+type MultiAssetIdExtractionError = ();
+type MultiAssetValueExtractionError = ();
+
+pub fn extract_asset(
+    multi_asset: MultiAsset,
+) -> Result<RewardAssetId, MultiAssetIdExtractionError> {
+    match multi_asset.id {
+        Concrete(multi_location) => Ok(RewardAssetId(multi_location)),
+        _ => Err(()),
+    }
+}
+
+pub fn extract_value(multi_asset: &MultiAsset) -> Result<u128, MultiAssetValueExtractionError> {
+    match multi_asset.fun {
+        Fungible(amount) => Ok(amount),
+        NonFungible(_) => Err(()),
+    }
+}
+
+impl RewardAssetId {
+    pub fn with_value(&self, value: u128) -> MultiAsset {
+        MultiAsset {
+            id: Concrete(self.0.clone()),
+            fun: Fungible(value),
+        }
+    }
+}
+
+pub type Price = u128;
+
+/// Pricing variant listing cost per resource unit and slash on SLA violation.
+/// Specified in specific asset that is payed out or deducted from stake on complete fulfillment.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct PricingVariant {
+    /// The rewarded asset. Only one per [PricingVariant].
+    pub reward_asset: RewardAssetId,
+    /// Price in [reward_asset] per cpu second.
+    pub price_per_cpu_millisecond: Price, // TODO change to nanosecond
+    /// A fixed bonus in [reward_asset].
+    pub bonus: u128,
+    /// The maximum slash to put at stake and that is lost if SLA is violated.
+    pub maximum_slash: u128,
+}
+
+pub type AdvertismentIndexValue<AccountId> = (AccountId, Price);
 
 pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
 pub(crate) const SCRIPT_LENGTH: u32 = 53;
@@ -53,11 +127,20 @@ where
     A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
 {
     /// The update operation.
-    pub operation: ListUpdateOperation,
+    pub operation: JobAssignemntUpdateOperation,
     /// The [AccountId] to assign the job to.
     pub assignee: A,
-    /// the job id to be assigned.
-    pub job_id: JobId<A>,
+    /// The job's original  to be assigned.
+    pub requester: A,
+    /// The consumer that registered the job originally.
+    pub script: Script,
+}
+
+/// The allowed sources update operation.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+pub enum JobAssignemntUpdateOperation {
+    Add(u8), // The slot to assign.
+    Remove,
 }
 
 /// Structure used to updated the certificate recovation list.
@@ -76,6 +159,38 @@ pub enum ListUpdateOperation {
     Remove,
 }
 
+/// The allowed sources update operation.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+pub enum JobStatus {
+    Open,
+    Assigned,
+    Fulfilled(SLAEvaluation),
+}
+
+impl Default for JobStatus {
+    fn default() -> Self {
+        JobStatus::Open
+    }
+}
+
+/// Represents an evaluation of the SLA after a job's schedule is completed.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+pub struct SLAEvaluation {
+    total: u8,
+    met: u8,
+}
+
+/// Structure representing a job with its registration and curent status.
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub struct Job<A, T>
+where
+    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
+    T: Parameter + Member + MaxEncodedLen,
+{
+    pub registration: JobRegistration<A, T>,
+    pub status: JobStatus,
+}
+
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub struct JobRegistration<A, T>
@@ -85,11 +200,15 @@ where
 {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
+    /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+    pub slots: u8,
+    /// CPU milliseconds (upper bound) required to execute script.
+    pub cpu_milliseconds: u128,
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
     pub allowed_sources: Option<Vec<A>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
-    /// Reward offered for the job
+    /// Total reward (and reward type) offered for the job.
     pub reward: xcm::v2::MultiAsset,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: T,

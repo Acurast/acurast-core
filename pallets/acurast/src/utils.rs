@@ -7,8 +7,9 @@ use crate::attestation::{
     PublicKey,
 };
 use crate::{
-    Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
-    JobRegistration, SerialNumber, StoredAttestation, StoredRevokedCertificate, ValidatingCertIds,
+    Advertisement, Attestation, AttestationChain, AttestationValidity, CertId, Config, Error,
+    IssuerName, JobRegistration, SerialNumber, StoredAttestation, StoredRevokedCertificate,
+    ValidatingCertIds,
 };
 
 pub(crate) fn validate_and_extract_attestation<T: Config>(
@@ -72,6 +73,24 @@ pub(crate) fn ensure_source_allowed<T: Config>(
         .unwrap_or(Ok(()))?;
 
     ensure_source_verified(source, registration)?;
+
+    Ok(())
+}
+
+pub(crate) fn ensure_consumer_allowed<T: Config>(
+    consumer: &T::AccountId,
+    ad: &Advertisement<T::AccountId>,
+) -> Result<(), Error<T>> {
+    ad.allowed_consumers
+        .as_ref()
+        .map(|allowed_consumers| {
+            allowed_consumers
+                .iter()
+                .position(|allowed_consumer| allowed_consumer == consumer)
+                .map(|_| ())
+                .ok_or(Error::<T>::ConsumerNotWhitelisted)
+        })
+        .unwrap_or(Ok(()))?;
 
     Ok(())
 }

@@ -2,7 +2,8 @@
 
 use crate::{
     mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate,
-    CertificateRevocationListUpdate, Error, Fulfillment, ListUpdateOperation, SerialNumber,
+    CertificateRevocationListUpdate, Error, Fulfillment, Job, JobStatus, ListUpdateOperation,
+    SerialNumber,
 };
 use frame_support::{assert_err, assert_ok};
 use hex_literal::hex;
@@ -19,7 +20,10 @@ fn test_job_registration() {
         assert_ok!(register_call);
 
         assert_eq!(
-            Some(registration.clone()),
+            Some(Job {
+                registration: registration.clone(),
+                status: JobStatus::Open
+            }),
             Acurast::stored_job_registration(alice_account_id(), registration.script.clone())
         );
 
@@ -179,7 +183,10 @@ fn test_update_allowed_sources() {
         ));
 
         assert_eq!(
-            Some(registration_2.clone()),
+            Some(Job {
+                registration: registration_2.clone(),
+                status: JobStatus::Open
+            }),
             Acurast::stored_job_registration(alice_account_id(), &registration_1.script)
         );
 
@@ -190,7 +197,10 @@ fn test_update_allowed_sources() {
         ));
 
         assert_eq!(
-            Some(registration_1.clone()),
+            Some(Job {
+                registration: registration_1.clone(),
+                status: JobStatus::Open
+            }),
             Acurast::stored_job_registration(alice_account_id(), &registration_1.script)
         );
 
@@ -253,7 +263,10 @@ fn test_update_allowed_sources_failure() {
         );
 
         assert_eq!(
-            Some(registration.clone()),
+            Some(Job {
+                registration: registration.clone(),
+                status: JobStatus::Open
+            }),
             Acurast::stored_job_registration(alice_account_id(), &registration.script)
         );
 
@@ -276,6 +289,119 @@ fn test_update_allowed_sources_failure() {
 }
 
 #[test]
+fn test_match() {
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 5);
+    let registration = job_registration_with_reward(script(), 5, 5000);
+    ExtBuilder::default().build().execute_with(|| {
+        assert_ok!(Acurast::advertise(
+            Origin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+        assert_eq!(
+            Some(ad.clone()),
+            Acurast::stored_advertisement(processor_account_id())
+        );
+        assert_ok!(Acurast::register(
+            Origin::signed(alice_account_id()).into(),
+            registration.clone(),
+        ));
+
+        assert_eq!(
+            events(),
+            [
+                Event::Acurast(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                Event::Assets(pallet_assets::Event::Transferred {
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: 2000,
+                }),
+                Event::Acurast(crate::Event::JobRegistrationStored(
+                    registration.clone(),
+                    alice_account_id()
+                )),
+                Event::Acurast(crate::Event::JobRegistrationMatched(
+                    registration.clone(),
+                    alice_account_id()
+                )),
+            ]
+        );
+    });
+}
+
+#[test]
+fn test_no_match_insufficient_capacity() {
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 1);
+    let registration = job_registration_with_reward(script(), 2, 2000);
+    let registration2 = job_registration_with_reward(script_random_value(), 2, 2000);
+    ExtBuilder::default().build().execute_with(|| {
+        assert_ok!(Acurast::advertise(
+            Origin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+        assert_eq!(
+            Some(ad.clone()),
+            Acurast::stored_advertisement(processor_account_id())
+        );
+
+        // the first job matches because 1 capacity left
+        assert_ok!(Acurast::register(
+            Origin::signed(alice_account_id()).into(),
+            registration.clone(),
+        ));
+        assert_eq!(Some(0), Acurast::stored_capacity(processor_account_id()));
+
+        // this one does not match anymore
+        assert_ok!(Acurast::register(
+            Origin::signed(alice_account_id()).into(),
+            registration2.clone(),
+        ));
+
+        assert_eq!(
+            events(),
+            [
+                Event::Acurast(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                // first job
+                Event::Assets(pallet_assets::Event::Transferred {
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: 2000,
+                }),
+                Event::Acurast(crate::Event::JobRegistrationStored(
+                    registration.clone(),
+                    alice_account_id()
+                )),
+                Event::Acurast(crate::Event::JobRegistrationMatched(
+                    registration.clone(),
+                    alice_account_id()
+                )),
+                // second job
+                Event::Assets(pallet_assets::Event::Transferred {
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: 2000,
+                }),
+                Event::Acurast(crate::Event::JobRegistrationStored(
+                    registration2.clone(),
+                    alice_account_id()
+                )),
+                // no match event
+            ]
+        );
+    });
+}
+
+#[test]
 fn test_assign_job() {
     let registration = job_registration(None, false);
     let updates = job_assignment_update_for(&registration, None);
@@ -284,14 +410,24 @@ fn test_assign_job() {
             Origin::signed(alice_account_id()).into(),
             registration.clone(),
         ));
+        assert_eq!(
+            None,
+            Acurast::stored_job_assignment(
+                (alice_account_id(), registration.script.clone()),
+                processor_account_id()
+            )
+        );
         assert_ok!(Acurast::update_job_assignments(
             Origin::signed(alice_account_id()),
             updates.clone(),
         ));
 
         assert_eq!(
-            Some(vec![(alice_account_id(), registration.script.clone())]),
-            Acurast::stored_job_assignment(processor_account_id())
+            Some(0),
+            Acurast::stored_job_assignment(
+                (alice_account_id(), registration.script.clone()),
+                processor_account_id()
+            )
         );
 
         assert_eq!(

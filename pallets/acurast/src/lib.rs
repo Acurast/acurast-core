@@ -79,6 +79,8 @@ pub mod pallet {
         fn register() -> Weight;
         fn deregister() -> Weight;
         fn update_allowed_sources() -> Weight;
+        fn advertise() -> Weight;
+        fn delete_advertisement() -> Weight;
         fn update_job_assignments() -> Weight;
         fn fulfill() -> Weight;
         fn submit_attestation() -> Weight;
@@ -115,19 +117,19 @@ pub mod pallet {
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
-    /// The storage for [JobRegistration]s. They are stored by [AccountId] and [Script].
+    /// The storage for jobs as a map [AccountId] -> [Script] -> [Job].
     #[pallet::storage]
     #[pallet::getter(fn stored_job_registration)]
-    pub type StoredJobRegistration<T: Config> = StorageDoubleMap<
+    pub type StoredJob<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         T::AccountId,
         Blake2_128Concat,
         Script,
-        JobRegistration<T::AccountId, T::RegistrationExtra>,
+        Job<T::AccountId, T::RegistrationExtra>,
     >;
 
-    /// The storage for [Attestation]s. They are stored by [AccountId].
+    /// The storage for attestations as a map [AccountId] -> [Attestation].
     #[pallet::storage]
     #[pallet::getter(fn stored_attestation)]
     pub type StoredAttestation<T: Config> =
@@ -139,17 +141,46 @@ pub mod pallet {
     pub type StoredRevokedCertificate<T: Config> =
         StorageMap<_, Blake2_128Concat, SerialNumber, ()>;
 
-    /// Job assignments.
+    /// The storage for advertisements. They are stored as a map [AccountId] -> [Advertisment] since only one
+    /// advertisement per client is allowed.
+    #[pallet::storage]
+    #[pallet::getter(fn stored_advertisement)]
+    pub type StoredAdvertisement<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, Advertisement<T::AccountId>>;
+
+    /// The storage for remaining capacity for each source. Can be negative if capacity is reduced beyond the number of jobs currently assigned.
+    #[pallet::storage]
+    #[pallet::getter(fn stored_capacity)]
+    pub type StoredCapacity<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, i32>;
+
+    /// Index with sorted advertisement by reward asset as a map [RewardAssetId] -> Vec<([AccountId], [Price])>
+    #[pallet::storage]
+    #[pallet::getter(fn stored_ad_index)]
+    pub type StoredAdIndex<T: Config> =
+        StorageMap<_, Blake2_128Concat, RewardAssetId, Vec<AdvertismentIndexValue<T::AccountId>>>;
+
+    /// Job assignments as a map [JobId] -> source's [AccountId] -> SlotId
     #[pallet::storage]
     #[pallet::getter(fn stored_job_assignment)]
-    pub type StoredJobAssignment<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, Vec<JobId<T::AccountId>>>;
+    pub type StoredJobAssignment<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        JobId<T::AccountId>,
+        Blake2_128Concat,
+        T::AccountId,
+        u8,
+    >;
 
     #[pallet::event]
-    #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully stored. [registration, who]
         JobRegistrationStored(
+            JobRegistration<T::AccountId, T::RegistrationExtra>,
+            T::AccountId,
+        ),
+        /// A registration was successfully matched. [registration, who]
+        JobRegistrationMatched(
             JobRegistration<T::AccountId, T::RegistrationExtra>,
             T::AccountId,
         ),
@@ -172,21 +203,41 @@ pub mod pallet {
         AttestationStored(Attestation, T::AccountId),
         /// The certificate revocation list has been updated. [who, updates]
         CertificateRecovationListUpdated(T::AccountId, Vec<CertificateRevocationListUpdate>),
+        /// A advertisement was successfully stored. [registration, who]
+        AdvertisementStored(Advertisement<T::AccountId>, T::AccountId),
+        /// A registration was successfully removed. [who]
+        AdvertisementRemoved(T::AccountId),
         /// The job assignemts have been updated. [who, updates]
         JobAssignmentUpdate(T::AccountId, Vec<JobAssignmentUpdate<T::AccountId>>),
     }
 
     #[pallet::error]
     pub enum Error<T> {
+        /// The job registration's reward type is not supported.
+        JobRegistrationUnsupportedReward,
+        /// The job registration's must specify non-zero `cpu_milliseconds`.
+        JobRegistrationZeroCPUMilliseconds,
+        /// The job registration's must specify non-zero `slots`.
+        JobRegistrationZeroSlots,
+        /// The job registration's must specify non-zero `reward`.
+        JobRegistrationZeroReward,
         /// Fulfill was executed for a not registered job.
         JobRegistrationNotFound,
+        /// The job registration can't be modified.
+        JobRegistrationUnmodifiable,
+        /// Fulfill cannot be called for a job that does not have `JobStatus::Assigned` status.
+        CannotFulfillJobWhenNotAssigned,
+        /// Advertisement not found when attempt to delete it.
+        AdvertisementNotFound,
         /// The source of the fulfill is not allowed for the job.
         FulfillSourceNotAllowed,
         /// The source of the fulfill is not verified. The source does not have a valid attestation submitted.
         FulfillSourceNotVerified,
-        /// The allowed soruces list for a registration exeeded the max length.
+        /// The source of the fulfill is not allowed for the job.
+        ConsumerNotWhitelisted,
+        /// The allowed source list for a registration exceeds the max length.
         TooManyAllowedSources,
-        /// The allowed soruces list for a registration cannot be empty if provided.
+        /// The allowed source list for a registration cannot be empty if provided.
         TooFewAllowedSources,
         /// The provided script value is not valid. The value needs to be and ipfs:// url.
         InvalidScriptValue,
@@ -216,16 +267,30 @@ pub mod pallet {
         RevokedCertificate,
         /// Origin is not allowed to update the certificate revocation list.
         CertificateRevocationListUpdateNotAllowed,
+        /// Fulfill was executed for a not registered job.
+        EmptyPricing,
+        /// Pricing cannot be changed (for now).
+        PricingUnmodifiable,
         /// The attestation was issued for an unsupported public key type.
         UnsupportedAttestationPublicKeyType,
         /// The submitted attestation public key does not match the source.
         AttestationPublicKeyDoesNotMatchSource,
         /// Job assignment update not allowed.
+        JobAssignmentNotFound,
+        /// Job assignment update not allowed.
         JobAssignmentUpdateNotAllowed,
+        /// Job assignment update invalid because of job's status.
+        JobAssignmentUpdateInvalidStatus,
+        /// Job assignment update invalid because slot out of bounds.
+        JobAssignmentUpdateInvalidSlot,
         /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
         InvalidPayment,
-        /// Failed to retrieve funds from pallet account to pay processor. SEVERE error
+        /// Failed to retrieve funds from pallet account to pay source. SEVERE error
         FailedToPay,
+        /// StoredAdIndex holds inconsistent data. SEVERE error
+        AdIndexInconsistent,
+        /// Capacity not known for a source. SEVERE error
+        CapacityNotFound,
     }
 
     #[pallet::hooks]
@@ -249,6 +314,15 @@ pub mod pallet {
                 script_len == SCRIPT_LENGTH && registration.script.starts_with(SCRIPT_PREFIX),
                 Error::<T>::InvalidScriptValue
             );
+            ensure!(
+                registration.cpu_milliseconds > 0,
+                Error::<T>::JobRegistrationZeroCPUMilliseconds
+            );
+            ensure!(registration.slots > 0, Error::<T>::JobRegistrationZeroSlots);
+            let reward_value = extract_value(&registration.reward)
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?;
+            ensure!(reward_value > 0, Error::<T>::JobRegistrationZeroReward);
+
             let allowed_sources_len = registration
                 .allowed_sources
                 .as_ref()
@@ -262,14 +336,35 @@ pub mod pallet {
                 );
             }
 
+            let reward_asset = extract_asset(registration.reward.clone())
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?;
+            let reward_value = extract_value(&registration.reward)
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?;
+
             T::AssetTransactor::lock_asset(
-                registration.reward.clone(),
+                reward_asset.with_value(reward_value * registration.slots as u128), // reward is understood per slot
                 T::Lookup::unlookup(who.clone()),
             )
             .map_err(|_| Error::<T>::InvalidPayment)?;
 
-            <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
-            Self::deposit_event(Event::JobRegistrationStored(registration, who));
+            <StoredJob<T>>::insert(
+                &who,
+                &registration.script,
+                Job {
+                    registration: registration.clone(),
+                    status: JobStatus::default(),
+                },
+            );
+            Self::deposit_event(Event::JobRegistrationStored(
+                registration.clone(),
+                who.clone(),
+            ));
+
+            if Self::match_job(&who, &registration)? {
+                // TODO improve event to contain list of matched sources
+                Self::deposit_event(Event::JobRegistrationMatched(registration, who));
+            }
+
             Ok(().into())
         }
 
@@ -277,7 +372,14 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::deregister())]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            <StoredJobRegistration<T>>::remove(&who, &script);
+            let job =
+                <StoredJob<T>>::get(&who, &script).ok_or(Error::<T>::JobRegistrationNotFound)?;
+            ensure!(
+                job.status == JobStatus::Open,
+                Error::<T>::JobRegistrationUnmodifiable
+            );
+
+            <StoredJob<T>>::remove(&who, &script);
             Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
@@ -290,11 +392,16 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let registration = <StoredJobRegistration<T>>::get(&who, &script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            let job =
+                <StoredJob<T>>::get(&who, &script).ok_or(Error::<T>::JobRegistrationNotFound)?;
+
+            ensure!(
+                job.status == JobStatus::Open,
+                Error::<T>::JobRegistrationUnmodifiable
+            );
 
             let mut current_allowed_sources =
-                registration.allowed_sources.clone().unwrap_or_default();
+                job.registration.allowed_sources.clone().unwrap_or_default();
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
@@ -320,20 +427,91 @@ pub mod pallet {
             } else {
                 Some(current_allowed_sources)
             };
-            <StoredJobRegistration<T>>::insert(
+            <StoredJob<T>>::insert(
                 &who,
                 &script,
-                JobRegistration {
-                    script: script.clone(),
-                    allowed_sources,
-                    extra: registration.extra.clone(),
-                    allow_only_verified_sources: registration.allow_only_verified_sources,
-                    reward: registration.reward.clone(),
+                Job {
+                    registration: JobRegistration {
+                        script: script.clone(),
+                        slots: job.registration.slots,
+                        cpu_milliseconds: job.registration.cpu_milliseconds,
+                        allowed_sources,
+                        extra: job.registration.extra.clone(),
+                        allow_only_verified_sources: job.registration.allow_only_verified_sources,
+                        reward: job.registration.reward.clone(),
+                    },
+                    status: JobStatus::default(),
                 },
             );
 
-            Self::deposit_event(Event::AllowedSourcesUpdated(who, registration, updates));
+            Self::deposit_event(Event::AllowedSourcesUpdated(who, job.registration, updates));
 
+            Ok(().into())
+        }
+
+        /// Advertise resources by providing a [Advertisement]. If an advertisement for the same script was previously registered, it will be overwritten.
+        #[pallet::weight(<T as Config>::WeightInfo::advertise())]
+        pub fn advertise(
+            origin: OriginFor<T>,
+            advertisement: Advertisement<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
+
+            // update capacity to save on operations when checking available capacity
+            if let Some(old) = <StoredAdvertisement<T>>::get(who.clone()) {
+                // TODO: relax this check and resort ads according to updated pricing
+                ensure!(
+                    old.pricing == advertisement.pricing,
+                    Error::<T>::PricingUnmodifiable
+                );
+
+                // allow capacity to become negative (in which case source remains assigned but does not receive new jobs assigned)
+                <StoredCapacity<T>>::mutate(who.clone(), |c| {
+                    c.unwrap_or(0) + advertisement.capacity as i32 - old.capacity as i32
+                });
+            } else {
+                <StoredCapacity<T>>::insert(who.clone(), advertisement.capacity as i32);
+            }
+
+            <StoredAdvertisement<T>>::insert(who.clone(), advertisement.clone());
+
+            // update index
+            for pricing in &advertisement.pricing {
+                let mut ads = <StoredAdIndex<T>>::get(&pricing.reward_asset).unwrap_or_default();
+
+                let to_add = (who.clone(), pricing.price_per_cpu_millisecond);
+                // partition with predicate such that lower priced ads at start of ved
+                let pos = ads.partition_point(|v| v.1 < to_add.1); // -> predicate holds for ads[i], i ∈ [0, pos)
+                ads.insert(pos, to_add);
+
+                <StoredAdIndex<T>>::set(&pricing.reward_asset, Some(ads));
+            }
+
+            Self::deposit_event(Event::AdvertisementStored(advertisement, who));
+            Ok(().into())
+        }
+
+        /// Delete advertisement.
+        #[pallet::weight(<T as Config>::WeightInfo::delete_advertisement())]
+        pub fn delete_advertisement(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            let ad = <StoredAdvertisement<T>>::get(who.clone())
+                .ok_or(Error::<T>::AdvertisementNotFound)?;
+
+            // update index
+            for pricing in &ad.pricing {
+                <StoredAdIndex<T>>::mutate(&pricing.reward_asset, |ads| {
+                    let mut a = ads.clone().unwrap_or_default();
+                    a.retain(|v| v.0 != who.clone())
+                });
+            }
+
+            <StoredAdvertisement<T>>::remove(who.clone());
+            <StoredCapacity<T>>::remove(who.clone());
+
+            Self::deposit_event(Event::AdvertisementRemoved(who));
             Ok(().into())
         }
 
@@ -344,22 +522,38 @@ pub mod pallet {
             updates: Vec<JobAssignmentUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
+
             if !T::JobAssignmentUpdateBarrier::can_update_assigned_jobs(&who, &updates) {
                 return Err(Error::<T>::JobAssignmentUpdateNotAllowed)?;
             }
             for update in &updates {
-                let job_registration =
-                    <StoredJobRegistration<T>>::get(&update.job_id.0, &update.job_id.1)
+                // lookups
+                let job_id: JobId<T::AccountId> = (update.requester.clone(), update.script.clone());
+
+                let job: Job<T::AccountId, T::RegistrationExtra> =
+                    <StoredJob<T>>::get(&update.requester, update.script.clone())
                         .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-                ensure_source_allowed::<T>(&update.assignee, &job_registration)?;
+                // validate
+                ensure_source_allowed::<T>(&update.assignee, &job.registration)?;
+                ensure!(
+                    job.status == JobStatus::Open,
+                    Error::<T>::JobAssignmentUpdateInvalidStatus
+                );
 
-                let mut assignments =
-                    <StoredJobAssignment<T>>::get(&update.assignee).unwrap_or_default();
-                if !assignments.contains(&update.job_id) {
-                    assignments.push(update.job_id.clone());
+                match &update.operation {
+                    JobAssignemntUpdateOperation::Add(slot_id) => {
+                        ensure!(
+                            *slot_id < job.registration.slots,
+                            Error::<T>::JobAssignmentUpdateInvalidSlot
+                        );
+                        <StoredJobAssignment<T>>::set(job_id, &update.assignee, Some(*slot_id));
+                    }
+                    JobAssignemntUpdateOperation::Remove => {
+                        // we allow overwriting existing assignment
+                        <StoredJobAssignment<T>>::remove(job_id, &update.assignee);
+                    }
                 }
-                <StoredJobAssignment<T>>::set(&update.assignee, Some(assignments));
             }
             Self::deposit_event(Event::JobAssignmentUpdate(who, updates));
             Ok(().into())
@@ -368,29 +562,32 @@ pub mod pallet {
         /// Fulfills a previously registered job.
         #[pallet::weight(<T as Config>::WeightInfo::fulfill())]
         pub fn fulfill(
-            origin: OriginFor<T>,
+            origin: OriginFor<T>, // processor
             fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
+            requester: <T::Lookup as StaticLookup>::Source, // the consumer that registered the job originally
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin.clone())?;
             let requester = T::Lookup::lookup(requester)?;
 
             // find assignment
-            let job_id: JobId<T::AccountId> = (requester, fulfillment.script.clone());
-            let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
-            let job_index = assigned_jobs
-                .iter()
-                .position(|assigned_job_id| assigned_job_id == &job_id)
+            let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
+            <StoredJobAssignment<T>>::get(&job_id, &who)
                 .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
 
-            // find registration
-            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            // find job
+            let job: Job<T::AccountId, T::RegistrationExtra> =
+                <StoredJob<T>>::get(&job_id.0, &fulfillment.script)
+                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-            ensure_source_allowed::<T>(&who, &registration)?;
+            // validate
+            ensure!(
+                job.status != JobStatus::Assigned,
+                Error::<T>::CannotFulfillJobWhenNotAssigned
+            );
+            ensure_source_allowed::<T>(&who, &job.registration)?;
 
             T::AssetTransactor::pay_asset(
-                registration.reward.clone(),
+                job.registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
             )
             .map_err(|_| Error::<T>::FailedToPay)?;
@@ -400,19 +597,18 @@ pub mod pallet {
                 origin,
                 who.clone(),
                 fulfillment.clone(),
-                registration.clone(),
-                job_id.0,
+                job.registration.clone(),
+                requester.clone(),
             )?;
 
             // removed fulfilled job from assigned jobs
-            let job_id = assigned_jobs.remove(job_index);
-            <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+            <StoredJobAssignment<T>>::remove(&job_id, &who);
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,
                 fulfillment,
-                registration,
-                job_id.0,
+                job.registration,
+                requester,
             ));
             Ok(info)
         }
@@ -466,6 +662,85 @@ pub mod pallet {
             }
             Self::deposit_event(Event::CertificateRecovationListUpdated(who, updates));
             Ok(().into())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        // fn match_ad(
+        //     who: &T::AccountId,
+        //     advertisement: &Advertisement<T::AccountId>,
+        // ) -> Result<bool, Error<T>> {
+        //     // TODO implement
+        //     Ok(false)
+        // }
+
+        fn match_job(
+            who: &T::AccountId,
+            registration: &JobRegistration<T::AccountId, T::RegistrationExtra>,
+        ) -> Result<bool, Error<T>> {
+            // strips away the asset amount
+            let reward_asset = extract_asset(registration.reward.clone())
+                .map_err(|_| Error::<T>::AdIndexInconsistent)?;
+
+            // filter candidates according to reward asset
+            let ads_with_reward = <StoredAdIndex<T>>::get(reward_asset);
+            if let Some(ads) = ads_with_reward {
+                let reward_value = extract_value(&registration.reward)
+                    .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?;
+
+                // either all or no candidate gets assigned after checking if all slots can be filled
+                let mut candidates = Vec::new();
+                for ad_with_reward in ads {
+                    // CHECK price not exceeding reward
+                    if ad_with_reward.1 * registration.cpu_milliseconds > reward_value {
+                        break;
+                    }
+
+                    // CHECK capacity sufficient
+                    let capacity = <StoredCapacity<T>>::get(ad_with_reward.0.clone())
+                        .ok_or(Error::<T>::CapacityNotFound)?;
+                    if capacity <= 0 {
+                        continue;
+                    }
+
+                    // CHECK source is whitelisted
+                    if ensure_source_allowed::<T>(&ad_with_reward.0, &registration).is_err() {
+                        continue;
+                    }
+
+                    let ad = <StoredAdvertisement<T>>::get(&ad_with_reward.0)
+                        .ok_or(Error::<T>::AdIndexInconsistent)?;
+
+                    // CHECK consumer is whitelisted
+                    if ensure_consumer_allowed::<T>(&who, &ad).is_err() {
+                        continue;
+                    }
+
+                    // CANDIDATE FOUND
+                    candidates.push((ad_with_reward.0, capacity));
+
+                    if candidates.len() as u8 == registration.slots {
+                        // all slots matched -> stop looking at pricier ads in sorted list
+                        break;
+                    }
+                }
+
+                if candidates.len() as u8 == registration.slots {
+                    // all slots matched
+                    for (slot, candidate) in candidates.iter().enumerate() {
+                        <StoredJobAssignment<T>>::set(
+                            (&who, &registration.script),
+                            &candidate.0,
+                            Some(slot as u8),
+                        );
+
+                        <StoredCapacity<T>>::set(&candidate.0, Some(candidate.1 - 1));
+                    }
+
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         }
     }
 }

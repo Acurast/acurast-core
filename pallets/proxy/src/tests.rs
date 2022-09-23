@@ -179,6 +179,8 @@ pub fn owned_asset() -> MultiAsset {
 pub fn registration() -> JobRegistration<AccountId, ()> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+        slots: 1,
+        cpu_milliseconds: 5,
         allowed_sources: None,
         allow_only_verified_sources: false,
         extra: (),
@@ -190,9 +192,10 @@ pub fn job_assignment_update_for(
     requester: Option<AccountId>,
 ) -> Vec<JobAssignmentUpdate<AccountId>> {
     vec![JobAssignmentUpdate {
-        operation: pallet_acurast::ListUpdateOperation::Add,
+        operation: pallet_acurast::JobAssignemntUpdateOperation::Add(0),
         assignee: processor_account_id(),
-        job_id: (requester.unwrap_or(alice_account_id()), registration.script),
+        requester: requester.unwrap_or(alice_account_id()),
+        script: registration.script,
     }]
 }
 
@@ -461,12 +464,12 @@ mod proxy_calls {
 
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationStored;
-            use acurast_runtime::pallet_acurast::StoredJobRegistration;
+            use acurast_runtime::pallet_acurast::StoredJob;
             use acurast_runtime::{Event, Runtime, System};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let p_store = StoredJob::<Runtime>::get(ALICE, script);
             assert!(p_store.is_some());
             assert!(events
                 .iter()
@@ -481,11 +484,11 @@ mod proxy_calls {
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast::StoredJobRegistration;
+            use acurast_runtime::pallet_acurast::StoredJob;
             use acurast_runtime::Runtime;
 
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let p_store = StoredJob::<Runtime>::get(ALICE, script);
             assert!(p_store.is_some());
         });
 
@@ -507,12 +510,12 @@ mod proxy_calls {
 
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationRemoved;
-            use acurast_runtime::pallet_acurast::StoredJobRegistration;
+            use acurast_runtime::pallet_acurast::StoredJob;
             use acurast_runtime::{Event, Runtime, System};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let _p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let _p_store = StoredJob::<Runtime>::get(ALICE, script);
             assert!(events
                 .iter()
                 .any(|event| matches!(event.event, Event::Acurast(JobRegistrationRemoved { .. }))));
@@ -527,11 +530,11 @@ mod proxy_calls {
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast::StoredJobRegistration;
+            use acurast_runtime::pallet_acurast::StoredJob;
             use acurast_runtime::Runtime;
 
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let p_store = StoredJob::<Runtime>::get(ALICE, script);
             assert!(p_store.is_some());
         });
 
@@ -562,16 +565,16 @@ mod proxy_calls {
 
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::AllowedSourcesUpdated;
-            use acurast_runtime::pallet_acurast::StoredJobRegistration;
+            use acurast_runtime::pallet_acurast::StoredJob;
             use acurast_runtime::{Event, Runtime, System};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let p_store = StoredJob::<Runtime>::get(ALICE, script);
 
             // source in storage same as one submitted to proxy
             let found_source: &frame_support::sp_runtime::AccountId32 =
-                &p_store.unwrap().allowed_sources.unwrap()[0];
+                &p_store.unwrap().registration.allowed_sources.unwrap()[0];
             assert_eq!(*found_source, source);
 
             // event emitted
