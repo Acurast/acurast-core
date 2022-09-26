@@ -22,6 +22,15 @@ frame-system = { git = "https://github.com/paritytech/substrate", default-featur
 sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
+pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
+
+# Cumulus
+parachains-common = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.26", default-features = false }
+
+# Polkadot
+xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
+xcm-executor = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
+xcm-builder = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
 
 # Attestation
 asn1 = { version = "0.11.0", default-features = false, features = ["derive"] }
@@ -35,8 +44,11 @@ ecdsa-vendored = { package = "ecdsa_vendored", path = "p384/ecdsa", default-feat
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 hex-literal = "0.3"
 
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, branch = "polkadot-v0.9.26" }
 
 acurast-p256-crypto = { path = "../../p256-crypto" }
 
@@ -54,8 +66,15 @@ std = [
 	"asn1/std",
 	"p256/std",
 	"sha2/std",
+	"p384/std",
 	"num-bigint/std",
 	"ecdsa-vendored/std",
 	"sp-io/std",
+	"pallet-assets/std",
+	"parachains-common/std",
+	"xcm/std",
+	"xcm-executor/std",
+	"xcm-builder/std",
+	"parachain-info/std",
 ]
 try-runtime = [ "frame-support/try-runtime" ]

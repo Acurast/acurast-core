@@ -6,20 +6,25 @@ mod mock;
 mod tests;
 
 mod attestation;
+pub mod payments;
 mod types;
 mod utils;
+pub mod xcm_adapters;
 
 pub use pallet::*;
+pub use payments::*;
 pub use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
-        ensure, pallet_prelude::*, sp_runtime::traits::StaticLookup, Blake2_128Concat,
+        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
+        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
 
+    use crate::payments::*;
     use crate::types::*;
     use crate::utils::*;
 
@@ -67,7 +72,9 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_timestamp::Config {
+    pub trait Config:
+        frame_system::Config + pallet_timestamp::Config + pallet_assets::Config
+    {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen;
@@ -76,6 +83,11 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
+        // Logic for locking and paying tokens for job execution
+        type AssetTransactor: LockAndPayAsset<Self>;
+        /// The ID for this pallet
+        #[pallet::constant]
+        type PalletId: Get<PalletId>;
         /// Barrier for the update_certificate_revocation_list extrinsic call.
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for update_job_assignments extrinsic call.
@@ -194,6 +206,10 @@ pub mod pallet {
         AttestationPublicKeyDoesNotMatchSource,
         /// Job assignment update not allowed.
         JobAssignmentUpdateNotAllowed,
+        /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
+        InvalidPayment,
+        /// Failed to retrieve funds from pallet account to pay processor. SEVERE error
+        FailedToPay,
     }
 
     #[pallet::hooks]
@@ -225,6 +241,14 @@ pub mod pallet {
                     Error::<T>::TooManyAllowedSources
                 );
             }
+
+            if let Err(()) = T::AssetTransactor::lock_asset(
+                registration.reward.clone(),
+                T::Lookup::unlookup(who.clone()),
+            ) {
+                return Err(Error::<T>::InvalidPayment.into());
+            }
+
             <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
             Ok(().into())
@@ -285,6 +309,7 @@ pub mod pallet {
                     allowed_sources,
                     extra: registration.extra.clone(),
                     allow_only_verified_sources: registration.allow_only_verified_sources,
+                    reward: registration.reward.clone(),
                 },
             );
 
@@ -350,6 +375,13 @@ pub mod pallet {
                     return Err(Error::<T>::FulfillSourceNotAllowed)?;
                 }
                 allowed_result?;
+
+                if let Err(()) = T::AssetTransactor::pay_asset(
+                    registration.reward.clone(),
+                    T::Lookup::unlookup(who.clone()),
+                ) {
+                    return Err(Error::<T>::FailedToPay.into());
+                };
 
                 // route fulfillment
                 let info = T::FulfillmentRouter::received_fulfillment(
