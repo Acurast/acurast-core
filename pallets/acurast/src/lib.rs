@@ -8,20 +8,28 @@ mod tests;
 mod attestation;
 mod types;
 mod utils;
+pub mod payments;
+pub mod xcm_adapters;
 
 pub use pallet::*;
 pub use types::*;
+pub use payments::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+
     use frame_support::{
-        ensure, pallet_prelude::*, sp_runtime::traits::StaticLookup, Blake2_128Concat,
+        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
+        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId
     };
+    use frame_support::dispatch::RawOrigin;
     use frame_system::pallet_prelude::*;
+    use sp_runtime::traits::AccountIdConversion;
     use sp_std::prelude::*;
 
     use crate::types::*;
     use crate::utils::*;
+    use crate::payments::*;
 
     /// This trait provides the interface for a fulfillment router.
     pub trait FulfillmentRouter<T: Config> {
@@ -67,7 +75,7 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_timestamp::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config + pallet_assets::Config<AssetId=parachains_common::AssetId>{
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen;
@@ -76,6 +84,11 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
+        // Logic for locking and paying tokens for job execution
+        type AssetTransactor: LockAndPayAsset<Self>;
+        /// The ID for this pallet
+        #[pallet::constant]
+        type PalletId: Get<PalletId>;
         /// Barrier for the update_certificate_revocation_list extrinsic call.
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for update_job_assignments extrinsic call.
@@ -194,6 +207,10 @@ pub mod pallet {
         AttestationPublicKeyDoesNotMatchSource,
         /// Job assignment update not allowed.
         JobAssignmentUpdateNotAllowed,
+        /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
+        InvalidPayment,
+        /// Failed to retrieve funds from pallet account to pay processor. SEVERE error
+        FailedToPay
     }
 
     #[pallet::hooks]
@@ -225,7 +242,17 @@ pub mod pallet {
                     Error::<T>::TooManyAllowedSources
                 );
             }
-            <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
+
+            if let Err(()) = T::AssetTransactor::lock_asset(
+                registration.payment.clone(),
+                T::Lookup::unlookup(who.clone())
+            ) { return Err(Error::<T>::InvalidPayment.into()) }
+
+            <StoredJobRegistration<T>>::insert(
+                who.clone(),
+                (&registration).script.clone(),
+                registration.clone(),
+            );
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
             Ok(().into())
         }
@@ -234,7 +261,7 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            <StoredJobRegistration<T>>::remove(&who, &script);
+            <StoredJobRegistration<T>>::remove(who.clone(), script.clone());
             Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
@@ -247,7 +274,7 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let registration = <StoredJobRegistration<T>>::get(&who, &script)
+            let registration = <StoredJobRegistration<T>>::get(who.clone(), script.clone())
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             let mut current_allowed_sources =
@@ -278,13 +305,14 @@ pub mod pallet {
                 Some(current_allowed_sources)
             };
             <StoredJobRegistration<T>>::insert(
-                &who,
-                &script,
+                who.clone(),
+                script.clone(),
                 JobRegistration {
                     script: script.clone(),
                     allowed_sources,
                     extra: (&registration).extra.clone(),
                     allow_only_verified_sources: (&registration).allow_only_verified_sources,
+                    payment: (&registration).payment.clone()
                 },
             );
 
@@ -350,6 +378,12 @@ pub mod pallet {
                     return Err(Error::<T>::FulfillSourceNotAllowed)?;
                 }
                 allowed_result?;
+
+                if let Err(()) = T::AssetTransactor::pay_asset(
+                    registration.payment.clone(),
+                    T::Lookup::unlookup(who.clone())
+                ) { return Err(Error::<T>::FailedToPay.into()) };
+
 
                 // route fulfillment
                 let info = T::FulfillmentRouter::received_fulfillment(

@@ -5,4 +5,11 @@ panic = "unwind"
 members = [
 	"pallets/*",
 	"p256-crypto",
+	"emulations",
+	"emulations/payments-emulation",
+	"examples/proxy-parachain/*"
 ]
+
+# Patching for local development. needs to be commented out on the remote repo
+#[patch."https://github.com/Acurast/acurast-substrate"]
+#acurast-runtime = { path = "../acurast-substrate/runtime" }
