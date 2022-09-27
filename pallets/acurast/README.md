@@ -80,7 +80,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 }
 
 parameter_types! {
-	pub const MaxAllowedSources: u16 = 100;
+    pub const MaxAllowedSources: u16 = 100;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![];
 }
 
