@@ -72,7 +72,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
 		from: <Runtime as frame_system::Config>::AccountId,
 		fulfillment: pallet_acurast::Fulfillment,
-		registration: pallet_acurast::Registration<AcurastRegistrationExtra>,
+		registration: pallet_acurast::JobRegistration<AcurastRegistrationExtra>,
 		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
 	) -> DispatchResultWithPostInfo {
 		/// route the fulfillment to its final destination
@@ -80,6 +80,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 }
 
 parameter_types! {
+    pub const MaxAllowedSources: u16 = 100;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![];
 }
 
@@ -87,6 +88,7 @@ impl pallet_acurast::Config for Runtime {
 	type Event = Event;
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
+	type MaxAllowedSources = MaxAllowedSources;
 	type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
 }
 
@@ -210,7 +212,7 @@ construct_runtime!(
 );
 ```
 
-The following snippet of code show a very basic EVM smart contract capable of receiving the routed `fulfill` call from the `FulfillmentRouter` implemented above:
+The following snippet of code shows a very basic EVM smart contract capable of receiving the routed `fulfill` call from the `FulfillmentRouter` implemented above:
 
 ```solidity
 pragma solidity ^0.8.0;
@@ -226,6 +228,146 @@ contract SimpleFulfill {
     }
     function getPayload() public view returns(bytes memory) {
         return _payload;
+    }
+}
+```
+
+### Example integration with WASM smart contract parachain
+
+The following example shows a possible integration approach for a WASM smart contract parachain (using [pallet-contracts](https://github.com/paritytech/substrate/tree/master/frame/contracts)).
+Similarly to the EVM integration, the example shows how to route the fulfillment's pyload to a smart contract by calling the `fulfill` mehod on it and passing the payload bytes are argument.
+
+```rust
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub enum ContractMethodSelector {
+	Default,
+	Custom([u8; 4]),
+}
+
+impl ContractMethodSelector {
+	fn into_fixed_bytes(self) -> [u8; 4] {
+		match self {
+			Self::Default => BlakeTwo256::hash(b"fulfill").as_bytes()[0..4].try_into().unwrap(),
+			Self::Custom(bytes) => bytes,
+		}
+	}
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct RegistrationExtra {
+	pub contract_address: AccountId,
+	pub selector: ContractMethodSelector,
+}
+
+parameter_types! {
+	pub const MaxAllowedSources: u16 = 100;
+	pub AllowedRevocationListUpdate: Vec<AccountId> = vec![];
+}
+
+impl pallet_acurast::Config for Runtime {
+	type Event = Event;
+	type RegistrationExtra = RegistrationExtra;
+	type FulfillmentRouter = AcurastRouter;
+	type MaxAllowedSources = MaxAllowedSources;
+	type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
+}
+
+pub struct AcurastRouter;
+impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
+	fn received_fulfillment(
+		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
+		from: <Runtime as frame_system::Config>::AccountId,
+		fulfillment: pallet_acurast::Fulfillment,
+		registration: pallet_acurast::JobRegistration<AccountId, RegistrationExtra>,
+		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
+	) -> DispatchResultWithPostInfo {
+		Contracts::call(
+			origin,
+			registration.extra.contract_address.into(),
+			0,
+			18_750_000_000,
+			None,
+			[
+				registration.extra.selector.into_fixed_bytes().to_vec(),
+				from.encode(),
+				requester.encode(),
+				fulfillment.payload.encode(),
+			]
+			.concat(),
+		)
+	}
+}
+
+construct_runtime!(
+	pub enum Runtime where
+		Block = Block,
+		NodeBlock = opaque::Block,
+		UncheckedExtrinsic = UncheckedExtrinsic,
+	{
+		// All your other pallets
+		...
+		// Contracts
+		Contracts: pallet_contracts,
+
+		// Acurast
+		Acurast: pallet_acurast,
+
+	}
+);
+```
+
+The following snippet of code shows a very basic WASM smart contract implemented using [ink!](https://github.com/paritytech/ink) and capable of receiving the routed `fulfill` call from the `FulfillmentRouter` implemented above:
+
+```rust
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use ink_lang as ink;
+
+#[ink::contract]
+mod receiver {
+
+    use ink_prelude::vec::Vec;
+
+    /// Defines the storage of your contract.
+    /// Add new fields to the below struct in order
+    /// to add new static storage fields to your contract.
+    #[ink(storage)]
+    pub struct Receiver {
+        source: Option<AccountId>,
+        target: Option<AccountId>,
+        payload: Option<Vec<u8>>,
+    }
+
+    impl Receiver {
+        /// Constructor that initializes `source`, `target` and `payload` to `None`.
+        ///
+        /// Constructors can delegate to other constructors.
+        #[ink(constructor)]
+        pub fn default() -> Self {
+            Self {
+                source: None,
+                target: None,
+                payload: None,
+            }
+        }
+
+        /// Simply stores the `source`, `target` and `payload` values.
+        #[ink(message)]
+        pub fn fulfill(&mut self, source: AccountId, target: AccountId, payload: Vec<u8>) {
+            self.source = Some(source);
+            self.target = Some(target);
+            self.payload = Some(payload);
+        }
+
+        /// Simply returns the current value of our `source`, `target` and `payload`.
+        #[ink(message)]
+        pub fn get(&self) -> (Option<AccountId>, Option<AccountId>, Option<Vec<u8>>) {
+            (
+                self.source.clone(),
+                self.target.clone(),
+                self.payload.clone(),
+            )
+        }
     }
 }
 ```
