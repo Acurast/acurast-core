@@ -135,10 +135,6 @@ pub mod pallet {
 			registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
-
-			// let mut data = [0; 32];
-			// data.copy_from_slice(who.encode());
-			// let b = AccountId32::try_from(who..as_ref());
 			let who_bytes = who.encode().try_into().unwrap();
 			match acurast_call::<T>(ProxyCall::register { registration }, who_bytes) {
 				Ok(_result) => return Ok(().into()),
