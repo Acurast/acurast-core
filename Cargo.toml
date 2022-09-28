@@ -5,6 +5,4 @@ panic = "unwind"
 members = [
 	"pallets/*",
 	"p256-crypto",
-	"xcm-emulator"
-#	"xcm-emulator/acurast-emulator"
 ]
