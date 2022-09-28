@@ -1,5 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod mock;
+
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
@@ -88,14 +93,6 @@ pub mod pallet {
 		type XcmSender: SendXcm;
 		type AcurastPalletId: Get<u8>;
 		type AcurastParachainId: Get<u32>;
-		// type AccountId: Parameter
-		// + Member
-		// + MaybeSerializeDeserialize
-		// + Debug
-		// + MaybeDisplay
-		// + Ord
-		// + MaxEncodedLen
-		// + Into<[u8;32]>;
 	}
 
 	#[pallet::pallet]
