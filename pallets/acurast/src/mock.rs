@@ -1,10 +1,10 @@
 use hex_literal::hex;
 use sp_io;
-use sp_runtime::{testing::Header, traits::IdentityLookup};
+use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
 
 use crate::{AttestationChain, Fulfillment, JobRegistration, Script, SerialNumber};
 
-type AccountId = u64;
+type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -31,7 +31,7 @@ impl frame_system::Config for Test {
     type Call = Call;
     type Hash = sp_core::H256;
     type Hashing = ::sp_runtime::traits::BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
     type Event = Event;
@@ -50,7 +50,7 @@ impl frame_system::Config for Test {
 frame_support::parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
     pub const MinimumPeriod: u64 = 6000;
-    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![1];
+    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
     pub static ExistentialDeposit: u64 = 0;
 }
 
@@ -222,4 +222,28 @@ pub fn invalid_attestation_chain_3() -> AttestationChain {
 
 pub fn cert_serial_number() -> SerialNumber {
     hex!("15905857467176635834").to_vec().try_into().unwrap()
+}
+
+pub fn processor_account_id() -> AccountId {
+    hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
+}
+
+pub fn alice_account_id() -> AccountId {
+    [0; 32].into()
+}
+
+pub fn bob_account_id() -> AccountId {
+    [1; 32].into()
+}
+
+pub fn charlie_account_id() -> AccountId {
+    [2; 32].into()
+}
+
+pub fn dave_account_id() -> AccountId {
+    [3; 32].into()
+}
+
+pub fn eve_account_id() -> AccountId {
+    [4; 32].into()
 }
