@@ -143,12 +143,16 @@ pub mod pallet {
         CannotGetCertificateId,
         /// Failed to convert the attestation to its bounded type.
         AttestationToBoundedTypeConversionFailed,
-        /// Timestamp error
+        /// Timestamp error.
         FailedTimestampConversion,
-        /// Certificate was revoked
+        /// Certificate was revoked.
         RevokedCertificate,
-        /// Origin is not allowed to update the certificate revocation list
+        /// Origin is not allowed to update the certificate revocation list.
         CertificateRevocationListUpdateNotAllowed,
+        /// The attestation was issued for an unsupported public key type.
+        UnsupportedAttestationPublicKeyType,
+        /// The submitted attestation public key does not match the source.
+        AttestationPublicKeyDoesNotMatchSource,
     }
 
     #[pallet::hooks]
@@ -302,7 +306,7 @@ pub mod pallet {
                 Error::<T>::CertificateChainTooShort,
             );
 
-            let attestation = validate_and_extract_attestation::<T>(&attestation_chain)?;
+            let attestation = validate_and_extract_attestation::<T>(&who, &attestation_chain)?;
 
             ensure_not_expired::<T>(&attestation)?;
             ensure_not_revoked::<T>(&attestation)?;

@@ -1,7 +1,10 @@
+use codec::Encode;
+use frame_support::ensure;
 use sp_std::prelude::*;
 
 use crate::attestation::{
-    extract_attestation, validate_certificate_chain, validate_certificate_chain_root,
+    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
+    PublicKey,
 };
 use crate::{
     Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
@@ -9,13 +12,17 @@ use crate::{
 };
 
 pub(crate) fn validate_and_extract_attestation<T: Config>(
+    source: &T::AccountId,
     attestation_chain: &AttestationChain,
 ) -> Result<Attestation, Error<T>> {
     validate_certificate_chain_root(&attestation_chain.certificate_chain)
         .map_err(|_| Error::<T>::RootCertificateValidationFailed)?;
 
-    let (cert_ids, cert) = validate_certificate_chain(&attestation_chain.certificate_chain)
-        .map_err(|_| Error::<T>::CertificateChainValidationFailed)?;
+    let (cert_ids, cert, public_key) =
+        validate_certificate_chain(&attestation_chain.certificate_chain)
+            .map_err(|_| Error::<T>::CertificateChainValidationFailed)?;
+
+    ensure_valid_public_key_for_source(source, &public_key)?;
 
     let attestation_validity = AttestationValidity {
         not_before: cert.validity.not_before.timestamp_millis(),
@@ -108,4 +115,27 @@ pub(crate) fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result
         }
     }
     Ok(())
+}
+
+fn ensure_valid_public_key_for_source<T: Config>(
+    source: &T::AccountId,
+    public_key: &PublicKey,
+) -> Result<(), Error<T>> {
+    match public_key {
+        PublicKey::RSA(_) => Err(Error::<T>::UnsupportedAttestationPublicKeyType),
+        PublicKey::ECDSA(public_key) => match public_key {
+            ECDSACurve::CurveP256(public_key) => {
+                let encoded_source = source.encode();
+                let encoded_public_key =
+                    sp_io::hashing::blake2_256(&public_key.to_bytes().to_vec()).to_vec();
+
+                ensure!(
+                    encoded_source == encoded_public_key,
+                    Error::<T>::AttestationPublicKeyDoesNotMatchSource
+                );
+                Ok(())
+            }
+            ECDSACurve::CurveP384(_) => Err(Error::<T>::UnsupportedAttestationPublicKeyType),
+        },
+    }
 }
