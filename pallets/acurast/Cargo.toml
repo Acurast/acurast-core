@@ -20,6 +20,7 @@ frame-benchmarking = { git = "https://github.com/paritytech/substrate", default-
 frame-support = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 frame-system = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
+sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
 
 # Attestation
@@ -36,7 +37,8 @@ hex-literal = "0.3"
 
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+
+acurast-p256-crypto = { path = "../../p256-crypto" }
 
 [features]
 default = ["std"]
@@ -54,5 +56,6 @@ std = [
 	"sha2/std",
 	"num-bigint/std",
 	"ecdsa-vendored/std",
+	"sp-io/std",
 ]
 try-runtime = [ "frame-support/try-runtime" ]

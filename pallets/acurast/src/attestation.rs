@@ -98,19 +98,19 @@ const RSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 113549, 1, 1, 1);
 const ECDSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 10045, 2, 1);
 
 #[derive(Clone)]
-enum PublicKey {
+pub enum PublicKey {
     RSA(RSAPbk),
     ECDSA(ECDSACurve),
 }
 
 #[derive(Clone)]
-struct RSAPbk {
+pub struct RSAPbk {
     exponent: BigUint,
     modulus: BigUint,
 }
 
 #[derive(Clone)]
-enum ECDSACurve {
+pub enum ECDSACurve {
     CurveP256(VerifyingKey),
     CurveP384(p384::AffinePoint),
 }
@@ -273,7 +273,7 @@ pub fn validate_certificate_chain_root(
 /// - the next certificate's public key signs the next one and so on...
 pub fn validate_certificate_chain<'a>(
     chain: &'a CertificateChainInput,
-) -> Result<(Vec<CertificateId>, TBSCertificate<'a>), ValidationError> {
+) -> Result<(Vec<CertificateId>, TBSCertificate<'a>, PublicKey), ValidationError> {
     let mut cert_ids = Vec::<CertificateId>::new();
     let fold_result = chain.iter().try_fold::<_, _, Result<_, ValidationError>>(
         (Option::<PublicKey>::None, Option::<Certificate>::None),
@@ -297,9 +297,10 @@ pub fn validate_certificate_chain<'a>(
     )?;
 
     let last_cert = fold_result.1.ok_or(ValidationError::ChainTooShort)?;
+    let last_cert_pbk = fold_result.0.ok_or(ValidationError::MissingPublicKey)?;
 
     // if the chain is non-empty as ensured above, we know that we always have Some certificate in option
-    Ok((cert_ids, last_cert.tbs_certificate))
+    Ok((cert_ids, last_cert.tbs_certificate, last_cert_pbk))
 }
 
 /// The list of trusted root certificates, as decoded bytes arrays. [Source](https://developer.android.com/training/articles/security-key-attestation#root_certificate)
@@ -369,7 +370,7 @@ mod tests {
         ];
         let decoded_chain = decode_certificate_chain(&chain);
         validate_certificate_chain_root(&decoded_chain)?;
-        let (_, cert) = validate_certificate_chain(&decoded_chain)?;
+        let (_, cert, _) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
         match &key_description {
             KeyDescription::V100(key_description) => {
@@ -391,7 +392,7 @@ mod tests {
         ];
         let decoded_chain = decode_certificate_chain(&chain);
         validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
-        let (_, cert) =
+        let (_, cert, _) =
             validate_certificate_chain(&decoded_chain).expect("validating chain failed");
         let key_description = extract_attestation(cert.extensions)?;
         match &key_description {

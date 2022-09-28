@@ -20,6 +20,7 @@ pub enum ValidationError {
     ParseP256PublicKey,
     ParseP384PublicKey,
     MissingECDSAAlgorithmTyp,
+    MissingPublicKey,
     InvalidSignatureEncoding,
     InvalidSignature,
     UnsupportedSignatureAlgorithm,
