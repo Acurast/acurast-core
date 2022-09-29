@@ -5,4 +5,8 @@ panic = "unwind"
 members = [
 	"pallets/*",
 	"p256-crypto",
+	"emulations",
+	"emulations/proxy-emulation",
+#	"simulations/",
+	"examples/proxy-parachain/*"
 ]
