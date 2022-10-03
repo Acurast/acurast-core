@@ -13,77 +13,15 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*, sp_runtime::traits::{StaticLookup},};
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*, sp_runtime::traits::{StaticLookup},};
 	use frame_system::pallet_prelude::*;
-	use pallet_acurast::{JobRegistration, Script, Fulfillment, AttestationChain,
-						 CertificateRevocationListUpdate, AllowedSourcesUpdate};
+	use pallet_acurast::{JobRegistration, Script, Fulfillment, AllowedSourcesUpdate};
 	use xcm::v2::{OriginKind, SendError, };
 	use xcm::v2::Instruction::{Transact, DescendOrigin};
 	use xcm::v2::{Junction::{Parachain, AccountId32}, SendXcm, Xcm, Junctions::{X1}};
 	use xcm::v2::prelude::*;
 	use frame_support::inherent::Vec;
-	// use bytes:str::ToBytes;
 
-	#[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-	#[allow(non_camel_case_types)]
-	pub enum ProxyCall<T: Config> {
-		#[codec(index = 0u8)]
-		register { registration: JobRegistration<T::AccountId, T::RegistrationExtra> },
-
-		#[codec(index = 1u8)]
-		deregister { script: Script },
-
-		#[codec(index = 2u8)]
-		update_allowed_sources { script: Script, updates: Vec<AllowedSourcesUpdate<T::AccountId>> },
-
-		#[codec(index = 3u8)]
-		fulfill { fulfillment: Fulfillment, requester: <T::Lookup as StaticLookup>::Source },
-
-		#[codec(index = 4u8)]
-		submit_attestation { attestation_chain: AttestationChain },
-
-		#[codec(index = 5u8)]
-		update_certificate_revocation_list { update: CertificateRevocationListUpdate }
-	}
-
-	pub fn acurast_call<T: Config>(proxy: ProxyCall<T>, accountId: [u8; 32]) -> Result<(), SendError> {
-		let mut xcm_message = Vec::new();
-
-		// create an encoded version of the call composed of the first byte being the pallet id
-		// on the destination chain, second byte the position of the calling function on the enum,
-		// and then the arguments SCALE encoded in order
-		let mut encoded_call = Vec::<u8>::new();
-		encoded_call.push(T::AcurastPalletId::get() as u8);
-		encoded_call.append(&mut proxy.encode());
-		log::info!("encoded call is: {:?}", encoded_call);
-
-		// xcm_message.push(ClearOrigin);
-		// put our transact message in the vector of instructions
-		xcm_message.push(DescendOrigin(X1(AccountId32 {
-			network: NetworkId::Any,
-			id: accountId
-		})));
-
-		xcm_message.push(Transact {
-			origin_type: OriginKind::Xcm,
-			require_weight_at_most: 1_000_000_000 as u64,
-			call: encoded_call.into(),
-		});
-
-
-		// use router to send the xcm message
-		return match T::XcmSender::send_xcm(
-			(1, X1(Parachain(T::AcurastParachainId::get()))),
-			Xcm(xcm_message),
-		) {
-			Ok(_) => {
-				Ok(())
-			},
-			Err(e) => {
-				Err(e)
-			},
-		};
-	}
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -95,33 +33,103 @@ pub mod pallet {
 		type AcurastParachainId: Get<u32>;
 	}
 
+	#[pallet::error]
+	pub enum Error<T> {
+		XcmError
+	}
+
+	#[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+	pub enum ProxyCall<T: Config> {
+		#[codec(index = 0u8)]
+		Register { registration: JobRegistration<T::AccountId, T::RegistrationExtra> },
+
+		#[codec(index = 1u8)]
+		Deregister { script: Script },
+
+		#[codec(index = 2u8)]
+		UpdateAllowedSources { script: Script, updates: Vec<AllowedSourcesUpdate<T::AccountId>> },
+
+		#[codec(index = 3u8)]
+		Fulfill { fulfillment: Fulfillment, requester: <T::Lookup as StaticLookup>::Source },
+	}
+
+	#[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+	pub enum ExtrinsicName {
+		Register,
+		Deregister,
+		UpdateAllowedSources,
+		Fulfill,
+	}
+
+	impl<T: Config> ProxyCall<T> {
+		fn get_name(&self) -> ExtrinsicName {
+			match self {
+				ProxyCall::Register{..} => ExtrinsicName::Register,
+				ProxyCall::Deregister{..} => ExtrinsicName::Deregister,
+				ProxyCall::UpdateAllowedSources{..} => ExtrinsicName::UpdateAllowedSources,
+				ProxyCall::Fulfill{..} => ExtrinsicName::Fulfill,
+			}
+		}
+	}
+
+	pub fn acurast_call<T: Config>(proxy_call: ProxyCall<T>, caller: T::AccountId) -> DispatchResult {
+		// extract bytes from struct
+		let account_bytes = caller.encode().try_into().unwrap();
+		let mut xcm_message = Vec::new();
+		let extrinsic = proxy_call.get_name();
+
+		// create an encoded version of the call
+		let mut encoded_call = Vec::<u8>::new();
+		// first byte is the pallet id on the destination chain
+		encoded_call.push(T::AcurastPalletId::get() as u8);
+		//second byte the position of the calling function on the enum,
+		// and then the arguments SCALE encoded in order.
+		encoded_call.append(&mut proxy_call.encode());
+
+		// before calling transact, we want to use not the parachain origin, but a user's account
+		xcm_message.push(DescendOrigin(X1(AccountId32 {
+			network: NetworkId::Any,
+			id: account_bytes
+		})));
+
+		// put our transact message in the vector of instructions
+		xcm_message.push(Transact {
+			origin_type: OriginKind::Xcm,
+			require_weight_at_most: 1_000_000_000 as u64,
+			call: encoded_call.into(),
+		});
+
+		// use router to send the xcm message
+		return match T::XcmSender::send_xcm(
+			(1, X1(Parachain(T::AcurastParachainId::get()))),
+			Xcm(xcm_message),
+		) {
+			Ok(_) => {
+				Pallet::<T>::deposit_event(Event::XcmSent { extrinsic, caller });
+				Ok(())
+			},
+			Err(error) => {
+				Pallet::<T>::deposit_event(Event::XcmNotSent { extrinsic, error, caller });
+				Err(Error::<T>::XcmError.into())
+			},
+		}
+	}
+
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	// #[derive(Clone)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
-	}
-
-	// Errors inform users that something went wrong.
-	#[pallet::error]
-	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
+		XcmSent { extrinsic: ExtrinsicName, caller: T::AccountId },
+		XcmNotSent { extrinsic: ExtrinsicName, error: SendError, caller: T::AccountId }
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Registers a job by providing a [Registration]. If a job for the same script was previously registered, it will be overwritten.
@@ -130,23 +138,18 @@ pub mod pallet {
 		pub fn register(
 			origin: OriginFor<T>,
 			registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			let who_bytes = who.encode().try_into().unwrap();
-			match acurast_call::<T>(ProxyCall::register { registration }, who_bytes) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
+		) -> DispatchResult {
+			let caller = ensure_signed(origin)?;
+			let proxy_call = ProxyCall::Register { registration };
+			acurast_call::<T>(proxy_call, caller)
 		}
 
 		/// Deregisters a job for the given script.
 		#[pallet::weight(10_000)]
-		pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			match acurast_call::<T>(ProxyCall::deregister { script }, who.encode().try_into().unwrap()) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
+		pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResult {
+			let caller = ensure_signed(origin)?;
+			let proxy_call = ProxyCall::Deregister { script };
+			acurast_call::<T>(proxy_call, caller)
 		}
 
 		/// Updates the allowed sources list of a [Registration].
@@ -155,12 +158,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			script: Script,
 			updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			match acurast_call::<T>(ProxyCall::update_allowed_sources { script, updates }, who.encode().try_into().unwrap()) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
+		) -> DispatchResult {
+			let caller = ensure_signed(origin)?;
+			let proxy_call = ProxyCall::UpdateAllowedSources { script, updates };
+			acurast_call::<T>(proxy_call, caller)
 		}
 
 		/// Fulfills a previously registered job.
@@ -169,45 +170,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			fulfillment: Fulfillment,
 			requester: <T::Lookup as StaticLookup>::Source,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			match acurast_call::<T>(ProxyCall::fulfill { fulfillment, requester }, who.encode().try_into().unwrap()) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
-		}
-
-		/// Submits an attestation given a valid certificate chain.
-		///
-		/// - As input a list of binary certificates is expected.
-		/// - The list must be ordered, starting from one of the known [trusted root certificates](https://developer.android.com/training/articles/security-key-attestation#root_certificate).
-		/// - If the represented chain is valid, the [Attestation] details are stored. An existing attestion for signing account gets overwritten.
-		///
-		/// Revocation: Each atttestation is stored with the unique IDs of the certificates on the chain proofing the attestation's validity.
-		///
-		/// TODO: implement revocation
-		#[pallet::weight(10_000)]
-		pub fn submit_attestation(
-			origin: OriginFor<T>,
-			attestation_chain: AttestationChain,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			match acurast_call::<T>(ProxyCall::submit_attestation { attestation_chain }, who.encode().try_into().unwrap()) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
-		}
-
-		#[pallet::weight(0)]
-		pub fn update_certificate_revocation_list(
-			origin: OriginFor<T>,
-			update: CertificateRevocationListUpdate,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			match acurast_call::<T>(ProxyCall::update_certificate_revocation_list { update }, who.encode().try_into().unwrap()) {
-				Ok(_result) => return Ok(().into()),
-				Err(_error) => return Err("xcm to acurast failed".into())
-			}
+		) -> DispatchResult {
+			let caller = ensure_signed(origin)?;
+			let proxy_call = ProxyCall::Fulfill { fulfillment, requester };
+			acurast_call::<T>(proxy_call, caller)
 		}
 	}
 }
