@@ -29,9 +29,13 @@ Allows the de-registration of a job.
 
 Allows to update the list of allowed sources for a previously registered job.
 
+### updateJobAssignments
+
+Allows to assign a registered job to a processor, so that it can later call `fulfill`.
+
 ### fulfill
 
-Allows to post the fulfillment of a registered job. The fulfillment structure consists of:
+Allows to post the fulfillment of a registered job. The `fulfill` call will fail if the job was not previously assigned to the origin. The fulfillment structure consists of:
 
 - The ipfs url of the `script` executed.
 - The `payload` bytes representing the output of the `script`.
@@ -81,7 +85,6 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 
 parameter_types! {
     pub const MaxAllowedSources: u16 = 100;
-    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![];
 }
 
 impl pallet_acurast::Config for Runtime {
@@ -89,7 +92,8 @@ impl pallet_acurast::Config for Runtime {
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
 	type MaxAllowedSources = MaxAllowedSources;
-	type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
+	type RevocationListUpdateBarrier = ();
+	type JobAssignmentUpdateBarrier = ();
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
