@@ -50,14 +50,14 @@ pub mod pallet {
         }
     }
 
-    pub trait AssignedJobUpdateBarrier<T: Config> {
+    pub trait JobAssignmentUpdateBarrier<T: Config> {
         fn can_update_assigned_jobs(
             origin: &T::AccountId,
             updates: &Vec<JobAssignmentUpdate<T::AccountId>>,
         ) -> bool;
     }
 
-    impl<T: Config> AssignedJobUpdateBarrier<T> for () {
+    impl<T: Config> JobAssignmentUpdateBarrier<T> for () {
         fn can_update_assigned_jobs(
             _origin: &T::AccountId,
             _updates: &Vec<JobAssignmentUpdate<T::AccountId>>,
@@ -79,7 +79,7 @@ pub mod pallet {
         /// Barrier for the update_certificate_revocation_list extrinsic call.
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for update_job_assignments extrinsic call.
-        type AssignedJobUpdateBarrier: AssignedJobUpdateBarrier<Self>;
+        type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
     }
 
     #[pallet::pallet]
@@ -293,13 +293,14 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Assigns jobs to [AccountId]s. Those accounts can then later call `fulfill` for those jobs.
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(2, 1))]
         pub fn update_job_assignments(
             origin: OriginFor<T>,
             updates: Vec<JobAssignmentUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            if !T::AssignedJobUpdateBarrier::can_update_assigned_jobs(&who, &updates) {
+            if !T::JobAssignmentUpdateBarrier::can_update_assigned_jobs(&who, &updates) {
                 return Err(Error::<T>::JobAssignmentUpdateNotAllowed)?;
             }
             for update in &updates {

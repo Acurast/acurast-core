@@ -3,8 +3,8 @@ use sp_io;
 use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
 
 use crate::{
-    AssignedJobUpdateBarrier, AttestationChain, Fulfillment, JobAssignmentUpdate, JobRegistration,
-    RevocationListUpdateBarrier, Script, SerialNumber,
+    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
+    JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 type AccountId = AccountId32;
@@ -71,7 +71,7 @@ impl crate::Config for Test {
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type RevocationListUpdateBarrier = Barrier;
-    type AssignedJobUpdateBarrier = Barrier;
+    type JobAssignmentUpdateBarrier = Barrier;
 }
 
 pub struct Barrier;
@@ -85,7 +85,7 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl AssignedJobUpdateBarrier<Test> for Barrier {
+impl JobAssignmentUpdateBarrier<Test> for Barrier {
     fn can_update_assigned_jobs(
         origin: &<Test as frame_system::Config>::AccountId,
         _updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
