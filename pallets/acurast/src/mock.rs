@@ -2,7 +2,10 @@ use hex_literal::hex;
 use sp_io;
 use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
 
-use crate::{AttestationChain, Fulfillment, JobRegistration, Script, SerialNumber};
+use crate::{
+    AssignedJobUpdateBarrier, AttestationChain, Fulfillment, JobAssignmentUpdate, JobRegistration,
+    RevocationListUpdateBarrier, Script, SerialNumber,
+};
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -51,6 +54,7 @@ frame_support::parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
+    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub static ExistentialDeposit: u64 = 0;
 }
 
@@ -66,7 +70,28 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
+    type RevocationListUpdateBarrier = Barrier;
+    type AssignedJobUpdateBarrier = Barrier;
+}
+
+pub struct Barrier;
+
+impl RevocationListUpdateBarrier<Test> for Barrier {
+    fn can_update_revocation_list(
+        origin: &<Test as frame_system::Config>::AccountId,
+        _updates: &Vec<crate::CertificateRevocationListUpdate>,
+    ) -> bool {
+        AllowedRevocationListUpdate::get().contains(origin)
+    }
+}
+
+impl AssignedJobUpdateBarrier<Test> for Barrier {
+    fn can_update_assigned_jobs(
+        origin: &<Test as frame_system::Config>::AccountId,
+        _updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
+    ) -> bool {
+        AllowedJobAssignmentUpdate::get().contains(origin)
+    }
 }
 
 pub struct Router;
@@ -144,6 +169,20 @@ pub fn job_registration(
         allow_only_verified_sources,
         extra: (),
     }
+}
+
+pub fn job_assignment_update_for(
+    registration: &JobRegistration<AccountId, ()>,
+    requester: Option<AccountId>,
+) -> Vec<JobAssignmentUpdate<AccountId>> {
+    vec![JobAssignmentUpdate {
+        operation: crate::ListUpdateOperation::Add,
+        assignee: processor_account_id(),
+        job_id: (
+            requester.unwrap_or(alice_account_id()),
+            registration.script.clone(),
+        ),
+    }]
 }
 
 pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {

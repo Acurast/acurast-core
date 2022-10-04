@@ -14,10 +14,8 @@ pub use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-
     use frame_support::{
-        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128Concat,
+        ensure, pallet_prelude::*, sp_runtime::traits::StaticLookup, Blake2_128Concat,
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
@@ -36,6 +34,38 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo;
     }
 
+    pub trait RevocationListUpdateBarrier<T: Config> {
+        fn can_update_revocation_list(
+            origin: &T::AccountId,
+            updates: &Vec<CertificateRevocationListUpdate>,
+        ) -> bool;
+    }
+
+    impl<T: Config> RevocationListUpdateBarrier<T> for () {
+        fn can_update_revocation_list(
+            _origin: &T::AccountId,
+            _updates: &Vec<CertificateRevocationListUpdate>,
+        ) -> bool {
+            false
+        }
+    }
+
+    pub trait AssignedJobUpdateBarrier<T: Config> {
+        fn can_update_assigned_jobs(
+            origin: &T::AccountId,
+            updates: &Vec<JobAssignmentUpdate<T::AccountId>>,
+        ) -> bool;
+    }
+
+    impl<T: Config> AssignedJobUpdateBarrier<T> for () {
+        fn can_update_assigned_jobs(
+            _origin: &T::AccountId,
+            _updates: &Vec<JobAssignmentUpdate<T::AccountId>>,
+        ) -> bool {
+            false
+        }
+    }
+
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -46,9 +76,10 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
-        /// AccountIDs that are allowed to call update_certificate_revocation_list.
-        #[pallet::constant]
-        type AllowedRevocationListUpdate: Get<Vec<Self::AccountId>>;
+        /// Barrier for the update_certificate_revocation_list extrinsic call.
+        type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
+        /// Barrier for update_job_assignments extrinsic call.
+        type AssignedJobUpdateBarrier: AssignedJobUpdateBarrier<Self>;
     }
 
     #[pallet::pallet]
@@ -80,6 +111,12 @@ pub mod pallet {
     pub type StoredRevokedCertificate<T: Config> =
         StorageMap<_, Blake2_128Concat, SerialNumber, ()>;
 
+    /// Job assignments.
+    #[pallet::storage]
+    #[pallet::getter(fn stored_job_assignment)]
+    pub type StoredJobAssignment<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, Vec<JobId<T::AccountId>>>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -107,6 +144,8 @@ pub mod pallet {
         AttestationStored(Attestation, T::AccountId),
         /// The certificate revocation list has been updated. [who, updates]
         CertificateRecovationListUpdated(T::AccountId, Vec<CertificateRevocationListUpdate>),
+        /// The job assignemts have been updated. [who, updates]
+        JobAssignmentUpdate(T::AccountId, Vec<JobAssignmentUpdate<T::AccountId>>),
     }
 
     #[pallet::error]
@@ -153,6 +192,8 @@ pub mod pallet {
         UnsupportedAttestationPublicKeyType,
         /// The submitted attestation public key does not match the source.
         AttestationPublicKeyDoesNotMatchSource,
+        /// Job assignment update not allowed.
+        JobAssignmentUpdateNotAllowed,
     }
 
     #[pallet::hooks]
@@ -184,11 +225,7 @@ pub mod pallet {
                     Error::<T>::TooManyAllowedSources
                 );
             }
-            <StoredJobRegistration<T>>::insert(
-                who.clone(),
-                (&registration).script.clone(),
-                registration.clone(),
-            );
+            <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
             Ok(().into())
         }
@@ -197,7 +234,7 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            <StoredJobRegistration<T>>::remove(who.clone(), script.clone());
+            <StoredJobRegistration<T>>::remove(&who, &script);
             Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
@@ -210,11 +247,11 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let registration = <StoredJobRegistration<T>>::get(who.clone(), script.clone())
+            let registration = <StoredJobRegistration<T>>::get(&who, &script)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             let mut current_allowed_sources =
-                (&registration).allowed_sources.clone().unwrap_or(vec![]);
+                (&registration).allowed_sources.clone().unwrap_or_default();
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
@@ -241,10 +278,10 @@ pub mod pallet {
                 Some(current_allowed_sources)
             };
             <StoredJobRegistration<T>>::insert(
-                who.clone(),
-                script.clone(),
+                &who,
+                &script,
                 JobRegistration {
-                    script,
+                    script: script.clone(),
                     allowed_sources,
                     extra: (&registration).extra.clone(),
                     allow_only_verified_sources: (&registration).allow_only_verified_sources,
@@ -256,8 +293,35 @@ pub mod pallet {
             Ok(().into())
         }
 
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(2, 1))]
+        pub fn update_job_assignments(
+            origin: OriginFor<T>,
+            updates: Vec<JobAssignmentUpdate<T::AccountId>>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            if !T::AssignedJobUpdateBarrier::can_update_assigned_jobs(&who, &updates) {
+                return Err(Error::<T>::JobAssignmentUpdateNotAllowed)?;
+            }
+            for update in &updates {
+                let job_registration =
+                    <StoredJobRegistration<T>>::get(&update.job_id.0, &update.job_id.1)
+                        .ok_or(Error::<T>::JobRegistrationNotFound)?;
+
+                ensure_source_allowed::<T>(&update.assignee, &job_registration)?;
+
+                let mut assignments =
+                    <StoredJobAssignment<T>>::get(&update.assignee).unwrap_or_default();
+                if !assignments.contains(&update.job_id) {
+                    assignments.push(update.job_id.clone());
+                }
+                <StoredJobAssignment<T>>::set(&update.assignee, Some(assignments));
+            }
+            Self::deposit_event(Event::JobAssignmentUpdate(who, updates));
+            Ok(().into())
+        }
+
         /// Fulfills a previously registered job.
-        #[pallet::weight(10_000 + T::DbWeight::get().reads(7))]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(7, 1))]
         pub fn fulfill(
             origin: OriginFor<T>,
             fulfillment: Fulfillment,
@@ -266,26 +330,52 @@ pub mod pallet {
             let who = ensure_signed(origin.clone())?;
             let requester = T::Lookup::lookup(requester)?;
 
-            let registration =
-                <StoredJobRegistration<T>>::get(requester.clone(), (&fulfillment).script.clone())
-                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            // find assignment
+            let job_id: JobId<T::AccountId> = (requester, fulfillment.script.clone());
+            let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
+            let job_index = assigned_jobs
+                .iter()
+                .position(|assigned_job_id| assigned_job_id == &job_id)
+                .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
 
-            ensure_source_allowed::<T>(&who, &registration)?;
+            // find registration
+            if let Some(registration) =
+                <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
+            {
+                let allowed_result = ensure_source_allowed(&who, &registration);
+                if let Err(Error::<T>::FulfillSourceNotAllowed) = allowed_result {
+                    assigned_jobs.remove(job_index);
+                    <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+                    return Err(Error::<T>::FulfillSourceNotAllowed)?;
+                }
+                allowed_result?;
 
-            let info = T::FulfillmentRouter::received_fulfillment(
-                origin,
-                who.clone(),
-                fulfillment.clone(),
-                registration.clone(),
-                requester.clone(),
-            )?;
-            Self::deposit_event(Event::ReceivedFulfillment(
-                who,
-                fulfillment,
-                registration,
-                requester,
-            ));
-            Ok(info)
+                // route fulfillment
+                let info = T::FulfillmentRouter::received_fulfillment(
+                    origin,
+                    who.clone(),
+                    fulfillment.clone(),
+                    registration.clone(),
+                    job_id.0,
+                )?;
+
+                // removed fulfilled job from assigned jobs
+                let job_id = assigned_jobs.remove(job_index);
+                <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+
+                Self::deposit_event(Event::ReceivedFulfillment(
+                    who,
+                    fulfillment,
+                    registration,
+                    job_id.0,
+                ));
+                Ok(info)
+            } else {
+                // registration was removed, job is not available anymore, remove it from assignment
+                assigned_jobs.remove(job_index);
+                <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+                Err(Error::<T>::JobRegistrationNotFound)?
+            }
         }
 
         /// Submits an attestation given a valid certificate chain.
@@ -311,7 +401,7 @@ pub mod pallet {
             ensure_not_expired::<T>(&attestation)?;
             ensure_not_revoked::<T>(&attestation)?;
 
-            <StoredAttestation<T>>::insert(who.clone(), attestation.clone());
+            <StoredAttestation<T>>::insert(&who, attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
             Ok(().into())
         }
@@ -322,16 +412,13 @@ pub mod pallet {
             updates: Vec<CertificateRevocationListUpdate>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            if !T::AllowedRevocationListUpdate::get().contains(&who) {
+            if !T::RevocationListUpdateBarrier::can_update_revocation_list(&who, &updates) {
                 return Err(Error::<T>::CertificateRevocationListUpdateNotAllowed)?;
             }
             for update in &updates {
                 match &update.operation {
                     ListUpdateOperation::Add => {
-                        <StoredRevokedCertificate<T>>::insert(
-                            update.cert_serial_number.clone(),
-                            (),
-                        );
+                        <StoredRevokedCertificate<T>>::insert(&update.cert_serial_number, ());
                     }
                     ListUpdateOperation::Remove => {
                         <StoredRevokedCertificate<T>>::remove(&update.cert_serial_number);

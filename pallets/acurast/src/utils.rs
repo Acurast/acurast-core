@@ -71,13 +71,21 @@ pub(crate) fn ensure_source_allowed<T: Config>(
         })
         .unwrap_or(Ok(()))?;
 
+    ensure_source_verified(source, registration)?;
+
+    Ok(())
+}
+
+pub(crate) fn ensure_source_verified<T: Config>(
+    source: &T::AccountId,
+    registration: &JobRegistration<T::AccountId, T::RegistrationExtra>,
+) -> Result<(), Error<T>> {
     if registration.allow_only_verified_sources {
         let attestation =
             <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotVerified)?;
         ensure_not_expired(&attestation)?;
         ensure_not_revoked(&attestation)?;
     }
-
     Ok(())
 }
 
