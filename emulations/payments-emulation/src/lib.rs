@@ -649,7 +649,7 @@ mod job_payments {
 	use xcm::v1::Response::Assets;
 	use crate::acurast_runtime::pallet_acurast;
 	use crate::pallet_acurast::Call::fulfill;
-	use crate::pallet_acurast::{Fulfillment, JobRegistration};
+	use crate::pallet_acurast::{Fulfillment, JobAssignmentUpdate, JobRegistration, ListUpdateOperation};
 	use super::*;
 	use acurast_runtime::{Runtime as AcurastRuntime};
 
@@ -784,14 +784,15 @@ mod job_payments {
 			fun: Fungible(INITIAL_BALANCE / 2)
 		};
 		let alice_origin = acurast_runtime::Origin::signed(ALICE.clone());
+		let bob_origin = acurast_runtime::Origin::signed(BOB.clone());
 
 		// fund alice's account with job payment tokens
 		send_native_and_token();
 
-		// register job
+		// register job and assign processor
 		AcurastParachain::execute_with(|| {
 			use acurast_runtime::Call::Acurast;
-			use pallet_acurast::Call::{register};
+			use pallet_acurast::Call::{register, update_job_assignments};
 
 			let pallet_account: <AcurastRuntime as frame_system::Config>::AccountId = <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating();
 			let raw_origin = RawOrigin::<<AcurastRuntime as frame_system::Config>::AccountId>::Signed(pallet_account.clone());
@@ -809,6 +810,18 @@ mod job_payments {
 
 			let dispatch_status = register_call.dispatch(alice_origin.clone());
 			assert_ok!(dispatch_status);
+
+			let updates = vec![JobAssignmentUpdate {
+				operation: ListUpdateOperation::Add,
+				assignee: BOB.clone(),
+				job_id: (
+					ALICE.clone(),
+					SCRIPT_BYTES.to_vec().try_into().unwrap(),
+				)
+			}];
+			let assign_call = Acurast(update_job_assignments { updates });
+			let dispatch_status = assign_call.dispatch(alice_origin.clone());
+			let x = 10;
 		});
 
 		// check job event

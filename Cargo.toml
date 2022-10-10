@@ -11,5 +11,5 @@ members = [
 ]
 
 # Patching for local development. needs to be commented out on the remote repo
-#[patch."https://github.com/Acurast/acurast-substrate"]
-#acurast-runtime = { path = "../acurast-substrate/runtime" }
+[patch."https://github.com/Acurast/acurast-substrate"]
+acurast-runtime = { path = "../acurast-substrate/runtime" }
