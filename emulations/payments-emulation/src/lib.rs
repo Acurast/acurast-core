@@ -867,3 +867,11 @@ mod job_payments {
 		})
 	}
 }
+
+#[cfg(test)]
+mod xcmp_panic {
+	#[test]
+	fn panics() {
+		assert!(false);
+	}
+}
