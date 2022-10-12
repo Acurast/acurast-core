@@ -6,30 +6,28 @@ mod mock;
 mod tests;
 
 mod attestation;
+pub mod payments;
 mod types;
 mod utils;
-pub mod payments;
 pub mod xcm_adapters;
 
 pub use pallet::*;
-pub use types::*;
 pub use payments::*;
+pub use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
 
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId
+        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
-    use frame_support::dispatch::RawOrigin;
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::AccountIdConversion;
     use sp_std::prelude::*;
 
+    use crate::payments::*;
     use crate::types::*;
     use crate::utils::*;
-    use crate::payments::*;
 
     /// This trait provides the interface for a fulfillment router.
     pub trait FulfillmentRouter<T: Config> {
@@ -75,7 +73,11 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_timestamp::Config + pallet_assets::Config<AssetId=parachains_common::AssetId>{
+    pub trait Config:
+        frame_system::Config
+        + pallet_timestamp::Config
+        + pallet_assets::Config<AssetId = parachains_common::AssetId>
+    {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen;
@@ -210,7 +212,7 @@ pub mod pallet {
         /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
         InvalidPayment,
         /// Failed to retrieve funds from pallet account to pay processor. SEVERE error
-        FailedToPay
+        FailedToPay,
     }
 
     #[pallet::hooks]
@@ -245,8 +247,10 @@ pub mod pallet {
 
             if let Err(()) = T::AssetTransactor::lock_asset(
                 registration.payment.clone(),
-                T::Lookup::unlookup(who.clone())
-            ) { return Err(Error::<T>::InvalidPayment.into()) }
+                T::Lookup::unlookup(who.clone()),
+            ) {
+                return Err(Error::<T>::InvalidPayment.into());
+            }
 
             <StoredJobRegistration<T>>::insert(
                 who.clone(),
@@ -312,7 +316,7 @@ pub mod pallet {
                     allowed_sources,
                     extra: (&registration).extra.clone(),
                     allow_only_verified_sources: (&registration).allow_only_verified_sources,
-                    payment: (&registration).payment.clone()
+                    payment: (&registration).payment.clone(),
                 },
             );
 
@@ -381,9 +385,10 @@ pub mod pallet {
 
                 if let Err(()) = T::AssetTransactor::pay_asset(
                     registration.payment.clone(),
-                    T::Lookup::unlookup(who.clone())
-                ) { return Err(Error::<T>::FailedToPay.into()) };
-
+                    T::Lookup::unlookup(who.clone()),
+                ) {
+                    return Err(Error::<T>::FailedToPay.into());
+                };
 
                 // route fulfillment
                 let info = T::FulfillmentRouter::received_fulfillment(

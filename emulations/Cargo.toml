@@ -14,7 +14,7 @@ rand = "0.8.5"
 
 # Runtimes
 proxy-runtime = { path = "../examples/proxy-parachain/runtime", default-features = false }
-acurast-runtime = { git = "https://github.com/Acurast/acurast-substrate", default-features = false, branch = "fix/xcmp-panic" }
+acurast-runtime = { git = "https://github.com/Acurast/acurast-substrate", default-features = false, branch = "feat/job-payment" }
 polkadot-runtime = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26" }
 statemint-runtime = { git = "https://github.com/paritytech/cumulus", default-features = false, branch = "polkadot-v0.9.26" }
 

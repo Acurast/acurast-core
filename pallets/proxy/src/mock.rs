@@ -1,19 +1,19 @@
 pub mod acurast_runtime {
-    use std::marker::PhantomData;
-    pub use pallet_acurast;
     use codec::{Decode, Encode};
     use frame_support::{
         construct_runtime, parameter_types,
         traits::{Everything, Nothing},
         weights::{constants::WEIGHT_PER_SECOND, Weight},
     };
+    pub use pallet_acurast;
     use sp_core::H256;
     use sp_runtime::{
         testing::Header,
-        traits::{Hash, AccountIdLookup},
+        traits::{AccountIdLookup, Hash},
         AccountId32,
     };
     use sp_std::prelude::*;
+    use std::marker::PhantomData;
 
     use pallet_xcm::XcmPassthrough;
     use polkadot_core_primitives::BlockNumber as RelayBlockNumber;
@@ -104,10 +104,9 @@ pub mod acurast_runtime {
     use xcm_executor::traits::{Convert, ConvertOrigin};
 
     pub struct SignedAccountId32FromXcm<Origin>(PhantomData<(Origin)>);
-    impl< Origin: OriginTrait> ConvertOrigin<Origin>
-    for SignedAccountId32FromXcm<Origin>
-        where
-            Origin::AccountId: From<[u8; 32]>,
+    impl<Origin: OriginTrait> ConvertOrigin<Origin> for SignedAccountId32FromXcm<Origin>
+    where
+        Origin::AccountId: From<[u8; 32]>,
     {
         fn convert_origin(
             origin: impl Into<MultiLocation>,
@@ -115,16 +114,19 @@ pub mod acurast_runtime {
         ) -> Result<Origin, MultiLocation> {
             let origin = origin.into();
             log::trace!(
-			target: "xcm::origin_conversion",
-			"SignedAccountId32AsNative origin: {:?}, kind: {:?}",
-			origin, kind,
-		);
+                target: "xcm::origin_conversion",
+                "SignedAccountId32AsNative origin: {:?}, kind: {:?}",
+                origin, kind,
+            );
             match (kind, origin) {
                 (
                     OriginKind::Xcm,
-                    MultiLocation { parents: 1, interior: X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }) },
-                ) =>
-                    Ok(Origin::signed(id.into())),
+                    MultiLocation {
+                        parents: 1,
+                        interior:
+                            X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }),
+                    },
+                ) => Ok(Origin::signed(id.into())),
                 (_, origin) => Err(origin),
             }
         }
@@ -139,13 +141,13 @@ pub mod acurast_runtime {
     );
 
     parameter_types! {
-	pub const UnitWeightCost: Weight = 1;
-	pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
-	pub const MaxInstructions: u32 = 100;
-}
+        pub const UnitWeightCost: Weight = 1;
+        pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
+        pub const MaxInstructions: u32 = 100;
+    }
 
     pub type LocalAssetTransactor =
-    XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, LocationToAccountId, AccountId, ()>;
+        XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, LocationToAccountId, AccountId, ()>;
 
     pub type XcmRouter = crate::tests::ParachainXcmRouter<MsgQueue>;
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
@@ -249,8 +251,11 @@ pub mod acurast_runtime {
                             // we just report the weight used.
                             Outcome::Incomplete(w, e) => (Ok(w), Event::Fail(Some(hash), e)),
                         }
-                    },
-                    Err(()) => (Err(XcmError::UnhandledXcmVersion), Event::BadVersion(Some(hash))),
+                    }
+                    Err(()) => (
+                        Err(XcmError::UnhandledXcmVersion),
+                        Event::BadVersion(Some(hash)),
+                    ),
                 };
                 Self::deposit_event(event);
                 result
@@ -258,7 +263,10 @@ pub mod acurast_runtime {
         }
 
         impl<T: Config> XcmpMessageHandler for Pallet<T> {
-            fn handle_xcmp_messages<'a, I: Iterator<Item=(ParaId, RelayBlockNumber, &'a [u8])>>(
+            fn handle_xcmp_messages<
+                'a,
+                I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>,
+            >(
                 iter: I,
                 max_weight: Weight,
             ) -> Weight {
@@ -282,25 +290,25 @@ pub mod acurast_runtime {
 
         impl<T: Config> DmpMessageHandler for Pallet<T> {
             fn handle_dmp_messages(
-                iter: impl Iterator<Item=(RelayBlockNumber, Vec<u8>)>,
+                iter: impl Iterator<Item = (RelayBlockNumber, Vec<u8>)>,
                 limit: Weight,
             ) -> Weight {
                 for (_i, (_sent_at, data)) in iter.enumerate() {
                     let id = sp_io::hashing::blake2_256(&data[..]);
-                    let maybe_msg =
-                        VersionedXcm::<T::Call>::decode(&mut &data[..]).map(Xcm::<T::Call>::try_from);
+                    let maybe_msg = VersionedXcm::<T::Call>::decode(&mut &data[..])
+                        .map(Xcm::<T::Call>::try_from);
                     match maybe_msg {
                         Err(_) => {
                             Self::deposit_event(Event::InvalidFormat(id));
-                        },
+                        }
                         Ok(Err(())) => {
                             Self::deposit_event(Event::UnsupportedVersion(id));
-                        },
+                        }
                         Ok(Ok(x)) => {
                             let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit);
                             <ReceivedDmp<T>>::append(x);
                             Self::deposit_event(Event::ExecutedDownward(id, outcome));
-                        },
+                        }
                     }
                 }
                 limit
@@ -390,7 +398,6 @@ pub mod acurast_runtime {
 }
 
 pub mod proxy_runtime {
-    use std::marker::PhantomData;
     use codec::{Decode, Encode};
     use frame_support::{
         construct_runtime, parameter_types,
@@ -400,10 +407,11 @@ pub mod proxy_runtime {
     use sp_core::H256;
     use sp_runtime::{
         testing::Header,
-        traits::{Hash, AccountIdLookup},
+        traits::{AccountIdLookup, Hash},
         AccountId32,
     };
     use sp_std::prelude::*;
+    use std::marker::PhantomData;
 
     use pallet_xcm::XcmPassthrough;
     use polkadot_core_primitives::BlockNumber as RelayBlockNumber;
@@ -425,7 +433,7 @@ pub mod proxy_runtime {
     pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
     parameter_types! {
-	pub const BlockHashCount: u64 = 250;
+    pub const BlockHashCount: u64 = 250;
     }
 
     impl frame_system::Config for Runtime {
@@ -456,10 +464,10 @@ pub mod proxy_runtime {
     }
 
     parameter_types! {
-	pub ExistentialDeposit: Balance = 1;
-	pub const MaxLocks: u32 = 50;
-	pub const MaxReserves: u32 = 50;
-}
+        pub ExistentialDeposit: Balance = 1;
+        pub const MaxLocks: u32 = 50;
+        pub const MaxReserves: u32 = 50;
+    }
 
     impl pallet_balances::Config for Runtime {
         type MaxLocks = MaxLocks;
@@ -474,15 +482,15 @@ pub mod proxy_runtime {
     }
 
     parameter_types! {
-	pub const ReservedXcmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-	pub const ReservedDmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-}
+        pub const ReservedXcmpWeight: Weight = WEIGHT_PER_SECOND / 4;
+        pub const ReservedDmpWeight: Weight = WEIGHT_PER_SECOND / 4;
+    }
 
     parameter_types! {
-	pub const KsmLocation: MultiLocation = MultiLocation::parent();
-	pub const RelayNetwork: NetworkId = NetworkId::Kusama;
-	pub Ancestry: MultiLocation = Parachain(MsgQueue::parachain_id().into()).into();
-}
+        pub const KsmLocation: MultiLocation = MultiLocation::parent();
+        pub const RelayNetwork: NetworkId = NetworkId::Kusama;
+        pub Ancestry: MultiLocation = Parachain(MsgQueue::parachain_id().into()).into();
+    }
 
     pub type LocationToAccountId = (
         ParentIsPreset<AccountId>,
@@ -494,10 +502,9 @@ pub mod proxy_runtime {
     use xcm_executor::traits::{Convert, ConvertOrigin};
 
     pub struct SignedAccountId32FromXcm<Origin>(PhantomData<(Origin)>);
-    impl< Origin: OriginTrait> ConvertOrigin<Origin>
-    for SignedAccountId32FromXcm<Origin>
-        where
-            Origin::AccountId: From<[u8; 32]>,
+    impl<Origin: OriginTrait> ConvertOrigin<Origin> for SignedAccountId32FromXcm<Origin>
+    where
+        Origin::AccountId: From<[u8; 32]>,
     {
         fn convert_origin(
             origin: impl Into<MultiLocation>,
@@ -505,16 +512,19 @@ pub mod proxy_runtime {
         ) -> Result<Origin, MultiLocation> {
             let origin = origin.into();
             log::trace!(
-			target: "xcm::origin_conversion",
-			"SignedAccountId32AsNative origin: {:?}, kind: {:?}",
-			origin, kind,
-		);
+                target: "xcm::origin_conversion",
+                "SignedAccountId32AsNative origin: {:?}, kind: {:?}",
+                origin, kind,
+            );
             match (kind, origin) {
                 (
                     OriginKind::Xcm,
-                    MultiLocation { parents: 1, interior: X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }) },
-                ) =>
-                    Ok(Origin::signed(id.into())),
+                    MultiLocation {
+                        parents: 1,
+                        interior:
+                            X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }),
+                    },
+                ) => Ok(Origin::signed(id.into())),
                 (_, origin) => Err(origin),
             }
         }
@@ -535,7 +545,7 @@ pub mod proxy_runtime {
     }
 
     pub type LocalAssetTransactor =
-    XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, LocationToAccountId, AccountId, ()>;
+        XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, LocationToAccountId, AccountId, ()>;
 
     pub type XcmRouter = crate::tests::ParachainXcmRouter<MsgQueue>;
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
@@ -639,8 +649,11 @@ pub mod proxy_runtime {
                             // we just report the weight used.
                             Outcome::Incomplete(w, e) => (Ok(w), Event::Fail(Some(hash), e)),
                         }
-                    },
-                    Err(()) => (Err(XcmError::UnhandledXcmVersion), Event::BadVersion(Some(hash))),
+                    }
+                    Err(()) => (
+                        Err(XcmError::UnhandledXcmVersion),
+                        Event::BadVersion(Some(hash)),
+                    ),
                 };
                 Self::deposit_event(event);
                 result
@@ -648,7 +661,10 @@ pub mod proxy_runtime {
         }
 
         impl<T: Config> XcmpMessageHandler for Pallet<T> {
-            fn handle_xcmp_messages<'a, I: Iterator<Item=(ParaId, RelayBlockNumber, &'a [u8])>>(
+            fn handle_xcmp_messages<
+                'a,
+                I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>,
+            >(
                 iter: I,
                 max_weight: Weight,
             ) -> Weight {
@@ -672,25 +688,25 @@ pub mod proxy_runtime {
 
         impl<T: Config> DmpMessageHandler for Pallet<T> {
             fn handle_dmp_messages(
-                iter: impl Iterator<Item=(RelayBlockNumber, Vec<u8>)>,
+                iter: impl Iterator<Item = (RelayBlockNumber, Vec<u8>)>,
                 limit: Weight,
             ) -> Weight {
                 for (_i, (_sent_at, data)) in iter.enumerate() {
                     let id = sp_io::hashing::blake2_256(&data[..]);
-                    let maybe_msg =
-                        VersionedXcm::<T::Call>::decode(&mut &data[..]).map(Xcm::<T::Call>::try_from);
+                    let maybe_msg = VersionedXcm::<T::Call>::decode(&mut &data[..])
+                        .map(Xcm::<T::Call>::try_from);
                     match maybe_msg {
                         Err(_) => {
                             Self::deposit_event(Event::InvalidFormat(id));
-                        },
+                        }
                         Ok(Err(())) => {
                             Self::deposit_event(Event::UnsupportedVersion(id));
-                        },
+                        }
                         Ok(Ok(x)) => {
                             let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit);
                             <ReceivedDmp<T>>::append(x);
                             Self::deposit_event(Event::ExecutedDownward(id, outcome));
-                        },
+                        }
                     }
                 }
                 limit
@@ -753,8 +769,8 @@ pub mod proxy_runtime {
     }
 
     parameter_types! {
-	pub const AcurastParachainId: u32 = 2000;
-	pub const AcurastPalletId: u8 = 40;
+    pub const AcurastParachainId: u32 = 2000;
+    pub const AcurastPalletId: u8 = 40;
     }
 
     impl crate::Config for Runtime {
@@ -782,7 +798,8 @@ pub mod relay_chain {
         AccountId32Aliases, AllowUnpaidExecutionFrom, ChildParachainAsNative,
         ChildParachainConvertsVia, ChildSystemParachainAsSuperuser,
         CurrencyAdapter as XcmCurrencyAdapter, FixedRateOfFungible, FixedWeightBounds, IsConcrete,
-        LocationInverter, SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation,
+        LocationInverter, SignedAccountId32AsNative, SignedToAccountId32,
+        SovereignSignedViaLocation,
     };
     use xcm_executor::{Config, XcmExecutor};
 
@@ -790,8 +807,8 @@ pub mod relay_chain {
     pub type Balance = u128;
 
     parameter_types! {
-	pub const BlockHashCount: u64 = 250;
-}
+        pub const BlockHashCount: u64 = 250;
+    }
 
     impl frame_system::Config for Runtime {
         type Origin = Origin;
@@ -821,10 +838,10 @@ pub mod relay_chain {
     }
 
     parameter_types! {
-	pub ExistentialDeposit: Balance = 1;
-	pub const MaxLocks: u32 = 50;
-	pub const MaxReserves: u32 = 50;
-}
+        pub ExistentialDeposit: Balance = 1;
+        pub const MaxLocks: u32 = 50;
+        pub const MaxReserves: u32 = 50;
+    }
 
     impl pallet_balances::Config for Runtime {
         type MaxLocks = MaxLocks;
@@ -845,18 +862,20 @@ pub mod relay_chain {
     }
 
     parameter_types! {
-	pub const KsmLocation: MultiLocation = Here.into();
-	pub const KusamaNetwork: NetworkId = NetworkId::Kusama;
-	pub const AnyNetwork: NetworkId = NetworkId::Any;
-	pub Ancestry: MultiLocation = Here.into();
-	pub UnitWeightCost: Weight = 1_000;
-}
+        pub const KsmLocation: MultiLocation = Here.into();
+        pub const KusamaNetwork: NetworkId = NetworkId::Kusama;
+        pub const AnyNetwork: NetworkId = NetworkId::Any;
+        pub Ancestry: MultiLocation = Here.into();
+        pub UnitWeightCost: Weight = 1_000;
+    }
 
-    pub type SovereignAccountOf =
-    (ChildParachainConvertsVia<ParaId, AccountId>, AccountId32Aliases<KusamaNetwork, AccountId>);
+    pub type SovereignAccountOf = (
+        ChildParachainConvertsVia<ParaId, AccountId>,
+        AccountId32Aliases<KusamaNetwork, AccountId>,
+    );
 
     pub type LocalAssetTransactor =
-    XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, SovereignAccountOf, AccountId, ()>;
+        XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, SovereignAccountOf, AccountId, ()>;
 
     type LocalOriginConverter = (
         SovereignSignedViaLocation<SovereignAccountOf, Origin>,
@@ -866,10 +885,10 @@ pub mod relay_chain {
     );
 
     parameter_types! {
-	pub const BaseXcmWeight: Weight = 1_000;
-	pub KsmPerSecond: (AssetId, u128) = (Concrete(KsmLocation::get()), 1);
-	pub const MaxInstructions: u32 = 100;
-}
+        pub const BaseXcmWeight: Weight = 1_000;
+        pub KsmPerSecond: (AssetId, u128) = (Concrete(KsmLocation::get()), 1);
+        pub const MaxInstructions: u32 = 100;
+    }
 
     pub type XcmRouter = crate::tests::RelayChainXcmRouter;
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
@@ -913,8 +932,8 @@ pub mod relay_chain {
     }
 
     parameter_types! {
-	pub const FirstMessageFactorPercent: u64 = 100;
-}
+        pub const FirstMessageFactorPercent: u64 = 100;
+    }
 
     impl ump::Config for Runtime {
         type Event = Event;

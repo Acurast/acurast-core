@@ -1,9 +1,8 @@
-use xcm::latest::prelude::*;
-use super::Config;
 use super::xcm_adapters::get_statemint_asset;
+use super::Config;
+use frame_support::dispatch::RawOrigin;
 use sp_runtime::traits::{AccountIdConversion, Get, StaticLookup};
-use frame_support::traits::OriginTrait;
-use frame_support::dispatch::{Dispatchable, RawOrigin};
+use xcm::latest::prelude::*;
 
 pub trait LockAndPayAsset<T: Config> {
     fn lock_asset(asset: MultiAsset, owner: <T::Lookup as StaticLookup>::Source) -> Result<(), ()>;
@@ -12,19 +11,20 @@ pub trait LockAndPayAsset<T: Config> {
 }
 
 pub struct StatemintAssetTransactor;
-impl<T: Config> LockAndPayAsset<T> for StatemintAssetTransactor where
+impl<T: Config> LockAndPayAsset<T> for StatemintAssetTransactor
+where
     T::AssetId: TryFrom<u32>,
-    T::Balance: TryFrom<u128>
+    T::Balance: TryFrom<u128>,
 {
     fn lock_asset(asset: MultiAsset, owner: <T::Lookup as StaticLookup>::Source) -> Result<(), ()> {
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
-        let raw_origin= RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
+        let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();
 
         let (id, amount) = get_statemint_asset(&asset).map_err(|_| ())?;
         let (id, amount): (T::AssetId, T::Balance) = match (id.try_into(), amount.try_into()) {
-                (Ok(id), Ok(amount)) => (id, amount),
-                _ => return Err(())
+            (Ok(id), Ok(amount)) => (id, amount),
+            _ => return Err(()),
         };
 
         // transfer funds from caller to pallet account for holding until fulfill is called
@@ -35,38 +35,33 @@ impl<T: Config> LockAndPayAsset<T> for StatemintAssetTransactor where
             pallet_origin,
             id,
             owner,
-           T::Lookup::unlookup(pallet_account),
-            amount
+            T::Lookup::unlookup(pallet_account),
+            amount,
         );
 
         match extrinsic_call {
             Ok(_) => Ok(()),
-            Err(_) => Err(())
+            Err(e) => Err(()),
         }
-
     }
 
     fn pay_asset(asset: MultiAsset, target: <T::Lookup as StaticLookup>::Source) -> Result<(), ()> {
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
-        let raw_origin= RawOrigin::<T::AccountId>::Signed(pallet_account);
+        let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account);
         let pallet_origin: T::Origin = raw_origin.into();
 
-        let (id, amount) = get_statemint_asset(&asset).map_err(|_| ())?;;
+        let (id, amount) = get_statemint_asset(&asset).map_err(|_| ())?;
         let (id, amount): (T::AssetId, T::Balance) = match (id.try_into(), amount.try_into()) {
             (Ok(id), Ok(amount)) => (id, amount),
-            _ => return Err(())
+            _ => return Err(()),
         };
 
-        let extrinsic_call = pallet_assets::Pallet::<T>::transfer(
-            pallet_origin,
-            id,
-            target,
-            amount
-        );
+        let extrinsic_call =
+            pallet_assets::Pallet::<T>::transfer(pallet_origin, id, target, amount);
 
         match extrinsic_call {
             Ok(_) => Ok(()),
-            Err(_) => Err(())
+            Err(_) => Err(()),
         }
     }
 }
