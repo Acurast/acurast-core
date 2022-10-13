@@ -117,9 +117,11 @@ impl<
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,
-                asset_id as u32,
+                asset_id
+                    .try_into()
+                    .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?,
                 <Runtime as frame_system::Config>::Lookup::unlookup(pallet_assets_account),
-                <Runtime as pallet_assets::Config>::Balance::from(1 as u32),
+                <Runtime as pallet_assets::Config>::Balance::from(1u32),
             )
             .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?;
 
