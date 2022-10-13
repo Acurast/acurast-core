@@ -37,16 +37,33 @@ pub struct AllowedSourcesUpdate<A>
 where
     A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
 {
-    /// The update operation
+    /// The update operation.
     pub operation: ListUpdateOperation,
     /// The [AccountId] to add or remove.
     pub account_id: A,
 }
 
+/// A Job ID consists of an [AccountId] and a [Script].
+pub type JobId<AccountId> = (AccountId, Script);
+
+/// Structure used to updated the allowed sources list of a [Registration].
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct JobAssignmentUpdate<A>
+where
+    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
+{
+    /// The update operation.
+    pub operation: ListUpdateOperation,
+    /// The [AccountId] to assign the job to.
+    pub assignee: A,
+    /// the job id to be assigned.
+    pub job_id: JobId<A>,
+}
+
 /// Structure used to updated the certificate recovation list.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct CertificateRevocationListUpdate {
-    /// The update operation
+    /// The update operation.
     pub operation: ListUpdateOperation,
     /// The [AccountId] to add or remove.
     pub cert_serial_number: SerialNumber,
@@ -60,7 +77,7 @@ pub enum ListUpdateOperation {
 }
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub struct JobRegistration<A, T>
 where
     A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
@@ -72,6 +89,8 @@ where
     pub allowed_sources: Option<Vec<A>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
+    /// Reward offered for the job
+    pub reward: xcm::v2::MultiAsset,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: T,
 }

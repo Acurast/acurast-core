@@ -1,8 +1,16 @@
+use frame_support::{
+    sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
+    traits::ConstU32,
+    PalletId,
+};
 use hex_literal::hex;
 use sp_io;
-use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
+use xcm::v2::{AssetId, Fungibility, Junctions, MultiAsset, MultiLocation};
 
-use crate::{AttestationChain, Fulfillment, JobRegistration, Script, SerialNumber};
+use crate::{
+    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
+    JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber,
+};
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -17,6 +25,7 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Acurast: crate::{Pallet, Call, Storage, Event<T>},
+        Assets: pallet_assets,
     }
 );
 
@@ -30,7 +39,7 @@ impl frame_system::Config for Test {
     type BlockNumber = u64;
     type Call = Call;
     type Hash = sp_core::H256;
-    type Hashing = ::sp_runtime::traits::BlakeTwo256;
+    type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
@@ -51,7 +60,9 @@ frame_support::parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
+    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub static ExistentialDeposit: u64 = 0;
+    pub const TestPalletId: PalletId = PalletId(*b"testpid1");
 }
 
 impl pallet_timestamp::Config for Test {
@@ -61,12 +72,56 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
+pub type Balance = u32;
+pub const UNIT: Balance = 1_000_000;
+pub const MICROUNIT: Balance = 1;
+
+impl pallet_assets::Config for Test {
+    type Event = Event;
+    type Balance = Balance;
+    type AssetId = u32;
+    type Currency = ();
+    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
+    type AssetDeposit = ConstU32<0>;
+    type AssetAccountDeposit = ConstU32<0>;
+    type MetadataDepositBase = ConstU32<{ UNIT }>;
+    type MetadataDepositPerByte = ConstU32<{ 10 * MICROUNIT }>;
+    type ApprovalDeposit = ConstU32<{ 10 * MICROUNIT }>;
+    type StringLimit = ConstU32<50>;
+    type Freezer = ();
+    type Extra = ();
+    type WeightInfo = ();
+}
+
 impl crate::Config for Test {
     type Event = Event;
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
+    type RevocationListUpdateBarrier = Barrier;
+    type JobAssignmentUpdateBarrier = Barrier;
+    type AssetTransactor = TestTransactor;
+    type PalletId = TestPalletId;
+}
+
+pub struct Barrier;
+
+impl RevocationListUpdateBarrier<Test> for Barrier {
+    fn can_update_revocation_list(
+        origin: &<Test as frame_system::Config>::AccountId,
+        _updates: &Vec<crate::CertificateRevocationListUpdate>,
+    ) -> bool {
+        AllowedRevocationListUpdate::get().contains(origin)
+    }
+}
+
+impl JobAssignmentUpdateBarrier<Test> for Barrier {
+    fn can_update_assigned_jobs(
+        origin: &<Test as frame_system::Config>::AccountId,
+        _updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
+    ) -> bool {
+        AllowedJobAssignmentUpdate::get().contains(origin)
+    }
 }
 
 pub struct Router;
@@ -83,6 +138,24 @@ impl crate::FulfillmentRouter<Test> for Router {
         _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
     ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
+    }
+}
+
+pub struct TestTransactor;
+
+impl LockAndPayAsset<Test> for TestTransactor {
+    fn lock_asset(
+        _asset: MultiAsset,
+        _owner: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+    ) -> Result<(), ()> {
+        Ok(())
+    }
+
+    fn pay_asset(
+        _asset: MultiAsset,
+        _target: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+    ) -> Result<(), ()> {
+        Ok(())
     }
 }
 
@@ -134,6 +207,16 @@ pub fn invalid_script_2() -> Script {
     bytes.try_into().unwrap()
 }
 
+fn multi_asset() -> MultiAsset {
+    MultiAsset {
+        id: AssetId::Concrete(MultiLocation {
+            parents: 0,
+            interior: Junctions::Here,
+        }),
+        fun: Fungibility::Fungible(10),
+    }
+}
+
 pub fn job_registration(
     allowed_sources: Option<Vec<AccountId>>,
     allow_only_verified_sources: bool,
@@ -143,7 +226,22 @@ pub fn job_registration(
         allowed_sources,
         allow_only_verified_sources,
         extra: (),
+        reward: multi_asset(),
     }
+}
+
+pub fn job_assignment_update_for(
+    registration: &JobRegistration<AccountId, ()>,
+    requester: Option<AccountId>,
+) -> Vec<JobAssignmentUpdate<AccountId>> {
+    vec![JobAssignmentUpdate {
+        operation: crate::ListUpdateOperation::Add,
+        assignee: processor_account_id(),
+        job_id: (
+            requester.unwrap_or(alice_account_id()),
+            registration.script.clone(),
+        ),
+    }]
 }
 
 pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
@@ -152,6 +250,7 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         allowed_sources: None,
         allow_only_verified_sources: false,
         extra: (),
+        reward: multi_asset(),
     }
 }
 
@@ -161,6 +260,7 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         allowed_sources: None,
         allow_only_verified_sources: false,
         extra: (),
+        reward: multi_asset(),
     }
 }
 
