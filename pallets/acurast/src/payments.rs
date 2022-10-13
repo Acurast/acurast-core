@@ -13,7 +13,7 @@ pub trait LockAndPayAsset<T: Config> {
 pub struct StatemintAssetTransactor;
 impl<T: Config> LockAndPayAsset<T> for StatemintAssetTransactor
 where
-    T::AssetId: TryFrom<u32>,
+    T::AssetId: TryFrom<u128>,
     T::Balance: TryFrom<u128>,
 {
     fn lock_asset(asset: MultiAsset, owner: <T::Lookup as StaticLookup>::Source) -> Result<(), ()> {

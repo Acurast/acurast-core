@@ -74,9 +74,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config:
-        frame_system::Config
-        + pallet_timestamp::Config
-        + pallet_assets::Config<AssetId = parachains_common::AssetId>
+        frame_system::Config + pallet_timestamp::Config + pallet_assets::Config
     {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
