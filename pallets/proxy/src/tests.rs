@@ -16,11 +16,12 @@
 
 use crate::mock::*;
 
+use frame_support::sp_runtime::traits::AccountIdConversion;
 use polkadot_parachain::primitives::Id as ParaId;
-use sp_runtime::traits::AccountIdConversion;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
 
-pub const ALICE: sp_runtime::AccountId32 = sp_runtime::AccountId32::new([0u8; 32]);
+pub const ALICE: frame_support::sp_runtime::AccountId32 =
+    frame_support::sp_runtime::AccountId32::new([0u8; 32]);
 pub const INITIAL_BALANCE: u128 = 1_000_000_000;
 
 decl_test_parachain! {
@@ -492,7 +493,7 @@ mod proxy_calls {
         use pallet_acurast::{AllowedSourcesUpdate, Script};
 
         let rand_array: [u8; 32] = rand::random();
-        let source = sp_runtime::AccountId32::new(rand_array);
+        let source = frame_support::sp_runtime::AccountId32::new(rand_array);
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::update_allowed_sources;
@@ -523,7 +524,7 @@ mod proxy_calls {
             let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
 
             // source in storage same as one submitted to proxy
-            let found_source: &sp_runtime::AccountId32 =
+            let found_source: &frame_support::sp_runtime::AccountId32 =
                 &p_store.unwrap().allowed_sources.unwrap()[0];
             assert_eq!(*found_source, source);
 
@@ -540,7 +541,7 @@ mod proxy_calls {
 
         register();
 
-        let bob = sp_runtime::AccountId32::new(rand::random());
+        let bob = frame_support::sp_runtime::AccountId32::new(rand::random());
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
@@ -568,7 +569,7 @@ mod proxy_calls {
 
             let message_call = AcurastProxy(fulfill {
                 fulfillment,
-                requester: sp_runtime::MultiAddress::Id(ALICE),
+                requester: frame_support::sp_runtime::MultiAddress::Id(ALICE),
             });
 
             let bob_origin = proxy_runtime::Origin::signed(bob);

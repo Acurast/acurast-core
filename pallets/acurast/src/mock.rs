@@ -1,7 +1,10 @@
-use frame_support::{traits::ConstU32, PalletId};
+use frame_support::{
+    sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
+    traits::ConstU32,
+    PalletId,
+};
 use hex_literal::hex;
 use sp_io;
-use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
 use xcm::v2::{AssetId, Fungibility, Junctions, MultiAsset, MultiLocation};
 
 use crate::{
@@ -36,7 +39,7 @@ impl frame_system::Config for Test {
     type BlockNumber = u64;
     type Call = Call;
     type Hash = sp_core::H256;
-    type Hashing = ::sp_runtime::traits::BlakeTwo256;
+    type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;

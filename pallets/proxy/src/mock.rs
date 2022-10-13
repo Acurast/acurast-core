@@ -2,6 +2,11 @@ pub mod acurast_runtime {
     use codec::{Decode, Encode};
     use frame_support::{
         construct_runtime, parameter_types,
+        sp_runtime::{
+            testing::Header,
+            traits::{AccountIdLookup, Hash},
+            AccountId32,
+        },
         traits::{Everything, Nothing},
         weights::{constants::WEIGHT_PER_SECOND, Weight},
         PalletId,
@@ -9,11 +14,6 @@ pub mod acurast_runtime {
     pub use pallet_acurast;
     use pallet_acurast::LockAndPayAsset;
     use sp_core::H256;
-    use sp_runtime::{
-        testing::Header,
-        traits::{AccountIdLookup, Hash},
-        AccountId32,
-    };
     use sp_std::prelude::*;
     use std::marker::PhantomData;
 
@@ -46,7 +46,7 @@ pub mod acurast_runtime {
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
-        type Hashing = ::sp_runtime::traits::BlakeTwo256;
+        type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
         type AccountId = AccountId;
         type Lookup = AccountIdLookup<AccountId, ()>;
         type Header = Header;
@@ -416,7 +416,7 @@ pub mod acurast_runtime {
                 <Runtime as frame_system::Config>::AccountId,
                 <Runtime as pallet_acurast::Config>::RegistrationExtra,
             >,
-            _requester: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
+            _requester: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Target,
         ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
             Ok(().into())
         }
@@ -427,14 +427,14 @@ pub mod acurast_runtime {
     impl LockAndPayAsset<Runtime> for Transactor {
         fn lock_asset(
             _asset: MultiAsset,
-            _owner: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+            _owner: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Source,
         ) -> Result<(), ()> {
             Ok(())
         }
 
         fn pay_asset(
             _asset: MultiAsset,
-            _target: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+            _target: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Source,
         ) -> Result<(), ()> {
             Ok(())
         }
@@ -486,7 +486,7 @@ pub mod proxy_runtime {
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
-        type Hashing = ::sp_runtime::traits::BlakeTwo256;
+        type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
         type AccountId = AccountId;
         type Lookup = AccountIdLookup<AccountId, ()>;
         type Header = Header;
@@ -829,11 +829,11 @@ pub mod proxy_runtime {
 pub mod relay_chain {
     use frame_support::{
         construct_runtime, parameter_types,
+        sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
         traits::{Everything, Nothing},
         weights::Weight,
     };
     use sp_core::H256;
-    use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
 
     use polkadot_parachain::primitives::Id as ParaId;
     use polkadot_runtime_parachains::{configuration, origin, shared, ump};
@@ -860,7 +860,7 @@ pub mod relay_chain {
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
-        type Hashing = ::sp_runtime::traits::BlakeTwo256;
+        type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
         type AccountId = AccountId;
         type Lookup = IdentityLookup<Self::AccountId>;
         type Header = Header;

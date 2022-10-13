@@ -28,8 +28,6 @@ xcm = { package = "xcm", git = "https://github.com/paritytech/polkadot", default
 xcm-executor = { package = "xcm-executor", git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
 xcm-builder = { package = "xcm-builder", git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
 
-sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.26" }
-
 [dev-dependencies]
 serde = { version = "1.0.132" }
 # Substrate

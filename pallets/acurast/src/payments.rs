@@ -1,7 +1,9 @@
 use super::xcm_adapters::get_statemint_asset;
 use super::Config;
-use frame_support::dispatch::RawOrigin;
-use sp_runtime::traits::{AccountIdConversion, Get, StaticLookup};
+use frame_support::{
+    dispatch::RawOrigin,
+    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
+};
 use xcm::latest::prelude::*;
 
 pub trait LockAndPayAsset<T: Config> {

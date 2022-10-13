@@ -1,6 +1,8 @@
-use frame_support::dispatch::RawOrigin;
-use frame_support::traits::{fungibles, Contains};
-use sp_runtime::traits::{AccountIdConversion, Get, StaticLookup};
+use frame_support::{
+    dispatch::RawOrigin,
+    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
+    traits::{fungibles, Contains},
+};
 use sp_std::{marker::PhantomData, result::Result};
 use xcm::latest::{MultiAsset, MultiLocation, Result as XcmResult};
 use xcm::prelude::*;
