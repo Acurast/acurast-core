@@ -111,9 +111,6 @@ where
             // asset might not have been created. Try creating it and give it again to FungiblesMutateAdapter
             let (asset_id, _amount) =
                 get_statemint_asset(what).map_err(|_| XcmError::AssetNotFound)?;
-
-            let asset_id: Runtime::AssetId =
-                asset_id.try_into().map_err(|_| XcmError::AssetNotFound)?;
             let pallet_assets_account: <Runtime as frame_system::Config>::AccountId =
                 <Runtime as crate::Config>::PalletId::get().into_account_truncating();
             let raw_origin = RawOrigin::<<Runtime as frame_system::Config>::AccountId>::Signed(
@@ -123,9 +120,11 @@ where
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,
-                asset_id,
+                asset_id
+                    .try_into()
+                    .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?,
                 <Runtime as frame_system::Config>::Lookup::unlookup(pallet_assets_account),
-                <Runtime as pallet_assets::Config>::Balance::from(1 as u32),
+                <Runtime as pallet_assets::Config>::Balance::from(1u32),
             )
             .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?;
 
