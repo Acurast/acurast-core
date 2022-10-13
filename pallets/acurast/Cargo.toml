@@ -45,8 +45,10 @@ ecdsa-vendored = { package = "ecdsa_vendored", path = "p384/ecdsa", default-feat
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 hex-literal = "0.3"
 
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, branch = "polkadot-v0.9.26" }
 
 acurast-p256-crypto = { path = "../../p256-crypto" }
 
@@ -73,5 +75,9 @@ std = [
 	"xcm/std",
 	"xcm-executor/std",
 	"xcm-builder/std",
+	"parachain-info/std",
+#	"pallet-balances/std",
+#	"sp-runtime/std",
+#	"sp-core/std"
 ]
 try-runtime = [ "frame-support/try-runtime" ]

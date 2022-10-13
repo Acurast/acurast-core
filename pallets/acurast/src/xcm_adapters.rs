@@ -44,7 +44,7 @@ pub struct StatemintTransactor<
     )>,
 );
 impl<
-        Runtime: frame_system::Config + pallet_assets::Config + crate::Config,
+        Runtime: crate::Config,
         Assets: fungibles::Mutate<AccountId> + fungibles::Transfer<AccountId>,
         Matcher: MatchesFungibles<Assets::AssetId, Assets::Balance>,
         AccountIdConverter: Convert<MultiLocation, AccountId>,
@@ -61,6 +61,9 @@ impl<
         CheckAsset,
         CheckingAccount,
     >
+where
+    Runtime::AssetId: TryFrom<u128>,
+    Runtime::Balance: TryFrom<u128>,
 {
     fn can_check_in(origin: &MultiLocation, what: &MultiAsset) -> XcmResult {
         FungiblesMutateAdapter::<
@@ -117,9 +120,11 @@ impl<
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,
-                asset_id as u32,
+                asset_id
+                    .try_into()
+                    .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?,
                 <Runtime as frame_system::Config>::Lookup::unlookup(pallet_assets_account),
-                <Runtime as pallet_assets::Config>::Balance::from(1 as u32),
+                <Runtime as pallet_assets::Config>::Balance::from(1u32),
             )
             .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?;
 
