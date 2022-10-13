@@ -64,8 +64,14 @@ std = [
 	"asn1/std",
 	"p256/std",
 	"sha2/std",
+	"p384/std",
 	"num-bigint/std",
 	"ecdsa-vendored/std",
 	"sp-io/std",
+	"pallet-assets/std",
+	"parachains-common/std",
+	"xcm/std",
+	"xcm-executor/std",
+	"xcm-builder/std",
 ]
 try-runtime = [ "frame-support/try-runtime" ]

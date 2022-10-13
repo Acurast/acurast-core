@@ -246,7 +246,7 @@ pub mod pallet {
             }
 
             if let Err(()) = T::AssetTransactor::lock_asset(
-                registration.payment.clone(),
+                registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
             ) {
                 return Err(Error::<T>::InvalidPayment.into());
@@ -316,7 +316,7 @@ pub mod pallet {
                     allowed_sources,
                     extra: (&registration).extra.clone(),
                     allow_only_verified_sources: (&registration).allow_only_verified_sources,
-                    payment: (&registration).payment.clone(),
+                    reward: (&registration).reward.clone(),
                 },
             );
 
@@ -384,7 +384,7 @@ pub mod pallet {
                 allowed_result?;
 
                 if let Err(()) = T::AssetTransactor::pay_asset(
-                    registration.payment.clone(),
+                    registration.reward.clone(),
                     T::Lookup::unlookup(who.clone()),
                 ) {
                     return Err(Error::<T>::FailedToPay.into());

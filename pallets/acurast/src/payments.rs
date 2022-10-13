@@ -41,7 +41,7 @@ where
 
         match extrinsic_call {
             Ok(_) => Ok(()),
-            Err(e) => Err(()),
+            Err(_e) => Err(()),
         }
     }
 

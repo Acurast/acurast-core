@@ -4,8 +4,10 @@ pub mod acurast_runtime {
         construct_runtime, parameter_types,
         traits::{Everything, Nothing},
         weights::{constants::WEIGHT_PER_SECOND, Weight},
+        PalletId,
     };
     pub use pallet_acurast;
+    use pallet_acurast::LockAndPayAsset;
     use sp_core::H256;
     use sp_runtime::{
         testing::Header,
@@ -100,10 +102,10 @@ pub mod acurast_runtime {
         AccountId32Aliases<RelayNetwork, AccountId>,
     );
 
-    use frame_support::traits::{EnsureOrigin, Get, GetBacking, OriginTrait};
-    use xcm_executor::traits::{Convert, ConvertOrigin};
+    use frame_support::traits::{Get, OriginTrait};
+    use xcm_executor::traits::ConvertOrigin;
 
-    pub struct SignedAccountId32FromXcm<Origin>(PhantomData<(Origin)>);
+    pub struct SignedAccountId32FromXcm<Origin>(PhantomData<Origin>);
     impl<Origin: OriginTrait> ConvertOrigin<Origin> for SignedAccountId32FromXcm<Origin>
     where
         Origin::AccountId: From<[u8; 32]>,
@@ -124,7 +126,7 @@ pub mod acurast_runtime {
                     MultiLocation {
                         parents: 1,
                         interior:
-                            X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }),
+                            X2(Junction::Parachain(_para_id), Junction::AccountId32 { id, network: _ }),
                     },
                 ) => Ok(Origin::signed(id.into())),
                 (_, origin) => Err(origin),
@@ -355,13 +357,14 @@ pub mod acurast_runtime {
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
             Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
             Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>} = 40,
+            Assets: pallet_assets,
         }
     );
 
     parameter_types! {
         pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
         pub const IsRelay: bool = false;
-        pub Admins: Vec<AccountId> = vec![];
+        pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
     }
 
     impl pallet_timestamp::Config for Runtime {
@@ -371,12 +374,35 @@ pub mod acurast_runtime {
         type WeightInfo = ();
     }
 
+    pub const UNIT: Balance = 1_000_000;
+    pub const MICROUNIT: Balance = 1;
+
+    impl pallet_assets::Config for Runtime {
+        type Event = Event;
+        type Balance = Balance;
+        type AssetId = u32;
+        type Currency = Balances;
+        type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
+        type AssetDeposit = frame_support::traits::ConstU128<0>;
+        type AssetAccountDeposit = frame_support::traits::ConstU128<0>;
+        type MetadataDepositBase = frame_support::traits::ConstU128<{ UNIT }>;
+        type MetadataDepositPerByte = frame_support::traits::ConstU128<{ 10 * MICROUNIT }>;
+        type ApprovalDeposit = frame_support::traits::ConstU128<{ 10 * MICROUNIT }>;
+        type StringLimit = frame_support::traits::ConstU32<50>;
+        type Freezer = ();
+        type Extra = ();
+        type WeightInfo = ();
+    }
+
     impl pallet_acurast::Config for Runtime {
         type Event = Event;
         type RegistrationExtra = ();
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
-        type AllowedRevocationListUpdate = Admins;
+        type AssetTransactor = Transactor;
+        type PalletId = AcurastPalletId;
+        type RevocationListUpdateBarrier = ();
+        type JobAssignmentUpdateBarrier = ();
     }
 
     pub struct FulfillmentRouter;
@@ -384,15 +410,33 @@ pub mod acurast_runtime {
     impl pallet_acurast::FulfillmentRouter<Runtime> for FulfillmentRouter {
         fn received_fulfillment(
             _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
-            from: <Runtime as frame_system::Config>::AccountId,
+            _from: <Runtime as frame_system::Config>::AccountId,
             _fulfillment: pallet_acurast::Fulfillment,
             _registration: pallet_acurast::JobRegistration<
                 <Runtime as frame_system::Config>::AccountId,
                 <Runtime as pallet_acurast::Config>::RegistrationExtra,
             >,
-            requester: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
+            _requester: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
         ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
             Ok(().into())
+        }
+    }
+
+    pub struct Transactor;
+
+    impl LockAndPayAsset<Runtime> for Transactor {
+        fn lock_asset(
+            _asset: MultiAsset,
+            _owner: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+        ) -> Result<(), ()> {
+            Ok(())
+        }
+
+        fn pay_asset(
+            _asset: MultiAsset,
+            _target: <<Runtime as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+        ) -> Result<(), ()> {
+            Ok(())
         }
     }
 }
@@ -498,10 +542,10 @@ pub mod proxy_runtime {
         AccountId32Aliases<RelayNetwork, AccountId>,
     );
 
-    use frame_support::traits::{EnsureOrigin, Get, GetBacking, OriginTrait};
-    use xcm_executor::traits::{Convert, ConvertOrigin};
+    use frame_support::traits::{Get, OriginTrait};
+    use xcm_executor::traits::ConvertOrigin;
 
-    pub struct SignedAccountId32FromXcm<Origin>(PhantomData<(Origin)>);
+    pub struct SignedAccountId32FromXcm<Origin>(PhantomData<Origin>);
     impl<Origin: OriginTrait> ConvertOrigin<Origin> for SignedAccountId32FromXcm<Origin>
     where
         Origin::AccountId: From<[u8; 32]>,
@@ -522,7 +566,7 @@ pub mod proxy_runtime {
                     MultiLocation {
                         parents: 1,
                         interior:
-                            X2(Junction::Parachain(para_id), Junction::AccountId32 { id, network }),
+                            X2(Junction::Parachain(_para_id), Junction::AccountId32 { id, network: _ }),
                     },
                 ) => Ok(Origin::signed(id.into())),
                 (_, origin) => Err(origin),
@@ -751,7 +795,7 @@ pub mod proxy_runtime {
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
             MsgQueue: mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
-            AcurastProxy: crate::{Pallet, Call, Event<T>} = 34
+            AcurastProxy: crate::{Pallet, Call, Event<T>} = 34,
         }
     );
 

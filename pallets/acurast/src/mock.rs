@@ -1,10 +1,12 @@
+use frame_support::{traits::ConstU32, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32};
+use xcm::v2::{AssetId, Fungibility, Junctions, MultiAsset, MultiLocation};
 
 use crate::{
     AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
-    JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
+    JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 type AccountId = AccountId32;
@@ -20,6 +22,7 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Acurast: crate::{Pallet, Call, Storage, Event<T>},
+        Assets: pallet_assets,
     }
 );
 
@@ -56,12 +59,34 @@ frame_support::parameter_types! {
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
     pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub static ExistentialDeposit: u64 = 0;
+    pub const TestPalletId: PalletId = PalletId(*b"testpid1");
 }
 
 impl pallet_timestamp::Config for Test {
     type Moment = u64;
     type OnTimestampSet = ();
     type MinimumPeriod = MinimumPeriod;
+    type WeightInfo = ();
+}
+
+pub type Balance = u32;
+pub const UNIT: Balance = 1_000_000;
+pub const MICROUNIT: Balance = 1;
+
+impl pallet_assets::Config for Test {
+    type Event = Event;
+    type Balance = Balance;
+    type AssetId = u32;
+    type Currency = ();
+    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
+    type AssetDeposit = ConstU32<0>;
+    type AssetAccountDeposit = ConstU32<0>;
+    type MetadataDepositBase = ConstU32<{ UNIT }>;
+    type MetadataDepositPerByte = ConstU32<{ 10 * MICROUNIT }>;
+    type ApprovalDeposit = ConstU32<{ 10 * MICROUNIT }>;
+    type StringLimit = ConstU32<50>;
+    type Freezer = ();
+    type Extra = ();
     type WeightInfo = ();
 }
 
@@ -72,6 +97,8 @@ impl crate::Config for Test {
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
+    type AssetTransactor = TestTransactor;
+    type PalletId = TestPalletId;
 }
 
 pub struct Barrier;
@@ -108,6 +135,24 @@ impl crate::FulfillmentRouter<Test> for Router {
         _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
     ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
+    }
+}
+
+pub struct TestTransactor;
+
+impl LockAndPayAsset<Test> for TestTransactor {
+    fn lock_asset(
+        _asset: MultiAsset,
+        _owner: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+    ) -> Result<(), ()> {
+        Ok(())
+    }
+
+    fn pay_asset(
+        _asset: MultiAsset,
+        _target: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
+    ) -> Result<(), ()> {
+        Ok(())
     }
 }
 
@@ -159,6 +204,16 @@ pub fn invalid_script_2() -> Script {
     bytes.try_into().unwrap()
 }
 
+fn multi_asset() -> MultiAsset {
+    MultiAsset {
+        id: AssetId::Concrete(MultiLocation {
+            parents: 0,
+            interior: Junctions::Here,
+        }),
+        fun: Fungibility::Fungible(10),
+    }
+}
+
 pub fn job_registration(
     allowed_sources: Option<Vec<AccountId>>,
     allow_only_verified_sources: bool,
@@ -168,6 +223,7 @@ pub fn job_registration(
         allowed_sources,
         allow_only_verified_sources,
         extra: (),
+        reward: multi_asset(),
     }
 }
 
@@ -191,6 +247,7 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         allowed_sources: None,
         allow_only_verified_sources: false,
         extra: (),
+        reward: multi_asset(),
     }
 }
 
@@ -200,6 +257,7 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         allowed_sources: None,
         allow_only_verified_sources: false,
         extra: (),
+        reward: multi_asset(),
     }
 }
 

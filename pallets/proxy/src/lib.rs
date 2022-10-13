@@ -59,7 +59,7 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         },
 
-        #[codec(index = 3u8)]
+        #[codec(index = 4u8)]
         Fulfill {
             fulfillment: Fulfillment,
             requester: <T::Lookup as StaticLookup>::Source,
@@ -141,7 +141,6 @@ pub mod pallet {
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
-    // #[derive(Clone)]
     pub enum Event<T: Config> {
         XcmSent {
             extrinsic: ExtrinsicName,

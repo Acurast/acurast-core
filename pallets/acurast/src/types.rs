@@ -89,8 +89,8 @@ where
     pub allowed_sources: Option<Vec<A>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
-    /// Payment offered for the job
-    pub payment: xcm::v2::MultiAsset,
+    /// Reward offered for the job
+    pub reward: xcm::v2::MultiAsset,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: T,
 }
