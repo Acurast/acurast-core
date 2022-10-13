@@ -6,15 +6,18 @@ use crate::{
 };
 use frame_support::{assert_err, assert_ok};
 use hex_literal::hex;
+use pallet_assets::Call::approve_transfer;
+use sp_runtime::MultiAddress;
 
 #[test]
 fn test_job_registration() {
     ExtBuilder::default().build().execute_with(|| {
         let registration = job_registration(None, false);
-        assert_ok!(Acurast::register(
+        let register_call = Acurast::register(
             Origin::signed(alice_account_id()).into(),
             registration.clone(),
-        ));
+        );
+        assert_ok!(register_call);
 
         assert_eq!(
             Some(registration.clone()),
@@ -34,6 +37,12 @@ fn test_job_registration() {
         assert_eq!(
             events(),
             [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
@@ -189,6 +198,12 @@ fn test_update_allowed_sources() {
         assert_eq!(
             events(),
             [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration_1.clone(),
                     alice_account_id()
@@ -245,7 +260,14 @@ fn test_update_allowed_sources_failure() {
 
         assert_eq!(
             events(),
-            [Event::Acurast(crate::Event::JobRegistrationStored(
+            [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
+                Event::Acurast(crate::Event::JobRegistrationStored(
                 registration.clone(),
                 alice_account_id()
             )),]
@@ -275,6 +297,12 @@ fn test_assign_job() {
         assert_eq!(
             events(),
             [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
@@ -303,7 +331,15 @@ fn test_assign_job_failure_1() {
         );
         assert_eq!(
             events(),
-            [Event::Acurast(crate::Event::JobRegistrationStored(
+            [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
+
+                Event::Acurast(crate::Event::JobRegistrationStored(
                 registration.clone(),
                 alice_account_id()
             )),]
@@ -326,7 +362,14 @@ fn test_assign_job_failure_2() {
         );
         assert_eq!(
             events(),
-            [Event::Acurast(crate::Event::JobRegistrationStored(
+            [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
+                Event::Acurast(crate::Event::JobRegistrationStored(
                 registration.clone(),
                 alice_account_id()
             ))]
@@ -354,16 +397,28 @@ fn test_fulfill() {
         assert_ok!(Acurast::fulfill(
             Origin::signed(processor_account_id()).into(),
             fulfillment.clone(),
-            alice_account_id()
+            MultiAddress::Id(alice_account_id()),
         ));
         assert_eq!(
             events(),
             [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
                 )),
                 Event::Acurast(crate::Event::JobAssignmentUpdate(bob_account_id(), updates)),
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: pallet_assets_account(),
+                    to: processor_account_id(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::ReceivedFulfillment(
                     processor_account_id(),
                     fulfillment,
@@ -400,7 +455,7 @@ fn test_fulfill_failure_1() {
             Acurast::fulfill(
                 Origin::signed(processor_account_id()).into(),
                 fulfillment.clone(),
-                alice_account_id()
+                MultiAddress::Id(alice_account_id())
             ),
             Error::<Test>::JobRegistrationNotFound
         );
@@ -411,6 +466,12 @@ fn test_fulfill_failure_1() {
         assert_eq!(
             events(),
             [
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: alice_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
@@ -476,12 +537,11 @@ fn test_submit_attestation_register_fulfill() {
         assert_ok!(Acurast::fulfill(
             Origin::signed(processor_account_id()),
             fulfillment.clone(),
-            bob_account_id()
+            MultiAddress::Id(bob_account_id())
         ));
 
         let attestation =
             validate_and_extract_attestation::<Test>(&processor_account_id(), &chain).unwrap();
-
         assert_eq!(
             events(),
             [
@@ -489,11 +549,23 @@ fn test_submit_attestation_register_fulfill() {
                     attestation,
                     processor_account_id()
                 )),
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: bob_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     bob_account_id()
                 )),
                 Event::Acurast(crate::Event::JobAssignmentUpdate(bob_account_id(), updates)),
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: pallet_assets_account(),
+                    to: processor_account_id(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::ReceivedFulfillment(
                     processor_account_id(),
                     fulfillment,
@@ -708,7 +780,7 @@ fn test_update_revocation_list_fulfill() {
             Acurast::fulfill(
                 Origin::signed(processor_account_id()),
                 fulfillment.clone(),
-                bob_account_id()
+                MultiAddress::Id(bob_account_id())
             ),
             Error::<Test>::RevokedCertificate
         );
@@ -723,6 +795,12 @@ fn test_update_revocation_list_fulfill() {
                     attestation,
                     processor_account_id()
                 )),
+                Event::Assets(pallet_assets::Event::Transferred{
+                    asset_id: 22,
+                    from: bob_account_id(),
+                    to: pallet_assets_account(),
+                    amount: INITIAL_BALANCE/2 as u128,
+                }),
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     bob_account_id()

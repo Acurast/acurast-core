@@ -1,20 +1,30 @@
-use frame_support::{
-    sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
-    traits::ConstU32,
-    PalletId,
-};
+use frame_support::traits::Everything;
+use frame_support::{pallet_prelude::GenesisBuild, PalletId};
 use hex_literal::hex;
 use sp_io;
-use xcm::v2::{AssetId, Fungibility, Junctions, MultiAsset, MultiLocation};
+use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
+use sp_runtime::{
+    create_runtime_str, generic, parameter_types, testing::Header, traits::IdentityLookup,
+    AccountId32,
+};
+use xcm::prelude::*;
 
 use crate::{
-    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
+    payments, AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
     JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+pub type Balance = u128;
+pub type BlockNumber = u32;
+
+pub const INITIAL_BALANCE: u128 = UNIT * 10;
+pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
+pub const UNIT: Balance = 1_000_000;
+pub const MILLIUNIT: Balance = UNIT / 1_000;
+pub const MICROUNIT: Balance = UNIT / 1_000_000;
 
 frame_support::construct_runtime!(
     pub enum Test where
@@ -22,46 +32,52 @@ frame_support::construct_runtime!(
         NodeBlock = Block,
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+        Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
+        ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: crate::{Pallet, Call, Storage, Event<T>},
-        Assets: pallet_assets,
     }
 );
 
+parameter_types! {
+    pub const BlockHashCount: BlockNumber = 2400;
+}
+
 impl frame_system::Config for Test {
-    type BaseCallFilter = frame_support::traits::Everything;
-    type BlockWeights = BlockWeights;
-    type BlockLength = ();
-    type DbWeight = ();
-    type Origin = Origin;
-    type Index = u64;
-    type BlockNumber = u64;
-    type Call = Call;
-    type Hash = sp_core::H256;
-    type Hashing = frame_support::sp_runtime::traits::BlakeTwo256;
     type AccountId = AccountId;
-    type Lookup = IdentityLookup<Self::AccountId>;
-    type Header = Header;
+    type Call = Call;
+    type Lookup = AccountIdLookup<AccountId, ()>;
+    type Index = u32;
+    type BlockNumber = BlockNumber;
+    type Hash = sp_core::H256;
+    type Hashing = BlakeTwo256;
+    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type Event = Event;
-    type BlockHashCount = frame_support::traits::ConstU64<250>;
+    type Origin = Origin;
+    type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
-    type AccountData = ();
+    type AccountData = pallet_balances::AccountData<Balance>;
     type OnNewAccount = ();
     type OnKilledAccount = ();
+    type DbWeight = ();
+    type BaseCallFilter = Everything;
     type SystemWeightInfo = ();
+    type BlockWeights = ();
+    type BlockLength = ();
     type SS58Prefix = ();
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-frame_support::parameter_types! {
+parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
     pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
-    pub static ExistentialDeposit: u64 = 0;
+    pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
     pub const TestPalletId: PalletId = PalletId(*b"testpid1");
 }
 
@@ -72,25 +88,46 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
-pub type Balance = u32;
-pub const UNIT: Balance = 1_000_000;
-pub const MICROUNIT: Balance = 1;
-
 impl pallet_assets::Config for Test {
     type Event = Event;
     type Balance = Balance;
-    type AssetId = u32;
-    type Currency = ();
+    type AssetId = parachains_common::AssetId;
+    type Currency = Balances;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-    type AssetDeposit = ConstU32<0>;
-    type AssetAccountDeposit = ConstU32<0>;
-    type MetadataDepositBase = ConstU32<{ UNIT }>;
-    type MetadataDepositPerByte = ConstU32<{ 10 * MICROUNIT }>;
-    type ApprovalDeposit = ConstU32<{ 10 * MICROUNIT }>;
+    type AssetDeposit = ConstU128<0>;
+    type AssetAccountDeposit = ConstU128<0>;
+    type MetadataDepositBase = ConstU128<{ UNIT }>;
+    type MetadataDepositPerByte = ConstU128<{ 10 * MICROUNIT }>;
+    type ApprovalDeposit = ConstU128<{ 10 * MICROUNIT }>;
     type StringLimit = ConstU32<50>;
     type Freezer = ();
     type Extra = ();
     type WeightInfo = ();
+}
+
+parameter_types! {
+    pub const MaxReserves: u32 = 50;
+    pub const MaxLocks: u32 = 50;
+}
+
+impl pallet_balances::Config for Test {
+    type MaxLocks = MaxLocks;
+    /// The type for recording an account's balance.
+    type Balance = Balance;
+    /// The ubiquitous event type.
+    type Event = Event;
+    type DustRemoval = ();
+    type ExistentialDeposit = ExistentialDeposit;
+    type AccountStore = System;
+    type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
+    type MaxReserves = MaxReserves;
+    type ReserveIdentifier = [u8; 8];
+}
+
+impl parachain_info::Config for Test {}
+
+parameter_types! {
+    	pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
 }
 
 impl crate::Config for Test {
@@ -98,10 +135,12 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
+    type AssetTransactor = payments::StatemintAssetTransactor;
+    type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
-    type AssetTransactor = TestTransactor;
-    type PalletId = TestPalletId;
+    // type AssetTransactor = TestTransactor;
+    // type PalletId = TestPalletId;
 }
 
 pub struct Barrier;
@@ -163,9 +202,44 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let t = frame_system::GenesisConfig::default()
+        let mut t = frame_system::GenesisConfig::default()
             .build_storage::<Test>()
             .unwrap();
+
+        let parachain_info_config = parachain_info::GenesisConfig {
+            parachain_id: 2000.into(),
+        };
+
+        <parachain_info::GenesisConfig as GenesisBuild<Test, _>>::assimilate_storage(
+            &parachain_info_config,
+            &mut t,
+        )
+            .unwrap();
+
+
+
+        pallet_balances::GenesisConfig::<Test> {
+            balances: vec![
+                (alice_account_id(), INITIAL_BALANCE),
+                (pallet_assets_account(), INITIAL_BALANCE),
+                (bob_account_id(), INITIAL_BALANCE),
+                (processor_account_id(), INITIAL_BALANCE)
+            ],
+        }
+            .assimilate_storage(&mut t)
+            .unwrap();
+
+        // give alice an initial balance of token 22 (backed by statemint) to pay for a job
+        // get the MultiAsset representing token 22 with owned_asset()
+        pallet_assets::GenesisConfig::<Test> {
+            assets: vec![(22, pallet_assets_account(), false, 1_000)],
+            metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
+            accounts: vec![
+                (22, alice_account_id(), INITIAL_BALANCE),
+                (22, bob_account_id(), INITIAL_BALANCE)],
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
@@ -207,16 +281,6 @@ pub fn invalid_script_2() -> Script {
     bytes.try_into().unwrap()
 }
 
-fn multi_asset() -> MultiAsset {
-    MultiAsset {
-        id: AssetId::Concrete(MultiLocation {
-            parents: 0,
-            interior: Junctions::Here,
-        }),
-        fun: Fungibility::Fungible(10),
-    }
-}
-
 pub fn job_registration(
     allowed_sources: Option<Vec<AccountId>>,
     allow_only_verified_sources: bool,
@@ -226,7 +290,7 @@ pub fn job_registration(
         allowed_sources,
         allow_only_verified_sources,
         extra: (),
-        reward: multi_asset(),
+        reward: owned_asset(),
     }
 }
 
@@ -249,8 +313,8 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         script: invalid_script_1(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        reward: owned_asset(),
         extra: (),
-        reward: multi_asset(),
     }
 }
 
@@ -259,8 +323,18 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         script: invalid_script_2(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        reward: owned_asset(),
         extra: (),
-        reward: multi_asset(),
+    }
+}
+
+pub fn invalid_job_registration_3() -> JobRegistration<AccountId, ()> {
+    JobRegistration {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        reward: unowned_asset(),
+        extra: (),
     }
 }
 
@@ -328,6 +402,10 @@ pub fn processor_account_id() -> AccountId {
     hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
 }
 
+pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
+    <Test as crate::Config>::PalletId::get().into_account_truncating()
+}
+
 pub fn alice_account_id() -> AccountId {
     [0; 32].into()
 }
@@ -346,4 +424,26 @@ pub fn dave_account_id() -> AccountId {
 
 pub fn eve_account_id() -> AccountId {
     [4; 32].into()
+}
+
+// owned by alice
+pub fn owned_asset() -> MultiAsset {
+    MultiAsset {
+        id: Concrete(MultiLocation {
+            parents: 1,
+            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
+        }),
+        fun: Fungible(INITIAL_BALANCE/2),
+    }
+}
+
+// unowned by everyone
+pub fn unowned_asset() -> MultiAsset {
+    MultiAsset {
+        id: Concrete(MultiLocation {
+            parents: 1,
+            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(44)),
+        }),
+        fun: Fungible(INITIAL_BALANCE/2),
+    }
 }
