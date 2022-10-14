@@ -52,6 +52,7 @@ pallet-assets = { git = "https://github.com/paritytech/substrate", default-featu
 polkadot-core-primitives = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
 polkadot-runtime-parachains = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
 polkadot-parachain = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.26"}
+parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, branch = "polkadot-v0.9.26" }
 
 hex-literal = "0.3.4"
 
@@ -72,5 +73,7 @@ std = [
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
+	"parachain-info/std",
+	"pallet-assets/std"
 ]
 try-runtime = [ "frame-support/try-runtime" ]

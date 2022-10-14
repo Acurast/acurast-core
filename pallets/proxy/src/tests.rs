@@ -16,13 +16,24 @@
 
 use crate::mock::*;
 
-use frame_support::sp_runtime::traits::AccountIdConversion;
+use acurast_runtime::AccountId as AcurastAccountId;
+use acurast_runtime::Runtime as AcurastRuntime;
+use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
+use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
+use xcm::latest::{MultiAsset, MultiLocation};
+use xcm::prelude::{Concrete, Fungible, GeneralIndex, PalletInstance, Parachain, X3};
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
+use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
+use crate::mock::proxy_runtime::AccountId;
+
+pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
+pub type AcurastPalletXcm = pallet_xcm::Pallet<acurast_runtime::Runtime>;
 
 pub const ALICE: frame_support::sp_runtime::AccountId32 =
     frame_support::sp_runtime::AccountId32::new([0u8; 32]);
 pub const INITIAL_BALANCE: u128 = 1_000_000_000;
+const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
 decl_test_parachain! {
     pub struct AcurastParachain {
@@ -60,10 +71,6 @@ decl_test_network! {
     }
 }
 
-pub fn para_account_id(id: u32) -> relay_chain::AccountId {
-    ParaId::from(id).into_account_truncating()
-}
-
 pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
     use acurast_runtime::{MsgQueue, Runtime, System};
 
@@ -72,7 +79,25 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
         .unwrap();
 
     pallet_balances::GenesisConfig::<Runtime> {
-        balances: vec![(ALICE, INITIAL_BALANCE)],
+        balances: vec![
+            (alice_account_id(), INITIAL_BALANCE),
+            (pallet_assets_account(), INITIAL_BALANCE),
+            (bob_account_id(), INITIAL_BALANCE),
+            (processor_account_id(), INITIAL_BALANCE),
+        ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    // give alice an initial balance of token 22 (backed by statemint) to pay for a job
+    // get the MultiAsset representing token 22 with owned_asset()
+    pallet_assets::GenesisConfig::<Runtime> {
+        assets: vec![(22, pallet_assets_account(), false, 1_000)],
+        metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
+        accounts: vec![
+            (22, alice_account_id(), INITIAL_BALANCE),
+            (22, bob_account_id(), INITIAL_BALANCE),
+        ],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -127,8 +152,52 @@ pub fn relay_ext() -> sp_io::TestExternalities {
     ext
 }
 
-pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
-pub type AcurastPalletXcm = pallet_xcm::Pallet<acurast_runtime::Runtime>;
+pub fn para_account_id(id: u32) -> relay_chain::AccountId {
+    ParaId::from(id).into_account_truncating()
+}
+pub fn processor_account_id() -> AcurastAccountId {
+    hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
+}
+pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
+    <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating()
+}
+pub fn alice_account_id() -> AcurastAccountId {
+    [0; 32].into()
+}
+pub fn bob_account_id() -> AcurastAccountId {
+    [1; 32].into()
+}
+pub fn owned_asset() -> MultiAsset {
+    MultiAsset {
+        id: Concrete(MultiLocation {
+            parents: 1,
+            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
+        }),
+        fun: Fungible(INITIAL_BALANCE / 2),
+    }
+}
+pub fn registration() -> JobRegistration<AccountId, ()> {
+    JobRegistration {
+        script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        extra: (),
+        reward: owned_asset(),
+    }
+}
+pub fn job_assignment_update_for(
+    registration: JobRegistration<AccountId, ()>,
+    requester: Option<AccountId>,
+) -> Vec<JobAssignmentUpdate<AccountId>> {
+    vec![JobAssignmentUpdate {
+        operation: pallet_acurast::ListUpdateOperation::Add,
+        assignee: processor_account_id(),
+        job_id: (
+            requester.unwrap_or(alice_account_id()),
+            registration.script,
+        ),
+    }]
+}
 
 #[cfg(test)]
 mod network_tests {
@@ -374,21 +443,9 @@ mod proxy_calls {
     use frame_support::assert_ok;
     use frame_support::dispatch::Dispatchable;
     use hex_literal::hex;
-    use pallet_acurast::{Fulfillment, ListUpdateOperation};
+    use pallet_acurast::{Fulfillment, ListUpdateOperation, StoredJobAssignment};
     use xcm::latest::prelude::*;
     use xcm_simulator::TestExt;
-
-    const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
-
-    fn multi_asset() -> MultiAsset {
-        MultiAsset {
-            id: AssetId::Concrete(MultiLocation {
-                parents: 0,
-                interior: Junctions::Here,
-            }),
-            fun: Fungibility::Fungible(10),
-        }
-    }
 
     #[test]
     fn register() {
@@ -400,15 +457,9 @@ mod proxy_calls {
             use proxy_runtime::Call::AcurastProxy;
 
             let message_call = AcurastProxy(register {
-                registration: JobRegistration {
-                    script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
-                    allowed_sources: None,
-                    allow_only_verified_sources: false,
-                    extra: (),
-                    reward: multi_asset(),
-                },
+                registration: registration()
             });
-            let alice_origin = proxy_runtime::Origin::signed(ALICE);
+            let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
             let dispatch_status = message_call.dispatch(alice_origin);
             assert_ok!(dispatch_status);
         });
@@ -537,24 +588,26 @@ mod proxy_calls {
 
     #[test]
     fn fulfill() {
+        use frame_support::dispatch::Dispatchable;
+
         Network::reset();
 
         register();
 
-        let bob = frame_support::sp_runtime::AccountId32::new(rand::random());
-
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast::StoredJobAssignment;
-            use acurast_runtime::Runtime;
+            use acurast_runtime::{Call::Acurast, Origin};
+            use pallet_acurast::Call::update_job_assignments;
+            // StoredJobAssignment::<Runtime>::set(bob.clone(), Some(vec![(ALICE, script)]));
 
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
+            let extrinsic_call = Acurast( update_job_assignments {
+                updates: job_assignment_update_for(registration(),Some(alice_account_id()))
+            });
 
-            StoredJobAssignment::<Runtime>::set(bob.clone(), Some(vec![(ALICE, script)]));
+            let dispatch_status = extrinsic_call.dispatch(Origin::signed(alice_account_id()));
+            assert_ok!(dispatch_status);
         });
 
-        use frame_support::dispatch::Dispatchable;
-        use pallet_acurast::Script;
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::fulfill;
@@ -563,17 +616,17 @@ mod proxy_calls {
             let payload: [u8; 32] = rand::random();
 
             let fulfillment = Fulfillment {
-                script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+                script: registration().script,
                 payload: payload.to_vec(),
             };
 
             let message_call = AcurastProxy(fulfill {
                 fulfillment,
-                requester: frame_support::sp_runtime::MultiAddress::Id(ALICE),
+                requester: frame_support::sp_runtime::MultiAddress::Id(alice_account_id()),
             });
 
-            let bob_origin = proxy_runtime::Origin::signed(bob);
-            let dispatch_status = message_call.dispatch(bob_origin);
+            let processor_origin = proxy_runtime::Origin::signed(processor_account_id());
+            let dispatch_status = message_call.dispatch(processor_origin);
             assert_ok!(dispatch_status);
         });
 
