@@ -8,7 +8,7 @@ use crate::attestation::{
     CertificateChainInput, CHAIN_MAX_LENGTH,
 };
 
-pub(crate) const SCRIPT_PREFIX: &'static [u8] = b"ipfs://";
+pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
 pub(crate) const SCRIPT_LENGTH: u32 = 53;
 
 /// Type representing the utf8 bytes of a string containing the value of an ipfs url.
@@ -128,7 +128,7 @@ pub struct Attestation {
     pub validity: AttestationValidity,
 }
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq, Eq)]
 pub struct AttestationValidity {
     pub not_before: u64,
     pub not_after: u64,
@@ -222,7 +222,7 @@ impl TryFrom<asn::KeyDescriptionV100V200<'_>> for BoundedKeyDescription {
     }
 }
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub enum AttestationSecurityLevel {
     Software,
     TrustedEnvironemnt,
@@ -687,7 +687,7 @@ impl TryFrom<asn::AuthorizationListV100V200<'_>> for BoundedAuthorizationList {
     }
 }
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct BoundedRootOfTrust {
     pub verified_boot_key: VerifiedBootKey,
     pub device_locked: bool,
@@ -723,7 +723,7 @@ impl TryFrom<asn::RootOfTrust<'_>> for BoundedRootOfTrust {
     }
 }
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub enum VerifiedBootState {
     Verified,
     SelfSigned,

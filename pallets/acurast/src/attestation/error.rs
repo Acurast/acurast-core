@@ -5,7 +5,7 @@ use codec::{Decode, Encode};
 use frame_support::RuntimeDebug;
 use scale_info::TypeInfo;
 
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
 
 pub enum ValidationError {
     ParseKeyDescription,

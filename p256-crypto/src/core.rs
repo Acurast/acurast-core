@@ -5,7 +5,7 @@ pub mod p256 {
 
 	use p256::{
 		ecdsa::{recoverable, signature::Signer, SigningKey, VerifyingKey},
-		EncodedPoint, PublicKey, SecretKey,
+		EncodedPoint, PublicKey, SecretKey, elliptic_curve,
 	};
 	use scale_info::TypeInfo;
 	#[cfg(feature = "std")]
@@ -288,7 +288,7 @@ pub mod p256 {
 					let signature_bytes: &[u8] = self.as_ref();
 					let verifying_key = VerifyingKey::from(public_key);
 					let verifying_key_from_signature =
-						recoverable::Signature::try_from(signature_bytes.as_ref())
+						recoverable::Signature::try_from(signature_bytes)
 							.unwrap()
 							.recover_verify_key(message)
 							.unwrap();
@@ -309,8 +309,8 @@ pub mod p256 {
 	}
 
 	impl Pair {
-		pub fn generate_from_seed_bytes(bytes: &[u8]) -> Result<Self, ()> {
-			let secret = SecretKey::from_be_bytes(bytes).map_err(|_error| ())?;
+		pub fn generate_from_seed_bytes(bytes: &[u8]) -> Result<Self, elliptic_curve::Error> {
+			let secret = SecretKey::from_be_bytes(bytes)?;
 			let public = secret.public_key();
 			let pub_bytes = public.to_bytes();
 			Ok(Pair {

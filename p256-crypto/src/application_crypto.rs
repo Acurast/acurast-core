@@ -43,7 +43,7 @@ pub mod p256 {
 		}
 
 		fn verify<M: AsRef<[u8]>>(&self, msg: &M, signature: &Self::Signature) -> bool {
-			signature.verify(msg.as_ref(), &self)
+			signature.verify(msg.as_ref(), self)
 		}
 
 		fn to_raw_vec(&self) -> Vec<u8> {
