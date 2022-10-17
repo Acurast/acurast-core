@@ -97,12 +97,12 @@ pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result
     if now >= attestation.validity.not_after || now < attestation.validity.not_before {
         return Err(Error::<T>::AttestationCertificateNotValid);
     }
-    let expire_date_time = (&attestation)
+    let expire_date_time = attestation
         .key_description
         .tee_enforced
         .usage_expire_date_time
-        .or_else(|| {
-            (&attestation)
+        .or({
+            attestation
                 .key_description
                 .software_enforced
                 .usage_expire_date_time
@@ -135,7 +135,7 @@ fn ensure_valid_public_key_for_source<T: Config>(
             ECDSACurve::CurveP256(public_key) => {
                 let encoded_source = source.encode();
                 let encoded_public_key =
-                    sp_io::hashing::blake2_256(&public_key.to_bytes().to_vec()).to_vec();
+                    sp_io::hashing::blake2_256(&public_key.to_bytes()).to_vec();
 
                 ensure!(
                     encoded_source == encoded_public_key,

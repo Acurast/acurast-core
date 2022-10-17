@@ -208,12 +208,12 @@ pub mod pallet {
             registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let script_len = (&registration).script.len() as u32;
+            let script_len = registration.script.len() as u32;
             ensure!(
-                script_len == SCRIPT_LENGTH && (&registration).script.starts_with(SCRIPT_PREFIX),
+                script_len == SCRIPT_LENGTH && registration.script.starts_with(SCRIPT_PREFIX),
                 Error::<T>::InvalidScriptValue
             );
-            let allowed_sources_len = (&registration)
+            let allowed_sources_len = registration
                 .allowed_sources
                 .as_ref()
                 .map(|sources| sources.len());
@@ -251,7 +251,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             let mut current_allowed_sources =
-                (&registration).allowed_sources.clone().unwrap_or_default();
+                registration.allowed_sources.clone().unwrap_or_default();
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
@@ -283,8 +283,8 @@ pub mod pallet {
                 JobRegistration {
                     script: script.clone(),
                     allowed_sources,
-                    extra: (&registration).extra.clone(),
-                    allow_only_verified_sources: (&registration).allow_only_verified_sources,
+                    extra: registration.extra.clone(),
+                    allow_only_verified_sources: registration.allow_only_verified_sources,
                 },
             );
 
@@ -393,7 +393,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             ensure!(
-                (&attestation_chain).certificate_chain.len() >= 2,
+                attestation_chain.certificate_chain.len() >= 2,
                 Error::<T>::CertificateChainTooShort,
             );
 
