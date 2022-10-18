@@ -13,7 +13,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive"], default-features = false }
-scale-info = { version = "2.0.0", default-features = false, features = ["derive"] }
+scale-info = { version = "2.0.0", features = ["derive"], default-features = false }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
@@ -40,6 +40,13 @@ sha2 = { version = "0.10", default-features = false }
 num-bigint = { version = "0.4.3", default-features = false }
 ecdsa-vendored = { package = "ecdsa_vendored", path = "p384/ecdsa", default-features = false}
 
+# benchmarks
+hex-literal = { version = "0.3", optional = true }
+sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
+parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
+sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
+
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 hex-literal = "0.3"
@@ -54,27 +61,42 @@ acurast-p256-crypto = { path = "../../p256-crypto" }
 
 [features]
 default = ["std"]
-runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"hex-literal",
+	"sp-runtime",
+	"parachain-info",
+	"pallet-balances",
+	"sp-core"
+]
+
+
 std = [
+	"acurast-p256-crypto/std",
+	"asn1/std",
+	"base64/std",
 	"codec/std",
-	"scale-info/std",
+	"ecdsa-vendored/std",
 	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
-	"sp-std/std",
-	"pallet-timestamp/std",
-	"asn1/std",
-	"p256/std",
-	"sha2/std",
-	"p384/std",
 	"num-bigint/std",
-	"ecdsa-vendored/std",
-	"sp-io/std",
+	"p256/std",
+	"p384/std",
 	"pallet-assets/std",
-	"parachains-common/std",
-	"xcm/std",
-	"xcm-executor/std",
-	"xcm-builder/std",
+	"pallet-balances/std",
+	"pallet-timestamp/std",
 	"parachain-info/std",
+	"parachains-common/std",
+	"scale-info/std",
+	"sha2/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-version/std",
+	"xcm-builder/std",
+	"xcm-executor/std",
+	"xcm/std",
 ]
 try-runtime = [ "frame-support/try-runtime" ]

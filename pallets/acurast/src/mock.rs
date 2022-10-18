@@ -18,6 +18,16 @@ type Block = frame_system::mocking::MockBlock<Test>;
 pub type Balance = u128;
 pub type BlockNumber = u32;
 
+pub struct JobBarrier;
+impl JobAssignmentUpdateBarrier<Test> for JobBarrier {
+    fn can_update_assigned_jobs(
+        origin: &<Test as frame_system::Config>::AccountId,
+        updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
+    ) -> bool {
+        updates.iter().all(|update| &update.job_id.0 == origin)
+    }
+}
+
 pub struct Barrier;
 impl RevocationListUpdateBarrier<Test> for Barrier {
     fn can_update_revocation_list(
@@ -154,7 +164,7 @@ parameter_types! {
 parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
-    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
+    pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
     pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
     pub const TestPalletId: PalletId = PalletId(*b"testpid1");
@@ -168,13 +178,13 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type AccountId = AccountId;
     type Call = Call;
-    type Lookup = AccountIdLookup<AccountId, ()>;
     type Index = u32;
     type BlockNumber = BlockNumber;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
+    type AccountId = AccountId;
+    type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type Event = Event;
     type Origin = Origin;
@@ -202,15 +212,15 @@ impl pallet_timestamp::Config for Test {
 }
 
 impl pallet_balances::Config for Test {
-    type MaxLocks = MaxLocks;
     /// The type for recording an account's balance.
     type Balance = Balance;
+    type DustRemoval = ();
     /// The ubiquitous event type.
     type Event = Event;
-    type DustRemoval = ();
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
+    type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
 }
@@ -242,7 +252,8 @@ impl crate::Config for Test {
     type AssetTransactor = payments::StatemintAssetTransactor;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = Barrier;
+    type JobAssignmentUpdateBarrier = JobBarrier;
+    type WeightInfo = crate::weights::WeightInfo<Test>;
 }
 
 pub fn events() -> Vec<Event> {
