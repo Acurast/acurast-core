@@ -17,7 +17,7 @@ pub mod pallet {
         dispatch::DispatchResult, pallet_prelude::*, sp_runtime::traits::StaticLookup,
     };
     use frame_system::pallet_prelude::*;
-    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script, JobAssignmentUpdate};
+    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
     use xcm::v2::prelude::*;
     use xcm::v2::Instruction::{DescendOrigin, Transact};
     use xcm::v2::{

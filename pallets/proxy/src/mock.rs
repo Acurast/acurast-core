@@ -18,7 +18,7 @@ pub mod acurast_runtime {
         PalletId,
     };
     pub use pallet_acurast;
-    use pallet_acurast::{payments, LockAndPayAsset, JobAssignmentUpdateBarrier};
+    use pallet_acurast::{payments, JobAssignmentUpdateBarrier, LockAndPayAsset};
     use sp_core::H256;
     use sp_std::prelude::*;
     use std::marker::PhantomData;
@@ -231,6 +231,7 @@ pub mod acurast_runtime {
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = JobBarrier;
+        type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
     impl pallet_xcm::Config for Runtime {

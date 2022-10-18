@@ -16,16 +16,16 @@
 
 use crate::mock::*;
 
+use crate::mock::proxy_runtime::AccountId;
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
+use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
 use polkadot_parachain::primitives::Id as ParaId;
 use xcm::latest::{MultiAsset, MultiLocation};
 use xcm::prelude::{Concrete, Fungible, GeneralIndex, PalletInstance, Parachain, X3};
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
-use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
-use crate::mock::proxy_runtime::AccountId;
 
 pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
 pub type AcurastPalletXcm = pallet_xcm::Pallet<acurast_runtime::Runtime>;
@@ -192,10 +192,7 @@ pub fn job_assignment_update_for(
     vec![JobAssignmentUpdate {
         operation: pallet_acurast::ListUpdateOperation::Add,
         assignee: processor_account_id(),
-        job_id: (
-            requester.unwrap_or(alice_account_id()),
-            registration.script,
-        ),
+        job_id: (requester.unwrap_or(alice_account_id()), registration.script),
     }]
 }
 
@@ -457,7 +454,7 @@ mod proxy_calls {
             use proxy_runtime::Call::AcurastProxy;
 
             let message_call = AcurastProxy(register {
-                registration: registration()
+                registration: registration(),
             });
             let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
             let dispatch_status = message_call.dispatch(alice_origin);
@@ -600,14 +597,13 @@ mod proxy_calls {
             use pallet_acurast::Call::update_job_assignments;
             // StoredJobAssignment::<Runtime>::set(bob.clone(), Some(vec![(ALICE, script)]));
 
-            let extrinsic_call = Acurast( update_job_assignments {
-                updates: job_assignment_update_for(registration(),Some(alice_account_id()))
+            let extrinsic_call = Acurast(update_job_assignments {
+                updates: job_assignment_update_for(registration(), Some(alice_account_id())),
             });
 
             let dispatch_status = extrinsic_call.dispatch(Origin::signed(alice_account_id()));
             assert_ok!(dispatch_status);
         });
-
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::fulfill;
