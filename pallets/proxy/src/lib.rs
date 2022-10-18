@@ -97,7 +97,7 @@ pub mod pallet {
         // create an encoded version of the call
         let mut encoded_call = Vec::<u8>::new();
         // first byte is the pallet id on the destination chain
-        encoded_call.push(T::AcurastPalletId::get() as u8);
+        encoded_call.push(T::AcurastPalletId::get());
         //second byte the position of the calling function on the enum,
         // and then the arguments SCALE encoded in order.
         encoded_call.append(&mut proxy_call.encode());
@@ -111,7 +111,7 @@ pub mod pallet {
         // put our transact message in the vector of instructions
         xcm_message.push(Transact {
             origin_type: OriginKind::Xcm,
-            require_weight_at_most: 1_000_000_000 as u64,
+            require_weight_at_most: 1_000_000_000u64,
             call: encoded_call.into(),
         });
 

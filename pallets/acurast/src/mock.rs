@@ -163,7 +163,7 @@ parameter_types! {
     pub const MaxLocks: u32 = 50;
 }
 parameter_types! {
-        pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
+    pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
 }
 
 impl frame_system::Config for Test {
@@ -242,8 +242,6 @@ impl crate::Config for Test {
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
-    // type AssetTransactor = TestTransactor;
-    // type PalletId = TestPalletId;
 }
 
 pub fn events() -> Vec<Event> {
