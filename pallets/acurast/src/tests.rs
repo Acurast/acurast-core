@@ -461,10 +461,6 @@ fn test_fulfill_failure_1() {
             Error::<Test>::JobRegistrationNotFound
         );
         assert_eq!(
-            Some(vec![]),
-            Acurast::stored_job_assignment(processor_account_id())
-        );
-        assert_eq!(
             events(),
             [
                 Event::Assets(pallet_assets::Event::Transferred {

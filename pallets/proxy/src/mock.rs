@@ -9,7 +9,6 @@ pub mod acurast_runtime {
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32},
         traits::{Everything, Nothing},
-        weights::{constants::WEIGHT_PER_SECOND, Weight},
         PalletId,
     };
     pub use pallet_acurast;
@@ -114,16 +113,12 @@ pub mod acurast_runtime {
         pub const MaxReserves: u32 = 50;
     }
     parameter_types! {
-        pub const ReservedXcmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-        pub const ReservedDmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-    }
-    parameter_types! {
         pub const KsmLocation: MultiLocation = MultiLocation::parent();
         pub const RelayNetwork: NetworkId = NetworkId::Kusama;
         pub Ancestry: MultiLocation = Parachain(MsgQueue::parachain_id().into()).into();
     }
     parameter_types! {
-        pub const UnitWeightCost: Weight = 1;
+        pub const UnitWeightCost: u64 = 1;
         pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
         pub const MaxInstructions: u32 = 100;
     }
@@ -248,8 +243,7 @@ pub mod acurast_runtime {
 pub mod proxy_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
-        traits::{Everything, Nothing},
-        weights::{constants::WEIGHT_PER_SECOND, Weight},
+        traits::{Everything, Nothing}
     };
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
@@ -331,16 +325,12 @@ pub mod proxy_runtime {
         pub const MaxReserves: u32 = 50;
     }
     parameter_types! {
-        pub const ReservedXcmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-        pub const ReservedDmpWeight: Weight = WEIGHT_PER_SECOND / 4;
-    }
-    parameter_types! {
         pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
         pub const IsRelay: bool = false;
         pub Admins: Vec<AccountId> = vec![];
     }
     parameter_types! {
-        pub const UnitWeightCost: Weight = 1;
+        pub const UnitWeightCost: u64 = 1;
         pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
         pub const MaxInstructions: u32 = 100;
     }
@@ -435,8 +425,7 @@ pub mod relay_chain {
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
-        traits::{Everything, Nothing},
-        weights::Weight,
+        traits::{Everything, Nothing}
     };
     use sp_core::H256;
 
@@ -509,10 +498,10 @@ pub mod relay_chain {
         pub const KusamaNetwork: NetworkId = NetworkId::Kusama;
         pub const AnyNetwork: NetworkId = NetworkId::Any;
         pub Ancestry: MultiLocation = Here.into();
-        pub UnitWeightCost: Weight = 1_000;
+        pub UnitWeightCost: u64 = 1_000;
     }
     parameter_types! {
-        pub const BaseXcmWeight: Weight = 1_000;
+        pub const BaseXcmWeight: u64 = 1_000;
         pub KsmPerSecond: (AssetId, u128) = (Concrete(KsmLocation::get()), 1);
         pub const MaxInstructions: u32 = 100;
     }
@@ -682,12 +671,12 @@ pub mod mock_msg_queue {
             let (result, event) = match Xcm::<T::Call>::try_from(xcm) {
                 Ok(xcm) => {
                     let location = (1, Parachain(sender.into()));
-                    match T::XcmExecutor::execute_xcm(location, xcm, max_weight) {
+                    match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
                         Outcome::Error(e) => (Err(e.clone()), Event::Fail(Some(hash), e)),
-                        Outcome::Complete(w) => (Ok(w), Event::Success(Some(hash))),
+                        Outcome::Complete(w) => (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash))),
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete(w, e) => (Ok(w), Event::Fail(Some(hash), e)),
+                        Outcome::Incomplete(w, e) => (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e)),
                     }
                 }
                 Err(()) => (
@@ -740,7 +729,7 @@ pub mod mock_msg_queue {
                         Self::deposit_event(Event::UnsupportedVersion(id));
                     }
                     Ok(Ok(x)) => {
-                        let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit);
+                        let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
                         <ReceivedDmp<T>>::append(x);
                         Self::deposit_event(Event::ExecutedDownward(id, outcome));
                     }
