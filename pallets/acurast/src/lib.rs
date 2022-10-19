@@ -218,7 +218,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [JobRegistration]. If a job for the same script was previously registered, it will be overwritten.
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().writes(1)))] // TODO: update weight
         pub fn register(
             origin: OriginFor<T>,
             registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
@@ -255,7 +255,7 @@ pub mod pallet {
         }
 
         /// Deregisters a job for the given script.
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 1)))] // TODO: update weight
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             <StoredJobRegistration<T>>::remove(&who, &script);
@@ -264,7 +264,7 @@ pub mod pallet {
         }
 
         /// Updates the allowed sources list of a [JobRegistration].
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 1)))] // TODO: update weight
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             script: Script,
@@ -319,7 +319,7 @@ pub mod pallet {
         }
 
         /// Assigns jobs to [AccountId]s. Those accounts can then later call `fulfill` for those jobs.
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(2, 1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(2, 1)))] // TODO: update weight
         pub fn update_job_assignments(
             origin: OriginFor<T>,
             updates: Vec<JobAssignmentUpdate<T::AccountId>>,
@@ -347,7 +347,7 @@ pub mod pallet {
         }
 
         /// Fulfills a previously registered job.
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(7, 1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(7, 1)))] // TODO: update weight
         pub fn fulfill(
             origin: OriginFor<T>,
             fulfillment: Fulfillment,
@@ -404,9 +404,6 @@ pub mod pallet {
                 ));
                 Ok(info)
             } else {
-                // registration was removed, job is not available anymore, remove it from assignment
-                assigned_jobs.remove(job_index);
-                <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
                 Err(Error::<T>::JobRegistrationNotFound)?
             }
         }
@@ -418,7 +415,7 @@ pub mod pallet {
         /// - If the represented chain is valid, the [Attestation] details are stored. An existing attestion for signing account gets overwritten.
         ///
         /// Revocation: Each atttestation is stored with the unique IDs of the certificates on the chain proofing the attestation's validity.
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().writes(1)))] // TODO: update weight
         pub fn submit_attestation(
             origin: OriginFor<T>,
             attestation_chain: AttestationChain,
@@ -439,7 +436,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(0)]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads(1)))] // TODO: update weight
         pub fn update_certificate_revocation_list(
             origin: OriginFor<T>,
             updates: Vec<CertificateRevocationListUpdate>,

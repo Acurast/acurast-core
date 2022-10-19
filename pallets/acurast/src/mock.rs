@@ -1,4 +1,5 @@
 use frame_support::traits::Everything;
+use frame_support::weights::Weight;
 use frame_support::{pallet_prelude::GenesisBuild, PalletId};
 use hex_literal::hex;
 use sp_io;
@@ -151,7 +152,7 @@ parameter_types! {
     pub const BlockHashCount: BlockNumber = 2400;
 }
 parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(1024);
+    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id()];
     pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
