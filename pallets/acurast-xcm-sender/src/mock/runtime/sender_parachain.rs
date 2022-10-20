@@ -1,4 +1,5 @@
 use codec::{Decode, Encode};
+use frame_support::traits::Get;
 use frame_support::{
     construct_runtime, parameter_types,
     sp_runtime::{
@@ -7,23 +8,21 @@ use frame_support::{
         AccountId32,
     },
     traits::{Everything, Nothing},
-    weights::Weight
+    weights::Weight,
 };
 pub use pallet_acurast_receiver;
-use sp_core::H256;
-use sp_std::prelude::*;
-use frame_support::traits::Get;
 use pallet_xcm::XcmPassthrough;
 use polkadot_core_primitives::BlockNumber as RelayBlockNumber;
 use polkadot_parachain::primitives::{
     DmpMessageHandler, Id as ParaId, Sibling, XcmpMessageFormat, XcmpMessageHandler,
 };
+use sp_core::H256;
+use sp_std::prelude::*;
 use xcm::{latest::prelude::*, VersionedXcm};
 use xcm_builder::{
-    AccountId32Aliases, AllowUnpaidExecutionFrom,
-    EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, LocationInverter,
-    NativeAsset, ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
-    SignedToAccountId32, SovereignSignedViaLocation,
+    AccountId32Aliases, AllowUnpaidExecutionFrom, EnsureXcmOrigin, FixedRateOfFungible,
+    FixedWeightBounds, LocationInverter, NativeAsset, ParentIsPreset, SiblingParachainConvertsVia,
+    SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation,
 };
 use xcm_executor::{Config, XcmExecutor};
 pub type AccountId = AccountId32;
@@ -180,10 +179,14 @@ pub mod mock_msg_queue {
                     let location = (1, Parachain(sender.into()));
                     match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
                         Outcome::Error(e) => (Err(e.clone()), Event::Fail(Some(hash), e)),
-                        Outcome::Complete(w) => (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash))),
+                        Outcome::Complete(w) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash)))
+                        }
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete(w, e) => (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e)),
+                        Outcome::Incomplete(w, e) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e))
+                        }
                     }
                 }
                 Err(()) => (
@@ -197,10 +200,7 @@ pub mod mock_msg_queue {
     }
 
     impl<T: Config> XcmpMessageHandler for Pallet<T> {
-        fn handle_xcmp_messages<
-            'a,
-            I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>,
-        >(
+        fn handle_xcmp_messages<'a, I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>>(
             iter: I,
             max_weight: Weight,
         ) -> Weight {
@@ -229,8 +229,8 @@ pub mod mock_msg_queue {
         ) -> Weight {
             for (_i, (_sent_at, data)) in iter.enumerate() {
                 let id = sp_io::hashing::blake2_256(&data[..]);
-                let maybe_msg = VersionedXcm::<T::Call>::decode(&mut &data[..])
-                    .map(Xcm::<T::Call>::try_from);
+                let maybe_msg =
+                    VersionedXcm::<T::Call>::decode(&mut &data[..]).map(Xcm::<T::Call>::try_from);
                 match maybe_msg {
                     Err(_) => {
                         Self::deposit_event(Event::InvalidFormat(id));
@@ -239,7 +239,8 @@ pub mod mock_msg_queue {
                         Self::deposit_event(Event::UnsupportedVersion(id));
                     }
                     Ok(Ok(x)) => {
-                        let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
+                        let outcome =
+                            T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
                         <ReceivedDmp<T>>::append(x);
                         Self::deposit_event(Event::ExecutedDownward(id, outcome));
                     }
@@ -284,8 +285,6 @@ parameter_types! {
 
 impl crate::Config for Runtime {
     type Event = Event;
-    type AcurastParachainId = AcurastParachainId;
-    type AcurastReceiverPalletId = AcurastReceiverPalletId;
     type XcmSender = XcmRouter;
 }
 
@@ -298,6 +297,6 @@ construct_runtime!(
         System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
         MsgQueue: mock_msg_queue::{Pallet, Storage, Event<T>},
         PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
-        AcurastSender: crate::{Pallet, Call, Event<T>},
+        AcurastSender: crate::{Pallet, Event<T>},
     }
 );
