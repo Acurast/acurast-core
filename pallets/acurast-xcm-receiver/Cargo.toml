@@ -1,5 +1,5 @@
 [package]
-name = "pallet-acurast-receiver"
+name = "pallet-acurast-xcm-receiver"
 authors = ["Papers AG"]
 description = "Pallet for defining the receiving logic from acurast parachain."
 version = "0.0.1"

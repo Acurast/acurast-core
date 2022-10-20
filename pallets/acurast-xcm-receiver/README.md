@@ -1,10 +1,10 @@
-# Acurast Receiver Pallet
+# Acurast XCM Receiver Pallet
 
 ## 🚧🚧🚧 The project is still a work in progress 🚧🚧🚧
 
 ## Introduction
 
-The `pallet-acurast-receiver` adds support for parachains to receive [XCM](https://wiki.polkadot.network/docs/learn-xcm) messages from [Acurast parachain](https://docs.acurast.com/).
+The `pallet-acurast-xcm-receiver` adds support for parachains to receive [XCM](https://wiki.polkadot.network/docs/learn-xcm) messages from [Acurast parachain](https://docs.acurast.com/).
 
 The Pallet exposes the following extrinsics.
 
@@ -18,16 +18,16 @@ Allows to post the fulfillment of a registered job. The `fulfill` call will fail
 
 ```toml
 [dependencies]
-pallet-acurast-receiver = { git = "https://github.com/Acurast/acurast-core.git" }
+pallet-acurast-xcm-receiver = { git = "https://github.com/Acurast/acurast-core.git" }
 ```
 
-2. Implement `pallet_acurast_receiver::Config` for your `Runtime` and add the Pallet:
+2. Implement `pallet_acurast_xcm_receiver::Config` for your `Runtime` and add the Pallet:
 
 ```rust
 /// Runtime example
 
 pub struct ParachainBarrier;
-impl pallet_acurast_receiver::traits::ParachainBarrier<Runtime> for ParachainBarrier {
+impl pallet_acurast_xcm_receiver::traits::ParachainBarrier<Runtime> for ParachainBarrier {
 	fn ensure_xcm_origin(
 		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
 	) -> Result<(), sp_runtime::DispatchError> {
@@ -56,7 +56,7 @@ impl pallet_acurast_receiver::traits::ParachainBarrier<Runtime> for ParachainBar
 }
 
 pub struct OnAcurastFulfillment;
-impl pallet_acurast_receiver::traits::OnFulfillment<Runtime> for OnAcurastFulfillment {
+impl pallet_acurast_xcm_receiver::traits::OnFulfillment<Runtime> for OnAcurastFulfillment {
 	fn fulfill(
 		payload: &[u8],
 	) -> sp_runtime::DispatchResultWithInfo<frame_support::weights::PostDispatchInfo> {
@@ -64,7 +64,7 @@ impl pallet_acurast_receiver::traits::OnFulfillment<Runtime> for OnAcurastFulfil
 	}
 }
 
-impl pallet_acurast_receiver::Config for Runtime {
+impl pallet_acurast_xcm_receiver::Config for Runtime {
 	type Event = Event;
 	type Payload = sp_runtime::bounded::bounded_vec::BoundedVec<u8, ConstU32<128>>;
 	type OnFulfillment = OnAcurastFulfillment;
@@ -80,7 +80,7 @@ construct_runtime!(
 	{
 		// All your other pallets
         ...
-		AcurastReceiver: pallet_acurast_receiver::{Pallet, Storage, Call, Event<T>};
+		AcurastReceiver: pallet_acurast_xcm_receiver::{Pallet, Storage, Call, Event<T>};
 	}
 );
 ```

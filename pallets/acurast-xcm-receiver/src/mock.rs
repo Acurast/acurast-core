@@ -1,4 +1,4 @@
-use crate as pallet_acurast_receiver;
+use crate as pallet_acurast_xcm_receiver;
 use frame_support::{
     traits::{ConstU16, ConstU64, Everything, Nothing},
     weights::{Pays, PostDispatchInfo},
@@ -23,7 +23,7 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        AcurastReceiver: pallet_acurast_receiver::{Pallet, Call, Storage, Event<T>},
+        AcurastReceiver: pallet_acurast_xcm_receiver::{Pallet, Call, Storage, Event<T>},
         PolkadotXcm: pallet_xcm::{Pallet, Storage, Call, Event<T>, Origin, Config},
     }
 );
@@ -124,7 +124,7 @@ impl crate::traits::ParachainBarrier<Test> for ParachainBarrier {
     }
 }
 
-impl pallet_acurast_receiver::Config for Test {
+impl pallet_acurast_xcm_receiver::Config for Test {
     type Event = Event;
     type Payload = Vec<u8>;
     type Parameters = Vec<u8>;
