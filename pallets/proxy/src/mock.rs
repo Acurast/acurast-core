@@ -215,6 +215,7 @@ pub mod acurast_runtime {
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = JobBarrier;
+        type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
     impl pallet_xcm::Config for Runtime {
@@ -243,7 +244,7 @@ pub mod acurast_runtime {
 pub mod proxy_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
-        traits::{Everything, Nothing}
+        traits::{Everything, Nothing},
     };
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
@@ -425,7 +426,7 @@ pub mod relay_chain {
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
-        traits::{Everything, Nothing}
+        traits::{Everything, Nothing},
     };
     use sp_core::H256;
 
@@ -673,10 +674,14 @@ pub mod mock_msg_queue {
                     let location = (1, Parachain(sender.into()));
                     match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
                         Outcome::Error(e) => (Err(e.clone()), Event::Fail(Some(hash), e)),
-                        Outcome::Complete(w) => (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash))),
+                        Outcome::Complete(w) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash)))
+                        }
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete(w, e) => (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e)),
+                        Outcome::Incomplete(w, e) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e))
+                        }
                     }
                 }
                 Err(()) => (
@@ -729,7 +734,8 @@ pub mod mock_msg_queue {
                         Self::deposit_event(Event::UnsupportedVersion(id));
                     }
                     Ok(Ok(x)) => {
-                        let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
+                        let outcome =
+                            T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
                         <ReceivedDmp<T>>::append(x);
                         Self::deposit_event(Event::ExecutedDownward(id, outcome));
                     }
