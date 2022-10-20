@@ -81,8 +81,8 @@ pub fn relay_ext() -> sp_io::TestExternalities {
 #[cfg(test)]
 mod proxy_calls {
     use super::*;
-    use frame_support::{assert_ok, dispatch::Dispatchable};
-    use xcm_simulator::TestExt;
+    use frame_support::assert_ok;
+    use xcm_simulator::{Junction, TestExt};
 
     #[test]
     fn fulfill() {
@@ -91,21 +91,21 @@ mod proxy_calls {
         let bob = frame_support::sp_runtime::AccountId32::new([0u8; 32]);
 
         AcurastParachain::execute_with(|| {
-            use crate::pallet::Call::fulfill;
-            use crate::mock::runtime::sender_parachain::{Origin, Call::AcurastSender};
+            use crate::mock::runtime::sender_parachain::AcurastSender;
 
             let payload = [0u8; 10];
 
-            let message_call = AcurastSender(fulfill { fulfillment: payload.to_vec() });
-
-            let bob_origin = Origin::signed(bob);
-            let dispatch_status = message_call.dispatch(bob_origin);
-            assert_ok!(dispatch_status);
+            assert_ok!(AcurastSender::send(
+                bob,
+                (1, Junction::Parachain(2000), Junction::PalletInstance(130)).into(),
+                payload.to_vec(),
+                None,
+            ));
         });
 
         OtherParachain::execute_with(|| {
-            use pallet_acurast_receiver::Event::FulfillReceived;
             use crate::mock::runtime::receiver_parachain::{Event, System};
+            use pallet_acurast_receiver::Event::FulfillReceived;
 
             let events = System::events();
 
