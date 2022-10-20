@@ -1,8 +1,11 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use frame_support::{
     sp_runtime::{DispatchError, DispatchResultWithInfo},
     weights::PostDispatchInfo,
 };
 use frame_system::pallet_prelude::OriginFor;
+use sp_std::prelude::Vec;
 
 use crate::Config;
 
