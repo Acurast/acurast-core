@@ -240,7 +240,11 @@ pub mod pallet {
             registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let script_len = registration.script.len() as u32;
+            let script_len: u32 = registration
+                .script
+                .len()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidScriptValue)?;
             ensure!(
                 script_len == SCRIPT_LENGTH && registration.script.starts_with(SCRIPT_PREFIX),
                 Error::<T>::InvalidScriptValue
@@ -258,12 +262,11 @@ pub mod pallet {
                 );
             }
 
-            if let Err(()) = T::AssetTransactor::lock_asset(
+            T::AssetTransactor::lock_asset(
                 registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
-            ) {
-                return Err(Error::<T>::InvalidPayment.into());
-            }
+            )
+            .map_err(|_| Error::<T>::InvalidPayment)?;
 
             <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
