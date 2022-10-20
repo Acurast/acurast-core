@@ -365,47 +365,37 @@ pub mod pallet {
                 .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
 
             // find registration
-            if let Some(registration) =
-                <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-            {
-                let allowed_result = ensure_source_allowed(&who, &registration);
-                if let Err(Error::<T>::FulfillSourceNotAllowed) = allowed_result {
-                    assigned_jobs.remove(job_index);
-                    <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
-                    return Err(Error::<T>::FulfillSourceNotAllowed)?;
-                }
-                allowed_result?;
+            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-                if let Err(()) = T::AssetTransactor::pay_asset(
-                    registration.reward.clone(),
-                    T::Lookup::unlookup(who.clone()),
-                ) {
-                    return Err(Error::<T>::FailedToPay.into());
-                };
+            ensure_source_allowed::<T>(&who, &registration)?;
 
-                // route fulfillment
-                let info = T::FulfillmentRouter::received_fulfillment(
-                    origin,
-                    who.clone(),
-                    fulfillment.clone(),
-                    registration.clone(),
-                    job_id.0,
-                )?;
+            T::AssetTransactor::pay_asset(
+                registration.reward.clone(),
+                T::Lookup::unlookup(who.clone()),
+            )
+            .map_err(|_| Error::<T>::FailedToPay)?;
 
-                // removed fulfilled job from assigned jobs
-                let job_id = assigned_jobs.remove(job_index);
-                <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+            // route fulfillment
+            let info = T::FulfillmentRouter::received_fulfillment(
+                origin,
+                who.clone(),
+                fulfillment.clone(),
+                registration.clone(),
+                job_id.0,
+            )?;
 
-                Self::deposit_event(Event::ReceivedFulfillment(
-                    who,
-                    fulfillment,
-                    registration,
-                    job_id.0,
-                ));
-                Ok(info)
-            } else {
-                Err(Error::<T>::JobRegistrationNotFound)?
-            }
+            // removed fulfilled job from assigned jobs
+            let job_id = assigned_jobs.remove(job_index);
+            <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+
+            Self::deposit_event(Event::ReceivedFulfillment(
+                who,
+                fulfillment,
+                registration,
+                job_id.0,
+            ));
+            Ok(info)
         }
 
         /// Submits an attestation given a valid certificate chain.
