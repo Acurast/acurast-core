@@ -277,13 +277,14 @@ impl<T: pallet_acurast_receiver::Config> pallet_acurast_receiver::traits::Parach
 impl pallet_acurast_receiver::Config for Runtime {
     type Event = Event;
     type Payload = BoundedVec<u8, ConstU32<128>>;
+    type Parameters = BoundedVec<u8, ConstU32<128>>;
     type OnFulfillment = OnFulfillment;
     type Barrier = AllowAcurastBarrier;
 }
 
 pub struct OnFulfillment;
 impl pallet_acurast_receiver::traits::OnFulfillment<Runtime> for OnFulfillment {
-    fn fulfill(_fulfillment: &[u8]) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
+    fn fulfill(_fulfillment: Vec<u8>, _parameters: Option<Vec<u8>>,) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
     }
 }
