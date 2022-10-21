@@ -1,10 +1,10 @@
+use crate::Config;
 use frame_support::{
     sp_runtime::{DispatchError, DispatchResultWithInfo},
     weights::PostDispatchInfo,
 };
 use frame_system::pallet_prelude::OriginFor;
-
-use crate::Config;
+use sp_std::prelude::*;
 
 /// Handle fulfillment messages.
 pub trait OnFulfillment<T: Config> {
