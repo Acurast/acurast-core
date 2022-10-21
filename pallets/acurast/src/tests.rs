@@ -291,7 +291,7 @@ fn test_assign_job() {
 
         assert_eq!(
             Some(vec![(alice_account_id(), registration.script.clone())]),
-            Acurast::stored_job_assignment(processor_account_id())
+            Acurast::processor_assigned_jobs(processor_account_id())
         );
 
         assert_eq!(

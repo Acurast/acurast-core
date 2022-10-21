@@ -139,11 +139,25 @@ pub mod pallet {
     pub type StoredRevokedCertificate<T: Config> =
         StorageMap<_, Blake2_128Concat, SerialNumber, ()>;
 
-    /// Job assignments.
+    /// Job assignments per processor.
     #[pallet::storage]
-    #[pallet::getter(fn stored_job_assignment)]
-    pub type StoredJobAssignment<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, Vec<JobId<T::AccountId>>>;
+    #[pallet::getter(fn processor_assigned_jobs)]
+    pub type ProcessorAssignedJobs<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        Vec<JobId<T::AccountId>>
+    >;
+
+    /// Processors per job assignment.
+    #[pallet::storage]
+    #[pallet::getter(fn job_assigned_processors)]
+    pub type JobAssignedProcessors<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        JobId<T::AccountId>,
+        Vec<T::AccountId>
+    >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -277,7 +291,22 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::deregister())]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
+
+            // Update job assigned processors
+            let job_id: JobId<T::AccountId> = (who.clone(), script.clone());
+            let processors = <JobAssignedProcessors<T>>::get(&job_id).unwrap_or_default();
+
+            processors.iter().for_each(|processor| {
+                let jobs = <ProcessorAssignedJobs<T>>::get(processor).map(| mut jobs| {
+                    jobs.retain(| job | job != &job_id);
+                    jobs
+                });
+                <ProcessorAssignedJobs<T>>::set(processor, jobs);
+            });
+
             <StoredJobRegistration<T>>::remove(&who, &script);
+            <JobAssignedProcessors<T>>::remove(&job_id);
+
             Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
@@ -354,12 +383,18 @@ pub mod pallet {
 
                 ensure_source_allowed::<T>(&update.assignee, &job_registration)?;
 
-                let mut assignments =
-                    <StoredJobAssignment<T>>::get(&update.assignee).unwrap_or_default();
-                if !assignments.contains(&update.job_id) {
+                let mut processors = <JobAssignedProcessors<T>>::get(&update.job_id).unwrap_or_default();
+                if !processors.contains(&update.assignee) {
+                    // Update job assigned processors
+                    processors.push(update.assignee.clone());
+                    <JobAssignedProcessors<T>>::set(&update.job_id, Some(processors));
+
+                    // Update the processor assignments
+                    let mut assignments = <ProcessorAssignedJobs<T>>::get(&update.assignee).unwrap_or_default();
                     assignments.push(update.job_id.clone());
+                    <ProcessorAssignedJobs<T>>::set(&update.assignee, Some(assignments));
                 }
-                <StoredJobAssignment<T>>::set(&update.assignee, Some(assignments));
+
             }
             Self::deposit_event(Event::JobAssignmentUpdate(who, updates));
             Ok(().into())
@@ -375,17 +410,17 @@ pub mod pallet {
             let who = ensure_signed(origin.clone())?;
             let requester = T::Lookup::lookup(requester)?;
 
+            // find registration
+            let registration = <StoredJobRegistration<T>>::get(&requester, &fulfillment.script)
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+
             // find assignment
             let job_id: JobId<T::AccountId> = (requester, fulfillment.script.clone());
-            let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
+            let mut assigned_jobs = <ProcessorAssignedJobs<T>>::get(&who).unwrap_or_default();
             let job_index = assigned_jobs
                 .iter()
                 .position(|assigned_job_id| assigned_job_id == &job_id)
                 .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
-
-            // find registration
-            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
@@ -404,9 +439,18 @@ pub mod pallet {
                 job_id.0,
             )?;
 
-            // removed fulfilled job from assigned jobs
+            // Update processor assigned jobs
             let job_id = assigned_jobs.remove(job_index);
-            <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+            <ProcessorAssignedJobs<T>>::set(&who, Some(assigned_jobs));
+
+            // Update job assigned processors
+            let mut processors = <JobAssignedProcessors<T>>::get(&job_id).unwrap_or_default();
+            let processor_index = processors
+                .iter()
+                .position(|processor| processor == &who)
+                .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
+            processors.remove(processor_index);
+            <JobAssignedProcessors<T>>::set(&job_id, Some(processors));
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,
