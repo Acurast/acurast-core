@@ -21,7 +21,7 @@ use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
-use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
+use pallet_acurast::{JobAssignmentUpdate, JobRegistration, FeeManager};
 use polkadot_parachain::primitives::Id as ParaId;
 use xcm::latest::{MultiAsset, MultiLocation};
 use xcm::prelude::{Concrete, Fungible, GeneralIndex, PalletInstance, Parachain, X3};
@@ -82,6 +82,7 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
         balances: vec![
             (alice_account_id(), INITIAL_BALANCE),
             (pallet_assets_account(), INITIAL_BALANCE),
+            (pallet_fees_account(), INITIAL_BALANCE),
             (bob_account_id(), INITIAL_BALANCE),
             (processor_account_id(), INITIAL_BALANCE),
         ],
@@ -160,6 +161,9 @@ pub fn processor_account_id() -> AcurastAccountId {
 }
 pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
     <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating()
+}
+pub fn pallet_fees_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
+    <AcurastRuntime as pallet_acurast::Config>::FeeManager::pallet_id().into_account_truncating()
 }
 pub fn alice_account_id() -> AcurastAccountId {
     [0; 32].into()

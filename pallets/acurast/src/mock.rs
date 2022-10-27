@@ -4,12 +4,12 @@ use frame_support::{pallet_prelude::GenesisBuild, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{generic, parameter_types, AccountId32};
+use sp_runtime::{generic, parameter_types, AccountId32, DispatchError, Percent};
 use xcm::prelude::*;
 
 use crate::{
     payments, AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
-    JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber,
+    JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber, FeeManager,
 };
 
 type AccountId = AccountId32;
@@ -67,15 +67,26 @@ impl LockAndPayAsset<Test> for TestTransactor {
     fn lock_asset(
         _asset: MultiAsset,
         _owner: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
-    ) -> Result<(), ()> {
+    ) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_asset(
         _asset: MultiAsset,
         _target: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
-    ) -> Result<(), ()> {
+    ) -> Result<(), DispatchError> {
         Ok(())
+    }
+}
+
+pub struct FeeManagerImpl;
+impl FeeManager for FeeManagerImpl {
+    fn get_fee_percentage() -> Percent {
+        Percent::from_percent(30)
+    }
+
+    fn pallet_id() -> PalletId {
+        PalletId(*b"acurfees")
     }
 }
 
@@ -100,6 +111,7 @@ impl ExtBuilder {
             balances: vec![
                 (alice_account_id(), INITIAL_BALANCE),
                 (pallet_assets_account(), INITIAL_BALANCE),
+                (pallet_fees_account(), INITIAL_BALANCE),
                 (bob_account_id(), INITIAL_BALANCE),
                 (processor_account_id(), INITIAL_BALANCE),
             ],
@@ -154,7 +166,7 @@ frame_support::construct_runtime!(
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
-        Acurast: crate::{Pallet, Call, Storage, Event<T>},
+        Acurast: crate::{Pallet, Call, Storage, Event<T>}
     }
 );
 
@@ -167,7 +179,6 @@ parameter_types! {
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
     pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
-    pub const TestPalletId: PalletId = PalletId(*b"testpid1");
 }
 parameter_types! {
     pub const MaxReserves: u32 = 50;
@@ -253,6 +264,7 @@ impl crate::Config for Test {
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = JobBarrier;
+    type FeeManager = FeeManagerImpl;
     type WeightInfo = crate::weights::WeightInfo<Test>;
 }
 
@@ -390,6 +402,10 @@ pub fn processor_account_id() -> AccountId {
 
 pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
     <Test as crate::Config>::PalletId::get().into_account_truncating()
+}
+
+pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
+    <Test as crate::Config>::FeeManager::pallet_id().into_account_truncating()
 }
 
 pub fn alice_account_id() -> AccountId {

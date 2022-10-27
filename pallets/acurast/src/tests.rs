@@ -423,8 +423,14 @@ fn test_fulfill() {
                 Event::Assets(pallet_assets::Event::Transferred {
                     asset_id: 22,
                     from: pallet_assets_account(),
+                    to: pallet_fees_account(),
+                    amount: 1_500_000_u128,
+                }),
+                Event::Assets(pallet_assets::Event::Transferred {
+                    asset_id: 22,
+                    from: pallet_assets_account(),
                     to: processor_account_id(),
-                    amount: INITIAL_BALANCE / 2 as u128,
+                    amount: 3_500_000_u128,
                 }),
                 Event::Acurast(crate::Event::ReceivedFulfillment(
                     processor_account_id(),
@@ -569,8 +575,14 @@ fn test_submit_attestation_register_fulfill() {
                 Event::Assets(pallet_assets::Event::Transferred {
                     asset_id: 22,
                     from: pallet_assets_account(),
+                    to: pallet_fees_account(),
+                    amount: 1_500_000_u128,
+                }),
+                Event::Assets(pallet_assets::Event::Transferred {
+                    asset_id: 22,
+                    from: pallet_assets_account(),
                     to: processor_account_id(),
-                    amount: INITIAL_BALANCE / 2 as u128,
+                    amount: 3_500_000_u128,
                 }),
                 Event::Acurast(crate::Event::ReceivedFulfillment(
                     processor_account_id(),

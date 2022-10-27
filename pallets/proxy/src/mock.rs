@@ -206,6 +206,17 @@ pub mod acurast_runtime {
         type WeightInfo = ();
     }
 
+    pub struct FeeManagerImpl;
+    impl pallet_acurast::FeeManager for FeeManagerImpl {
+        fn get_fee_percentage() -> sp_runtime::Percent {
+            sp_runtime::Percent::from_percent(30)
+        }
+
+        fn pallet_id() -> PalletId {
+            PalletId(*b"acurfees")
+        }
+    }
+
     impl pallet_acurast::Config for Runtime {
         type Event = Event;
         type RegistrationExtra = ();
@@ -215,6 +226,7 @@ pub mod acurast_runtime {
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = JobBarrier;
+        type FeeManager = FeeManagerImpl;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
