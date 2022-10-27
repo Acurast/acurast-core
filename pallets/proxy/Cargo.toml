@@ -56,7 +56,6 @@ parachain-info = { git = "https://github.com/paritytech/cumulus", default-featur
 
 hex-literal = "0.3.4"
 
-
 [features]
 default = ["std"]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
