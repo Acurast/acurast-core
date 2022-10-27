@@ -53,7 +53,6 @@ ecdsa-vendored = { package = "ecdsa_vendored", path = "p384/ecdsa", default-feat
 
 # benchmarks
 hex-literal = { version = "0.3", optional = true }
-sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
 parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.29" }
@@ -76,7 +75,6 @@ default = ["std"]
 runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
   "hex-literal",
-  "sp-runtime",
   "parachain-info",
   "pallet-balances",
   "sp-core",

@@ -1,7 +1,11 @@
 use crate::{Config, Fulfillment, JobRegistration, CertificateRevocationListUpdate, JobAssignmentUpdate};
-use frame_support::{pallet_prelude::DispatchResultWithPostInfo, weights::Weight, PalletId};
 use frame_system::pallet_prelude::OriginFor;
-use sp_runtime::{traits::StaticLookup, Percent};
+use frame_support::{
+    pallet_prelude::DispatchResultWithPostInfo,
+    weights::Weight,
+    PalletId,
+    sp_runtime::{traits::StaticLookup, Percent}
+};
 use sp_std::prelude::*;
 
 /// This trait provides the interface for a fulfillment router.
