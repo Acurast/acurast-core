@@ -10,35 +10,31 @@ mod benchmarking;
 
 mod attestation;
 pub mod payments;
+mod traits;
 mod types;
 mod utils;
-mod traits;
 pub mod weights;
 pub mod xcm_adapters;
 
 pub use pallet::*;
 pub use payments::*;
-pub use types::*;
 pub use traits::*;
+pub use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::traits::*;
+    use crate::types::*;
+    use crate::utils::*;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
+        sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
 
-    use crate::payments::*;
-    use crate::types::*;
-    use crate::utils::*;
-    use crate::traits::*;
-
     #[pallet::config]
-    pub trait Config:
-        frame_system::Config + pallet_timestamp::Config + pallet_assets::Config
-    {
+    pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen;
@@ -48,7 +44,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
         /// Logic for locking and paying tokens for job execution
-        type AssetTransactor: LockAndPayAsset<Self>;
+        type RewardManager: RewardManager<Self>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
@@ -58,6 +54,8 @@ pub mod pallet {
         type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
         // Fee Logic
         type FeeManager: FeeManager;
+        /// Timestamp
+        type UnixTime: UnixTime;
         // Weight Logic
         type WeightInfo: WeightInfo;
     }
@@ -76,7 +74,7 @@ pub mod pallet {
         T::AccountId,
         Blake2_128Concat,
         Script,
-        JobRegistration<T::AccountId, T::RegistrationExtra>,
+        JobRegistrationFor<T>,
     >;
 
     /// The storage for [Attestation]s. They are stored by [AccountId].
@@ -101,23 +99,20 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully stored. [registration, who]
-        JobRegistrationStored(
-            JobRegistration<T::AccountId, T::RegistrationExtra>,
-            T::AccountId,
-        ),
+        JobRegistrationStored(JobRegistrationFor<T>, T::AccountId),
         /// A registration was successfully removed. [registration, who]
         JobRegistrationRemoved(Script, T::AccountId),
         /// A fulfillment has been posted. [who, fulfillment, registration, receiver]
         ReceivedFulfillment(
             T::AccountId,
             Fulfillment,
-            JobRegistration<T::AccountId, T::RegistrationExtra>,
+            JobRegistrationFor<T>,
             T::AccountId,
         ),
         /// The allowed sources have been updated. [who, old_registration, updates]
         AllowedSourcesUpdated(
             T::AccountId,
-            JobRegistration<T::AccountId, T::RegistrationExtra>,
+            JobRegistrationFor<T>,
             Vec<AllowedSourcesUpdate<T::AccountId>>,
         ),
         /// An attestation was successfully stored. [attestation, who]
@@ -189,7 +184,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::register())]
         pub fn register(
             origin: OriginFor<T>,
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let script_len: u32 = registration
@@ -214,11 +209,10 @@ pub mod pallet {
                 );
             }
 
-            T::AssetTransactor::lock_asset(
+            T::RewardManager::lock_reward(
                 registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
-            )
-            .map_err(|_| Error::<T>::InvalidPayment)?;
+            )?;
 
             <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
@@ -341,7 +335,7 @@ pub mod pallet {
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
-            T::AssetTransactor::pay_asset(
+            T::RewardManager::pay_reward(
                 registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
             )

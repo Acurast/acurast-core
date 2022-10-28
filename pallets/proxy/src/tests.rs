@@ -21,7 +21,7 @@ use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
-use pallet_acurast::{JobAssignmentUpdate, JobRegistration, FeeManager};
+use pallet_acurast::{FeeManager, JobAssignmentUpdate, JobRegistration};
 use polkadot_parachain::primitives::Id as ParaId;
 use xcm::latest::{MultiAsset, MultiLocation};
 use xcm::prelude::{Concrete, Fungible, GeneralIndex, PalletInstance, Parachain, X3};
@@ -180,7 +180,7 @@ pub fn owned_asset() -> MultiAsset {
         fun: Fungible(INITIAL_BALANCE / 2),
     }
 }
-pub fn registration() -> JobRegistration<AccountId, ()> {
+pub fn registration() -> JobRegistration<AccountId, (), MultiAsset> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -190,7 +190,7 @@ pub fn registration() -> JobRegistration<AccountId, ()> {
     }
 }
 pub fn job_assignment_update_for(
-    registration: JobRegistration<AccountId, ()>,
+    registration: JobRegistration<AccountId, (), MultiAsset>,
     requester: Option<AccountId>,
 ) -> Vec<JobAssignmentUpdate<AccountId>> {
     vec![JobAssignmentUpdate {

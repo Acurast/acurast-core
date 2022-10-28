@@ -9,20 +9,7 @@ use xcm::prelude::*;
 use xcm_builder::{FungiblesMutateAdapter, FungiblesTransferAdapter};
 use xcm_executor::traits::{Convert, MatchesFungibles, TransactAsset};
 
-pub fn get_statemint_asset(asset: &MultiAsset) -> Result<(u128, u128), ()> {
-    return match asset {
-        MultiAsset {
-            fun: Fungible(amount),
-            id:
-                Concrete(MultiLocation {
-                    parents: 1,
-                    interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(id)),
-                }),
-        } => Ok((*id, *amount)),
-
-        _ => return Err(()),
-    };
-}
+use crate::Reward;
 
 /// wrapper around FungiblesAdapter. It proxies to it and just on deposit_asset if it failed due to
 /// the asset not being created, then creates it and calls the adapter again
@@ -45,6 +32,7 @@ pub struct StatemintTransactor<
         CheckingAccount,
     )>,
 );
+
 impl<
         Runtime: crate::Config,
         Assets: fungibles::Mutate<AccountId> + fungibles::Transfer<AccountId>,
@@ -64,6 +52,7 @@ impl<
         CheckingAccount,
     >
 where
+    Runtime: pallet_assets::Config,
     Runtime::AssetId: TryFrom<u128>,
     Runtime::Balance: TryFrom<u128>,
 {
@@ -111,8 +100,9 @@ where
         >::deposit_asset(what, who)
         .or_else(|_| {
             // asset might not have been created. Try creating it and give it again to FungiblesMutateAdapter
-            let (asset_id, _amount) =
-                get_statemint_asset(what).map_err(|_| XcmError::AssetNotFound)?;
+            let asset_id = what
+                .try_get_asset_id()
+                .map_err(|_| XcmError::AssetNotFound)?;
             let pallet_assets_account: <Runtime as frame_system::Config>::AccountId =
                 <Runtime as crate::Config>::PalletId::get().into_account_truncating();
             let raw_origin = RawOrigin::<<Runtime as frame_system::Config>::AccountId>::Signed(

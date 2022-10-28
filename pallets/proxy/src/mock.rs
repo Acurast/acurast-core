@@ -55,10 +55,7 @@ pub mod acurast_runtime {
             _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
             _from: <Runtime as frame_system::Config>::AccountId,
             _fulfillment: pallet_acurast::Fulfillment,
-            _registration: pallet_acurast::JobRegistration<
-                <Runtime as frame_system::Config>::AccountId,
-                <Runtime as pallet_acurast::Config>::RegistrationExtra,
-            >,
+            _registration: pallet_acurast::JobRegistrationFor<Runtime>,
             _requester: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Target,
         ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
             Ok(().into())
@@ -222,11 +219,12 @@ pub mod acurast_runtime {
         type RegistrationExtra = ();
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
-        type AssetTransactor = payments::StatemintAssetTransactor;
+        type RewardManager = payments::StatemintRewardManager;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = JobBarrier;
         type FeeManager = FeeManagerImpl;
+        type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
@@ -421,6 +419,7 @@ pub mod proxy_runtime {
     impl crate::Config for Runtime {
         type Event = Event;
         type RegistrationExtra = ();
+        type Reward = MultiAsset;
         type XcmSender = XcmRouter;
         type AcurastPalletId = AcurastPalletId;
         type AcurastParachainId = AcurastParachainId;

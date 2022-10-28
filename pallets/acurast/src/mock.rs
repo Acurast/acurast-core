@@ -4,12 +4,12 @@ use frame_support::{pallet_prelude::GenesisBuild, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{generic, parameter_types, AccountId32, DispatchError, Percent};
+use sp_runtime::{generic, parameter_types, AccountId32, Percent};
 use xcm::prelude::*;
 
 use crate::{
-    payments, AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
-    JobRegistration, LockAndPayAsset, RevocationListUpdateBarrier, Script, SerialNumber, FeeManager,
+    payments, AttestationChain, FeeManager, Fulfillment, JobAssignmentUpdate,
+    JobAssignmentUpdateBarrier, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 type AccountId = AccountId32;
@@ -52,30 +52,10 @@ impl crate::FulfillmentRouter<Test> for Router {
         _origin: frame_system::pallet_prelude::OriginFor<Test>,
         _from: <Test as frame_system::Config>::AccountId,
         _fulfillment: crate::Fulfillment,
-        _registration: crate::JobRegistration<
-            <Test as frame_system::Config>::AccountId,
-            <Test as crate::Config>::RegistrationExtra,
-        >,
+        _registration: crate::JobRegistrationFor<Test>,
         _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
     ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
-    }
-}
-
-pub struct TestTransactor;
-impl LockAndPayAsset<Test> for TestTransactor {
-    fn lock_asset(
-        _asset: MultiAsset,
-        _owner: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
-
-    fn pay_asset(
-        _asset: MultiAsset,
-        _target: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
-        Ok(())
     }
 }
 
@@ -260,11 +240,12 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type AssetTransactor = payments::StatemintAssetTransactor;
+    type RewardManager = payments::StatemintRewardManager;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = JobBarrier;
     type FeeManager = FeeManagerImpl;
+    type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
 }
 
@@ -297,7 +278,7 @@ pub fn invalid_script_2() -> Script {
 pub fn job_registration(
     allowed_sources: Option<Vec<AccountId>>,
     allow_only_verified_sources: bool,
-) -> JobRegistration<AccountId, ()> {
+) -> JobRegistration<AccountId, (), MultiAsset> {
     JobRegistration {
         script: script(),
         allowed_sources,
@@ -308,7 +289,7 @@ pub fn job_registration(
 }
 
 pub fn job_assignment_update_for(
-    registration: &JobRegistration<AccountId, ()>,
+    registration: &JobRegistration<AccountId, (), MultiAsset>,
     requester: Option<AccountId>,
 ) -> Vec<JobAssignmentUpdate<AccountId>> {
     vec![JobAssignmentUpdate {
@@ -321,7 +302,7 @@ pub fn job_assignment_update_for(
     }]
 }
 
-pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
+pub fn invalid_job_registration_1() -> JobRegistration<AccountId, (), MultiAsset> {
     JobRegistration {
         script: invalid_script_1(),
         allowed_sources: None,
@@ -331,7 +312,7 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
     }
 }
 
-pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
+pub fn invalid_job_registration_2() -> JobRegistration<AccountId, (), MultiAsset> {
     JobRegistration {
         script: invalid_script_2(),
         allowed_sources: None,
@@ -341,7 +322,7 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
     }
 }
 
-pub fn fulfillment_for(registration: &JobRegistration<AccountId, ()>) -> Fulfillment {
+pub fn fulfillment_for(registration: &JobRegistration<AccountId, (), MultiAsset>) -> Fulfillment {
     Fulfillment {
         script: registration.script.clone(),
         payload: hex!("00").to_vec(),
