@@ -2,9 +2,8 @@ use super::xcm_adapters::get_statemint_asset;
 use super::Config;
 use frame_support::{
     dispatch::RawOrigin,
-    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
+    sp_runtime::{DispatchError, traits::{AccountIdConversion, Get, StaticLookup}},
 };
-use sp_runtime::DispatchError;
 use xcm::latest::prelude::*;
 use crate::traits::FeeManager;
 

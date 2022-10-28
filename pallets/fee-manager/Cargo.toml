@@ -1,0 +1,47 @@
+[package]
+name = "pallet-acurast-fee-manager"
+authors = ["Papers AG"]
+description = "Pallet for managing the Acurast fees."
+version = "0.0.1"
+license = "Unlicense"
+homepage = "https://acurast.com/"
+edition = "2021"
+publish = false
+repository = "https://github.com/acurast/"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
+  "derive",
+] }
+
+# Benchmarks
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", optional = true, default-features = false }
+
+# Substrate
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+scale-info = { version = "2.0", default-features = false, features = [
+  "derive",
+] }
+sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+
+[dev-dependencies]
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+  "codec/std",
+  "scale-info/std",
+  "frame-support/std",
+  "frame-system/std",
+  "frame-benchmarking/std",
+]
+
+runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
+try-runtime = ["frame-support/try-runtime"]
