@@ -1,14 +1,15 @@
-use crate::{
-    CertificateRevocationListUpdate, Config, Fulfillment, JobAssignmentUpdate, JobRegistrationFor,
-};
 use frame_support::{
-    pallet_prelude::{DispatchResultWithPostInfo, Member},
+    pallet_prelude::DispatchResultWithPostInfo,
     sp_runtime::{traits::StaticLookup, DispatchError},
     weights::Weight,
-    Never, Parameter,
 };
 use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
+
+use crate::{
+    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, Fulfillment,
+    JobAssignmentUpdate, JobId, JobRegistrationFor, Script, StoredJobAssignment,
+};
 
 /// This trait provides the interface for a fulfillment router.
 pub trait FulfillmentRouter<T: Config> {
@@ -63,56 +64,74 @@ pub trait WeightInfo {
     fn update_certificate_revocation_list() -> Weight;
 }
 
-pub trait Reward {
-    type AssetId;
-    type Balance;
-    type Error;
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
+pub trait JobHooks<T: Config> {
+    type Error: Into<Error<T>>;
+    fn register_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        registration: &JobRegistrationFor<T>,
+    ) -> Result<(), DispatchError>;
+    fn deregister_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        script: &Script,
+    ) -> Result<(), DispatchError>;
+    fn update_allowed_sources_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        script: &Script,
+        updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
+    ) -> Result<(), DispatchError>;
+    fn fulfill_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        fulfillment: &Fulfillment,
+        requester: <T::Lookup as StaticLookup>::Target,
+        registration: &JobRegistrationFor<T>,
+    ) -> Result<(), DispatchError>;
 }
 
-impl Reward for () {
-    type AssetId = Never;
-    type Balance = Never;
+impl<T: Config> JobHooks<T> for () {
     type Error = ();
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        Err(())
-    }
-
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
-        Err(())
-    }
-}
-
-pub trait RewardManager<T: Config> {
-    type Reward: Parameter + Member + Reward;
-
-    fn lock_reward(
-        reward: Self::Reward,
-        owner: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
-    fn pay_reward(
-        reward: Self::Reward,
-        target: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
-}
-
-impl<T: Config> RewardManager<T> for () {
-    type Reward = ();
-
-    fn lock_reward(
-        _reward: Self::Reward,
-        _owner: <<T>::Lookup as StaticLookup>::Source,
+    fn register_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _registration: &JobRegistrationFor<T>,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
-
-    fn pay_reward(
-        _reward: Self::Reward,
-        _target: <<T>::Lookup as StaticLookup>::Source,
+    fn deregister_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _script: &Script,
     ) -> Result<(), DispatchError> {
         Ok(())
+    }
+    fn update_allowed_sources_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _script: &Script,
+        _updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn fulfill_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        fulfillment: &Fulfillment,
+        requester: <T::Lookup as StaticLookup>::Target,
+        _registration: &JobRegistrationFor<T>,
+    ) -> Result<(), DispatchError> {
+        // find assignment
+        let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
+        let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
+        let job_index = assigned_jobs
+            .iter()
+            .position(|assigned_job_id| assigned_job_id == &job_id)
+            .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
+
+        // removed fulfilled job from assigned jobs
+        assigned_jobs.remove(job_index);
+        <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+
+        Ok(())
+    }
+}
+
+impl<T: Config> From<()> for Error<T> {
+    fn from(_: ()) -> Self {
+        Self::JobHookFailed
     }
 }

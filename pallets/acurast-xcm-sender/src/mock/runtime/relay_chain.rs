@@ -44,7 +44,6 @@ impl frame_system::Config for Runtime {
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-
 impl shared::Config for Runtime {}
 
 impl configuration::Config for Runtime {
