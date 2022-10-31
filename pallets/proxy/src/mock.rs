@@ -5,6 +5,7 @@ use xcm::prelude::X2;
 use xcm_executor::traits::ConvertOrigin;
 
 pub mod acurast_runtime {
+    use codec::{Decode, Encode};
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32},
@@ -12,7 +13,8 @@ pub mod acurast_runtime {
         PalletId,
     };
     pub use pallet_acurast;
-    use pallet_acurast::{payments, JobAssignmentUpdateBarrier};
+    use pallet_acurast::{payments, AssetBarrier, JobAssignmentUpdateBarrier, Reward};
+    use scale_info::TypeInfo;
     use sp_core::H256;
     use sp_std::prelude::*;
 
@@ -55,18 +57,15 @@ pub mod acurast_runtime {
             _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
             _from: <Runtime as frame_system::Config>::AccountId,
             _fulfillment: pallet_acurast::Fulfillment,
-            _registration: pallet_acurast::JobRegistration<
-                <Runtime as frame_system::Config>::AccountId,
-                <Runtime as pallet_acurast::Config>::RegistrationExtra,
-            >,
+            _registration: pallet_acurast::JobRegistrationFor<Runtime>,
             _requester: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Target,
         ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
             Ok(().into())
         }
     }
 
-    pub struct JobBarrier;
-    impl JobAssignmentUpdateBarrier<Runtime> for JobBarrier {
+    pub struct AcurastBarrier;
+    impl JobAssignmentUpdateBarrier<Runtime> for AcurastBarrier {
         fn can_update_assigned_jobs(
             origin: &<Runtime as frame_system::Config>::AccountId,
             updates: &Vec<
@@ -74,6 +73,37 @@ pub mod acurast_runtime {
             >,
         ) -> bool {
             updates.iter().all(|update| &update.job_id.0 == origin)
+        }
+    }
+
+    impl AssetBarrier<AcurastAsset> for AcurastBarrier {
+        fn can_use_asset(_asset: &AcurastAsset) -> bool {
+            true
+        }
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
+    pub struct AcurastAsset(MultiAsset);
+    impl Reward for AcurastAsset {
+        type AssetId = u32;
+        type Balance = u128;
+        type Error = ();
+
+        fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+            match &self.0.id {
+                Concrete(location) => match location.last() {
+                    Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
+                    _ => Err(()),
+                },
+                Abstract(_) => Err(()),
+            }
+        }
+
+        fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+            match &self.0.fun {
+                Fungible(amount) => Ok(*amount),
+                _ => Err(()),
+            }
         }
     }
 
@@ -222,11 +252,12 @@ pub mod acurast_runtime {
         type RegistrationExtra = ();
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
-        type AssetTransactor = payments::StatemintAssetTransactor;
+        type RewardManager = payments::AssetRewardManager<AcurastAsset, AcurastBarrier>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
-        type JobAssignmentUpdateBarrier = JobBarrier;
+        type JobAssignmentUpdateBarrier = AcurastBarrier;
         type FeeManager = FeeManagerImpl;
+        type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
@@ -421,6 +452,7 @@ pub mod proxy_runtime {
     impl crate::Config for Runtime {
         type Event = Event;
         type RegistrationExtra = ();
+        type Reward = MultiAsset;
         type XcmSender = XcmRouter;
         type AcurastPalletId = AcurastPalletId;
         type AcurastParachainId = AcurastParachainId;

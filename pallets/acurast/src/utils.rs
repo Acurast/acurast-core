@@ -1,5 +1,5 @@
 use codec::Encode;
-use frame_support::ensure;
+use frame_support::{ensure, traits::UnixTime};
 use sp_std::prelude::*;
 
 use crate::attestation::{
@@ -8,7 +8,8 @@ use crate::attestation::{
 };
 use crate::{
     Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
-    JobRegistration, SerialNumber, StoredAttestation, StoredRevokedCertificate, ValidatingCertIds,
+    JobRegistrationFor, SerialNumber, StoredAttestation, StoredRevokedCertificate,
+    ValidatingCertIds,
 };
 
 pub(crate) fn validate_and_extract_attestation<T: Config>(
@@ -57,7 +58,7 @@ pub(crate) fn validate_and_extract_attestation<T: Config>(
 
 pub(crate) fn ensure_source_allowed<T: Config>(
     source: &T::AccountId,
-    registration: &JobRegistration<T::AccountId, T::RegistrationExtra>,
+    registration: &JobRegistrationFor<T>,
 ) -> Result<(), Error<T>> {
     registration
         .allowed_sources
@@ -78,7 +79,7 @@ pub(crate) fn ensure_source_allowed<T: Config>(
 
 pub(crate) fn ensure_source_verified<T: Config>(
     source: &T::AccountId,
-    registration: &JobRegistration<T::AccountId, T::RegistrationExtra>,
+    registration: &JobRegistrationFor<T>,
 ) -> Result<(), Error<T>> {
     if registration.allow_only_verified_sources {
         let attestation =
@@ -90,7 +91,8 @@ pub(crate) fn ensure_source_verified<T: Config>(
 }
 
 pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
-    let now: u64 = <pallet_timestamp::Pallet<T>>::now()
+    let now: u64 = T::UnixTime::now()
+        .as_millis()
         .try_into()
         .map_err(|_| Error::<T>::FailedTimestampConversion)?;
 

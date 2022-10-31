@@ -4,29 +4,21 @@ use frame_support::{
     traits::{fungibles, Contains},
 };
 use sp_std::{marker::PhantomData, result::Result};
-use xcm::latest::{MultiAsset, MultiLocation, Result as XcmResult};
-use xcm::prelude::*;
+use xcm::latest::{Error as XcmError, MultiAsset, MultiLocation, Result as XcmResult};
 use xcm_builder::{FungiblesMutateAdapter, FungiblesTransferAdapter};
 use xcm_executor::traits::{Convert, MatchesFungibles, TransactAsset};
 
-pub fn get_statemint_asset(asset: &MultiAsset) -> Result<(u128, u128), ()> {
-    return match asset {
-        MultiAsset {
-            fun: Fungible(amount),
-            id:
-                Concrete(MultiLocation {
-                    parents: 1,
-                    interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(id)),
-                }),
-        } => Ok((*id, *amount)),
+use crate::Config;
 
-        _ => return Err(()),
-    };
+pub trait MultiAssetConverter<AssetId> {
+    type Error;
+
+    fn try_convert(asset: &MultiAsset) -> Result<AssetId, Self::Error>;
 }
 
 /// wrapper around FungiblesAdapter. It proxies to it and just on deposit_asset if it failed due to
 /// the asset not being created, then creates it and calls the adapter again
-pub struct StatemintTransactor<
+pub struct AssetTransactor<
     Runtime,
     Assets,
     Matcher,
@@ -34,6 +26,7 @@ pub struct StatemintTransactor<
     AccountId,
     CheckAsset,
     CheckingAccount,
+    AssetConverter,
 >(
     PhantomData<(
         Runtime,
@@ -43,18 +36,21 @@ pub struct StatemintTransactor<
         AccountId,
         CheckAsset,
         CheckingAccount,
+        AssetConverter,
     )>,
 );
+
 impl<
-        Runtime: crate::Config,
+        Runtime: Config + pallet_assets::Config<AssetId = Assets::AssetId>,
         Assets: fungibles::Mutate<AccountId> + fungibles::Transfer<AccountId>,
         Matcher: MatchesFungibles<Assets::AssetId, Assets::Balance>,
         AccountIdConverter: Convert<MultiLocation, AccountId>,
         AccountId: Clone, // can't get away without it since Currency is generic over it.
         CheckAsset: Contains<Assets::AssetId>,
         CheckingAccount: Get<AccountId>,
+        AssetConverter: MultiAssetConverter<Assets::AssetId, Error = XcmError>,
     > TransactAsset
-    for StatemintTransactor<
+    for AssetTransactor<
         Runtime,
         Assets,
         Matcher,
@@ -62,6 +58,7 @@ impl<
         AccountId,
         CheckAsset,
         CheckingAccount,
+        AssetConverter,
     >
 where
     Runtime::AssetId: TryFrom<u128>,
@@ -111,8 +108,7 @@ where
         >::deposit_asset(what, who)
         .or_else(|_| {
             // asset might not have been created. Try creating it and give it again to FungiblesMutateAdapter
-            let (asset_id, _amount) =
-                get_statemint_asset(what).map_err(|_| XcmError::AssetNotFound)?;
+            let asset_id = AssetConverter::try_convert(&what)?;
             let pallet_assets_account: <Runtime as frame_system::Config>::AccountId =
                 <Runtime as crate::Config>::PalletId::get().into_account_truncating();
             let raw_origin = RawOrigin::<<Runtime as frame_system::Config>::AccountId>::Signed(
@@ -122,9 +118,7 @@ where
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,
-                asset_id
-                    .try_into()
-                    .map_err(|_| XcmError::FailedToTransactAsset("unable to create asset"))?,
+                asset_id,
                 <Runtime as frame_system::Config>::Lookup::unlookup(pallet_assets_account),
                 <Runtime as pallet_assets::Config>::Balance::from(1u32),
             )

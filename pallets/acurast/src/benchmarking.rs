@@ -2,11 +2,13 @@ use super::*;
 use crate::utils::validate_and_extract_attestation;
 use crate::Pallet as Acurast;
 use frame_benchmarking::{account, benchmarks, whitelist_account};
-use frame_support::assert_ok;
-use frame_support::traits::{Currency, OriginTrait};
+use frame_support::{
+    assert_ok,
+    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
+    traits::{Currency, OriginTrait},
+};
 use frame_system::RawOrigin;
 use hex_literal::hex;
-use sp_runtime::traits::{AccountIdConversion, Get, StaticLookup};
 use sp_std::prelude::*;
 use types::{AllowedSourcesUpdate, JobAssignmentUpdate};
 use xcm::prelude::*;
@@ -26,14 +28,15 @@ pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
-pub fn job_registration_n<T: Config>(
-    extra: T::RegistrationExtra,
-) -> JobRegistration<T::AccountId, T::RegistrationExtra> {
+pub fn job_registration_n<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T>
+where
+    <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
+{
     return JobRegistration {
         script: script(),
         allowed_sources: None,
         extra,
-        reward: owned_asset(),
+        reward: owned_asset().into(),
         allow_only_verified_sources: false,
     };
 }
@@ -74,6 +77,7 @@ pub fn attestation_chain() -> AttestationChain {
 
 fn token_22_funded_account<T: Config>() -> T::AccountId
 where
+    T: pallet_assets::Config,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
 {
@@ -104,14 +108,11 @@ where
     caller
 }
 
-fn register_job<T: Config>(
-    submit: bool,
-) -> (
-    T::AccountId,
-    JobRegistration<T::AccountId, T::RegistrationExtra>,
-)
+fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>)
 where
-    <T as crate::Config>::RegistrationExtra: Default,
+    T: pallet_assets::Config,
+    <T as Config>::RegistrationExtra: Default,
+    <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
 {
@@ -131,8 +132,11 @@ where
 fn assign_job<T: Config>(
     submit: bool,
     caller: T::AccountId,
-    job: JobRegistration<T::AccountId, T::RegistrationExtra>,
-) -> JobAssignmentUpdate<T::AccountId> {
+    job: JobRegistrationFor<T>,
+) -> JobAssignmentUpdate<T::AccountId>
+where
+    T: pallet_assets::Config,
+{
     let processor_account: T::AccountId = account("processor", 0, SEED);
 
     let job_assignment = JobAssignmentUpdate {
@@ -157,7 +161,9 @@ fn assign_job<T: Config>(
 
 benchmarks! {
     where_clause {  where
-        <T as crate::Config>::RegistrationExtra: Default,
+        T: pallet_assets::Config,
+        <T as Config>::RegistrationExtra: Default,
+        <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
         <T as pallet_assets::Config>::AssetId: From<u32>,
         <T as pallet_assets::Config>::Balance: From<u128>,
         <T as frame_system::Config>::AccountId: From<[u8; 32]>,

@@ -33,6 +33,7 @@ pub mod pallet {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + MaxEncodedLen + Eq;
+        type Reward: Parameter + Member;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;
         type AcurastParachainId: Get<u32>;
@@ -47,7 +48,7 @@ pub mod pallet {
     pub enum ProxyCall<T: Config> {
         #[codec(index = 0u8)]
         Register {
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra, T::Reward>,
         },
 
         #[codec(index = 1u8)]
@@ -163,7 +164,7 @@ pub mod pallet {
         #[pallet::weight(10_000)]
         pub fn register(
             origin: OriginFor<T>,
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra, T::Reward>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Register { registration };

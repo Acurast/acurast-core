@@ -3,13 +3,23 @@ use frame_support::{
 };
 use sp_std::prelude::*;
 
-use crate::attestation::{
-    asn::{self, KeyDescription},
-    CertificateChainInput, CHAIN_MAX_LENGTH,
+use crate::{
+    attestation::{
+        asn::{self, KeyDescription},
+        CertificateChainInput, CHAIN_MAX_LENGTH,
+    },
+    Config, RewardManager,
 };
 
 pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
 pub(crate) const SCRIPT_LENGTH: u32 = 53;
+
+pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
+pub type JobRegistrationFor<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::RegistrationExtra,
+    RewardFor<T>,
+>;
 
 /// Type representing the utf8 bytes of a string containing the value of an ipfs url.
 /// The ipfs url is expected to point to a script.
@@ -78,21 +88,22 @@ pub enum ListUpdateOperation {
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct JobRegistration<A, T>
+pub struct JobRegistration<AccountId, Extra, Reward>
 where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-    T: Parameter + Member + MaxEncodedLen,
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
+    Reward: Parameter + Member,
+    Extra: Parameter + Member + MaxEncodedLen,
 {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<A>>,
+    pub allowed_sources: Option<Vec<AccountId>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
     /// Reward offered for the job
-    pub reward: xcm::v2::MultiAsset,
+    pub reward: Reward,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
-    pub extra: T,
+    pub extra: Extra,
 }
 
 pub(crate) const PURPOSE_MAX_LENGTH: u32 = 50;

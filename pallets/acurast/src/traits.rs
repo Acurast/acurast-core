@@ -1,11 +1,13 @@
-use crate::{Config, Fulfillment, JobRegistration, CertificateRevocationListUpdate, JobAssignmentUpdate};
-use frame_system::pallet_prelude::OriginFor;
-use frame_support::{
-    pallet_prelude::DispatchResultWithPostInfo,
-    weights::Weight,
-    PalletId,
-    sp_runtime::{traits::StaticLookup, Percent}
+use crate::{
+    CertificateRevocationListUpdate, Config, Fulfillment, JobAssignmentUpdate, JobRegistrationFor,
 };
+use frame_support::{
+    pallet_prelude::{DispatchResultWithPostInfo, Member},
+    sp_runtime::{traits::StaticLookup, DispatchError, Percent},
+    weights::Weight,
+    Never, PalletId, Parameter,
+};
+use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
 
 /// This trait provides the interface for a fulfillment router.
@@ -14,7 +16,7 @@ pub trait FulfillmentRouter<T: Config> {
         origin: OriginFor<T>,
         from: T::AccountId,
         fulfillment: Fulfillment,
-        registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+        registration: JobRegistrationFor<T>,
         requester: <T::Lookup as StaticLookup>::Target,
     ) -> DispatchResultWithPostInfo;
 }
@@ -65,4 +67,58 @@ pub trait WeightInfo {
 pub trait FeeManager {
     fn get_fee_percentage() -> Percent;
     fn pallet_id() -> PalletId;
+}
+
+pub trait Reward {
+    type AssetId;
+    type Balance;
+    type Error;
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
+    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
+}
+
+impl Reward for () {
+    type AssetId = Never;
+    type Balance = Never;
+    type Error = ();
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+        Err(())
+    }
+
+    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+        Err(())
+    }
+}
+
+pub trait RewardManager<T: Config> {
+    type Reward: Parameter + Member + Reward;
+
+    fn lock_reward(
+        reward: Self::Reward,
+        owner: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
+    fn pay_reward(
+        reward: Self::Reward,
+        target: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
+}
+
+impl<T: Config> RewardManager<T> for () {
+    type Reward = ();
+
+    fn lock_reward(
+        _reward: Self::Reward,
+        _owner: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+
+    fn pay_reward(
+        _reward: Self::Reward,
+        _target: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
 }
