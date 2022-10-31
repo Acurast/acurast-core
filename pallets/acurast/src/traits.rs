@@ -1,5 +1,6 @@
 use crate::{
-    CertificateRevocationListUpdate, Config, Fulfillment, JobAssignmentUpdate, JobRegistrationFor,
+    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, Fulfillment,
+    JobAssignmentUpdate, JobRegistrationFor, Script,
 };
 use frame_support::{
     pallet_prelude::{DispatchResultWithPostInfo, Member},
@@ -63,11 +64,70 @@ pub trait WeightInfo {
     fn update_certificate_revocation_list() -> Weight;
 }
 
+pub trait JobHooks<T: Config> {
+    type Error: Into<Error<T>>;
+    fn register_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        registration: &JobRegistrationFor<T>,
+    ) -> Result<(), DispatchError>;
+    fn deregister_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        script: &Script,
+    ) -> Result<(), DispatchError>;
+    fn update_allowed_sources_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        script: &Script,
+        updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
+    ) -> Result<(), DispatchError>;
+    fn fulfill_hook(
+        who: &<T as frame_system::Config>::AccountId,
+        fulfillment: &Fulfillment,
+        requester: <T::Lookup as StaticLookup>::Target,
+    ) -> Result<(), DispatchError>;
+}
+
+impl<T: Config> JobHooks<T> for () {
+    type Error = ();
+    fn register_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _registration: &JobRegistrationFor<T>,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn deregister_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _script: &Script,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn update_allowed_sources_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _script: &Script,
+        _updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+    fn fulfill_hook(
+        _who: &<T as frame_system::Config>::AccountId,
+        _fulfillment: &Fulfillment,
+        _requester: <T::Lookup as StaticLookup>::Target,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+}
+
+impl<T: Config> From<()> for Error<T> {
+    fn from(_: ()) -> Self {
+        Self::JobHookFailed
+    }
+}
+
 pub trait Reward {
     type AssetId;
     type Balance;
     type Error;
 
+    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error>;
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
     fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
 }
@@ -76,6 +136,10 @@ impl Reward for () {
     type AssetId = Never;
     type Balance = Never;
     type Error = ();
+
+    fn with_amount(&mut self, _: Self::Balance) -> Result<&Self, Self::Error> {
+        Err(())
+    }
 
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
         Err(())

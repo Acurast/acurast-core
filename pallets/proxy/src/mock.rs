@@ -52,6 +52,7 @@ pub mod acurast_runtime {
     );
 
     pub struct FulfillmentRouter;
+
     impl pallet_acurast::FulfillmentRouter<Runtime> for FulfillmentRouter {
         fn received_fulfillment(
             _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
@@ -65,6 +66,7 @@ pub mod acurast_runtime {
     }
 
     pub struct AcurastBarrier;
+
     impl JobAssignmentUpdateBarrier<Runtime> for AcurastBarrier {
         fn can_update_assigned_jobs(
             origin: &<Runtime as frame_system::Config>::AccountId,
@@ -84,10 +86,22 @@ pub mod acurast_runtime {
 
     #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
     pub struct AcurastAsset(MultiAsset);
+
     impl Reward for AcurastAsset {
         type AssetId = u32;
         type Balance = u128;
         type Error = ();
+
+        fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error> {
+            self.0 = MultiAsset {
+                id: Concrete(MultiLocation {
+                    parents: 1,
+                    interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
+                }),
+                fun: Fungible(amount),
+            };
+            Ok(self)
+        }
 
         fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
             match &self.0.id {
@@ -154,6 +168,7 @@ pub mod acurast_runtime {
     }
 
     pub struct XcmConfig;
+
     impl xcm_executor::Config for XcmConfig {
         type Call = Call;
         type XcmSender = XcmRouter;
@@ -237,6 +252,7 @@ pub mod acurast_runtime {
     }
 
     pub struct FeeManagerImpl;
+
     impl pallet_acurast::FeeManager for FeeManagerImpl {
         fn get_fee_percentage() -> sp_runtime::Percent {
             sp_runtime::Percent::from_percent(30)
@@ -259,6 +275,7 @@ pub mod acurast_runtime {
         type JobAssignmentUpdateBarrier = AcurastBarrier;
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
+        type JobHooks = ();
     }
 
     impl pallet_xcm::Config for Runtime {
@@ -326,6 +343,7 @@ pub mod proxy_runtime {
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
 
     pub struct XcmConfig;
+
     impl Config for XcmConfig {
         type Call = Call;
         type XcmSender = XcmRouter;
@@ -507,6 +525,7 @@ pub mod relay_chain {
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
 
     pub struct XcmConfig;
+
     impl Config for XcmConfig {
         type Call = Call;
         type XcmSender = XcmRouter;
@@ -791,6 +810,7 @@ pub mod mock_msg_queue {
 }
 
 pub struct SignedAccountId32FromXcm<Origin>(PhantomData<Origin>);
+
 impl<Origin: OriginTrait> ConvertOrigin<Origin> for SignedAccountId32FromXcm<Origin>
 where
     Origin::AccountId: From<[u8; 32]>,
