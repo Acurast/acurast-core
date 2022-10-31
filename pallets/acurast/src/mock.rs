@@ -8,8 +8,9 @@ use sp_runtime::{generic, parameter_types, AccountId32, Percent};
 use xcm::prelude::*;
 
 use crate::{
-    payments, AttestationChain, FeeManager, Fulfillment, JobAssignmentUpdate,
-    JobAssignmentUpdateBarrier, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
+    payments, AssetBarrier, AttestationChain, FeeManager, Fulfillment, JobAssignmentUpdate,
+    JobAssignmentUpdateBarrier, JobRegistration, RevocationListUpdateBarrier, Reward, Script,
+    SerialNumber,
 };
 
 type AccountId = AccountId32;
@@ -17,16 +18,6 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub type Balance = u128;
 pub type BlockNumber = u32;
-
-pub struct JobBarrier;
-impl JobAssignmentUpdateBarrier<Test> for JobBarrier {
-    fn can_update_assigned_jobs(
-        origin: &<Test as frame_system::Config>::AccountId,
-        updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
-    ) -> bool {
-        updates.iter().all(|update| &update.job_id.0 == origin)
-    }
-}
 
 pub struct Barrier;
 impl RevocationListUpdateBarrier<Test> for Barrier {
@@ -40,9 +31,38 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
 impl JobAssignmentUpdateBarrier<Test> for Barrier {
     fn can_update_assigned_jobs(
         origin: &<Test as frame_system::Config>::AccountId,
-        _updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
+        updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
     ) -> bool {
-        AllowedJobAssignmentUpdate::get().contains(origin)
+        updates.iter().all(|update| &update.job_id.0 == origin)
+    }
+}
+
+impl AssetBarrier<MultiAsset> for Barrier {
+    fn can_use_asset(_asset: &MultiAsset) -> bool {
+        true
+    }
+}
+
+impl Reward for MultiAsset {
+    type AssetId = u32;
+    type Balance = u128;
+    type Error = ();
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+        match &self.id {
+            Concrete(location) => match location.last() {
+                Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
+                _ => Err(()),
+            },
+            Abstract(_) => Err(()),
+        }
+    }
+
+    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+        match &self.fun {
+            Fungible(amount) => Ok(*amount),
+            _ => Err(()),
+        }
     }
 }
 
@@ -240,10 +260,10 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type RewardManager = payments::StatemintRewardManager;
+    type RewardManager = payments::AssetRewardManager<MultiAsset, Barrier>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = JobBarrier;
+    type JobAssignmentUpdateBarrier = Barrier;
     type FeeManager = FeeManagerImpl;
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;

@@ -1,28 +1,50 @@
-use super::Config;
-use crate::{traits::FeeManager, Reward, RewardManager};
+use core::marker::PhantomData;
 use frame_support::{
     dispatch::RawOrigin,
-    sp_runtime::{DispatchError, traits::{AccountIdConversion, Get, StaticLookup}},
+    pallet_prelude::Member,
+    sp_runtime::{
+        traits::{AccountIdConversion, Get, StaticLookup},
+        DispatchError,
+    },
+    Parameter,
 };
-use xcm::latest::prelude::*;
 
-pub struct StatemintRewardManager;
-impl<T: Config> RewardManager<T> for StatemintRewardManager
+use super::Config;
+use crate::{traits::FeeManager, Reward, RewardManager};
+
+pub trait AssetBarrier<Asset> {
+    fn can_use_asset(asset: &Asset) -> bool;
+}
+
+impl<Asset> AssetBarrier<Asset> for () {
+    fn can_use_asset(_asset: &Asset) -> bool {
+        false
+    }
+}
+
+pub struct AssetRewardManager<Asset, Barrier>(PhantomData<(Asset, Barrier)>);
+impl<T: Config, Asset, Barrier> RewardManager<T> for AssetRewardManager<Asset, Barrier>
 where
     T: pallet_assets::Config,
-    T::AssetId: TryFrom<u128>,
-    T::Balance: TryFrom<u128>,
+    T::AssetId: TryInto<u32>,
+    Asset: Parameter + Member + Reward,
+    Asset::AssetId: TryInto<T::AssetId>,
+    Asset::Balance: TryInto<T::Balance>,
+    Barrier: AssetBarrier<Asset>,
 {
-    type Reward = MultiAsset;
+    type Reward = Asset;
 
     fn lock_reward(
-        asset: MultiAsset,
+        reward: Self::Reward,
         owner: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
+        if !Barrier::can_use_asset(&reward) {
+            return Err(DispatchError::Other("Invalid asset."));
+        }
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();
-        let (id, amount): (u128, u128) = match (asset.try_get_asset_id(), asset.try_get_amount()) {
+        let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
             (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
@@ -45,13 +67,13 @@ where
     }
 
     fn pay_reward(
-        asset: MultiAsset,
+        reward: Self::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();
-        let (id, amount): (u128, u128) = match (asset.try_get_asset_id(), asset.try_get_amount()) {
+        let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
             (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
@@ -86,35 +108,5 @@ where
             target,
             reward_after_fee.into(),
         )
-    }
-}
-
-impl Reward for MultiAsset {
-    type AssetId = u128;
-    type Balance = u128;
-    type Error = ();
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        return match self {
-            MultiAsset {
-                fun: _,
-                id:
-                    Concrete(MultiLocation {
-                        parents: 1,
-                        interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(id)),
-                    }),
-            } => Ok(*id),
-            _ => return Err(()),
-        };
-    }
-
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
-        return match self {
-            MultiAsset {
-                fun: Fungible(amount),
-                id: _,
-            } => Ok(*amount),
-            _ => return Err(()),
-        };
     }
 }

@@ -169,10 +169,6 @@ pub mod pallet {
         AttestationPublicKeyDoesNotMatchSource,
         /// Job assignment update not allowed.
         JobAssignmentUpdateNotAllowed,
-        /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
-        InvalidPayment,
-        /// Failed to retrieve funds from pallet account to pay processor. SEVERE error
-        FailedToPay,
     }
 
     #[pallet::hooks]
@@ -338,8 +334,7 @@ pub mod pallet {
             T::RewardManager::pay_reward(
                 registration.reward.clone(),
                 T::Lookup::unlookup(who.clone()),
-            )
-            .map_err(|_| Error::<T>::FailedToPay)?;
+            )?;
 
             // route fulfillment
             let info = T::FulfillmentRouter::received_fulfillment(
