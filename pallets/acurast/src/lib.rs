@@ -9,15 +9,13 @@ mod tests;
 mod benchmarking;
 
 mod attestation;
-pub mod payments;
 mod traits;
 mod types;
-mod utils;
+pub mod utils;
 pub mod weights;
 pub mod xcm_adapters;
 
 pub use pallet::*;
-pub use payments::*;
 pub use traits::*;
 pub use types::*;
 
@@ -37,14 +35,12 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member + MaxEncodedLen;
+        type RegistrationExtra: Parameter + Member;
         /// The fulfillment router to route a job fulfillment to its final destination.
         type FulfillmentRouter: FulfillmentRouter<Self>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
-        /// Logic for locking and paying tokens for job execution
-        type RewardManager: RewardManager<Self>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
@@ -54,12 +50,14 @@ pub mod pallet {
         type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
         /// Timestamp
         type UnixTime: UnixTime;
-        // Weight Logic
+        /// Hooks used by tightly coupled subpallets.
+        type JobHooks: JobHooks<Self>;
+        /// Weight Info for extrinsics. Needs to include weight of hooks called. The weights in this pallet or only correct when using the default hooks [()].
         type WeightInfo: WeightInfo;
     }
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
+    #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
@@ -94,7 +92,7 @@ pub mod pallet {
         StorageMap<_, Blake2_128Concat, T::AccountId, Vec<JobId<T::AccountId>>>;
 
     #[pallet::event]
-    #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully stored. [registration, who]
         JobRegistrationStored(JobRegistrationFor<T>, T::AccountId),
@@ -167,6 +165,8 @@ pub mod pallet {
         AttestationPublicKeyDoesNotMatchSource,
         /// Job assignment update not allowed.
         JobAssignmentUpdateNotAllowed,
+        /// Calling a job hook produced an error.
+        JobHookFailed,
     }
 
     #[pallet::hooks]
@@ -175,7 +175,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [JobRegistration]. If a job for the same script was previously registered, it will be overwritten.
-        #[pallet::weight(<T as Config>::WeightInfo::register())]
+        #[pallet::weight(< T as Config >::WeightInfo::register())]
         pub fn register(
             origin: OriginFor<T>,
             registration: JobRegistrationFor<T>,
@@ -203,27 +203,28 @@ pub mod pallet {
                 );
             }
 
-            T::RewardManager::lock_reward(
-                registration.reward.clone(),
-                T::Lookup::unlookup(who.clone()),
-            )?;
-
             <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
+
+            <T as Config>::JobHooks::register_hook(&who, &registration)?;
+
             Self::deposit_event(Event::JobRegistrationStored(registration, who));
             Ok(().into())
         }
 
         /// Deregisters a job for the given script.
-        #[pallet::weight(<T as Config>::WeightInfo::deregister())]
+        #[pallet::weight(< T as Config >::WeightInfo::deregister())]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             <StoredJobRegistration<T>>::remove(&who, &script);
+
+            <T as Config>::JobHooks::deregister_hook(&who, &script)?;
+
             Self::deposit_event(Event::JobRegistrationRemoved(script, who));
             Ok(().into())
         }
 
         /// Updates the allowed sources list of a [JobRegistration].
-        #[pallet::weight(<T as Config>::WeightInfo::update_allowed_sources())]
+        #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources())]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             script: Script,
@@ -268,9 +269,10 @@ pub mod pallet {
                     allowed_sources,
                     extra: registration.extra.clone(),
                     allow_only_verified_sources: registration.allow_only_verified_sources,
-                    reward: registration.reward.clone(),
                 },
             );
+
+            <T as Config>::JobHooks::update_allowed_sources_hook(&who, &script, &updates)?;
 
             Self::deposit_event(Event::AllowedSourcesUpdated(who, registration, updates));
 
@@ -278,7 +280,7 @@ pub mod pallet {
         }
 
         /// Assigns jobs to [AccountId]s. Those accounts can then later call `fulfill` for those jobs.
-        #[pallet::weight(<T as Config>::WeightInfo::update_job_assignments())]
+        #[pallet::weight(< T as Config >::WeightInfo::update_job_assignments())]
         pub fn update_job_assignments(
             origin: OriginFor<T>,
             updates: Vec<JobAssignmentUpdate<T::AccountId>>,
@@ -306,7 +308,7 @@ pub mod pallet {
         }
 
         /// Fulfills a previously registered job.
-        #[pallet::weight(<T as Config>::WeightInfo::fulfill())]
+        #[pallet::weight(< T as Config >::WeightInfo::fulfill())]
         pub fn fulfill(
             origin: OriginFor<T>,
             fulfillment: Fulfillment,
@@ -315,43 +317,33 @@ pub mod pallet {
             let who = ensure_signed(origin.clone())?;
             let requester = T::Lookup::lookup(requester)?;
 
-            // find assignment
-            let job_id: JobId<T::AccountId> = (requester, fulfillment.script.clone());
-            let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
-            let job_index = assigned_jobs
-                .iter()
-                .position(|assigned_job_id| assigned_job_id == &job_id)
-                .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
-
             // find registration
-            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            let registration =
+                <StoredJobRegistration<T>>::get(&requester.clone(), &fulfillment.script)
+                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
-            T::RewardManager::pay_reward(
-                registration.reward.clone(),
-                T::Lookup::unlookup(who.clone()),
+            <T as Config>::JobHooks::fulfill_hook(
+                &who,
+                &fulfillment,
+                requester.clone(),
+                &registration,
             )?;
 
-            // route fulfillment
             let info = T::FulfillmentRouter::received_fulfillment(
                 origin,
                 who.clone(),
                 fulfillment.clone(),
                 registration.clone(),
-                job_id.0,
+                requester.clone(),
             )?;
-
-            // removed fulfilled job from assigned jobs
-            let job_id = assigned_jobs.remove(job_index);
-            <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,
                 fulfillment,
                 registration,
-                job_id.0,
+                requester,
             ));
             Ok(info)
         }
@@ -363,7 +355,7 @@ pub mod pallet {
         /// - If the represented chain is valid, the [Attestation] details are stored. An existing attestion for signing account gets overwritten.
         ///
         /// Revocation: Each atttestation is stored with the unique IDs of the certificates on the chain proofing the attestation's validity.
-        #[pallet::weight(<T as Config>::WeightInfo::submit_attestation())]
+        #[pallet::weight(< T as Config >::WeightInfo::submit_attestation())]
         pub fn submit_attestation(
             origin: OriginFor<T>,
             attestation_chain: AttestationChain,
@@ -384,7 +376,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(<T as Config>::WeightInfo::register())]
+        #[pallet::weight(< T as Config >::WeightInfo::register())]
         pub fn update_certificate_revocation_list(
             origin: OriginFor<T>,
             updates: Vec<CertificateRevocationListUpdate>,

@@ -4,8 +4,8 @@ authors = ["Anonymous"]
 description = "FRAME pallet template for defining custom runtime logic."
 version = "0.1.0"
 license = "Unlicense"
-homepage = "https://substrate.io"
-repository = "https://github.com/paritytech/substrate/"
+homepage = "https://docs.acurast.com/"
+repository = "https://github.com/acurast"
 edition = "2021"
 
 [package.metadata.docs.rs]
@@ -22,6 +22,7 @@ frame-support = { git = "https://github.com/paritytech/substrate", default-featu
 frame-system = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
 
 pallet-acurast = { path = "../acurast", default-features = false}
+pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
 pallet-xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.29"}
 xcm = { package = "xcm", git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.29"}
@@ -67,6 +68,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-acurast/std",
+	"pallet-acurast-marketplace/std",
 	"pallet-timestamp/std",
 	"pallet-xcm/std",
 	"xcm-builder/std",

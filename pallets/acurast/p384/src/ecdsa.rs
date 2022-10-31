@@ -54,10 +54,7 @@ impl VerifyPrimitive<NistP384> for AffinePoint {}
 
 #[cfg(all(test, feature = "ecdsa"))]
 mod tests {
-    use crate::{
-        ecdsa::{SigningKey},
-        SecretKey,
-    };
+    use crate::{ecdsa::SigningKey, SecretKey};
 
     #[test]
     fn signing_secret_key_equivalent() {
@@ -83,5 +80,4 @@ mod tests {
         use crate::{test_vectors::ecdsa::ECDSA_TEST_VECTORS, NistP384};
         ecdsa_vendored::new_verification_test!(NistP384, ECDSA_TEST_VECTORS);
     }
-
 }

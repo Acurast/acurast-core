@@ -17,7 +17,6 @@ pub mod pallet {
         dispatch::DispatchResult, pallet_prelude::*, sp_runtime::traits::StaticLookup,
     };
     use frame_system::pallet_prelude::*;
-    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
     use xcm::v2::prelude::*;
     use xcm::v2::Instruction::{DescendOrigin, Transact};
     use xcm::v2::{
@@ -27,15 +26,20 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
+    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
+    use pallet_acurast_marketplace::Advertisement;
+
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member + MaxEncodedLen + Eq;
-        type Reward: Parameter + Member;
+        type RegistrationExtra: Parameter + Member;
+        type AssetId: Parameter + Member;
+        type AssetAmount: Parameter;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;
+        type AcurastMarketplacePalletId: Get<u8>;
         type AcurastParachainId: Get<u32>;
     }
 
@@ -48,7 +52,7 @@ pub mod pallet {
     pub enum ProxyCall<T: Config> {
         #[codec(index = 0u8)]
         Register {
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra, T::Reward>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
         },
 
         #[codec(index = 1u8)]
@@ -65,6 +69,11 @@ pub mod pallet {
             fulfillment: Fulfillment,
             requester: <T::Lookup as StaticLookup>::Source,
         },
+
+        #[codec(index = 0u8)]
+        Advertise {
+            advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,
+        },
     }
 
     #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -73,6 +82,7 @@ pub mod pallet {
         Deregister,
         UpdateAllowedSources,
         Fulfill,
+        Advertise,
     }
 
     impl<T: Config> ProxyCall<T> {
@@ -82,6 +92,7 @@ pub mod pallet {
                 ProxyCall::Deregister { .. } => ExtrinsicName::Deregister,
                 ProxyCall::UpdateAllowedSources { .. } => ExtrinsicName::UpdateAllowedSources,
                 ProxyCall::Fulfill { .. } => ExtrinsicName::Fulfill,
+                ProxyCall::Advertise { .. } => ExtrinsicName::Advertise,
             }
         }
     }
@@ -89,6 +100,7 @@ pub mod pallet {
     pub fn acurast_call<T: Config>(
         proxy_call: ProxyCall<T>,
         caller: T::AccountId,
+        pallet_id: u8,
     ) -> DispatchResult {
         // extract bytes from struct
         let account_bytes = caller.encode().try_into().unwrap();
@@ -98,7 +110,7 @@ pub mod pallet {
         // create an encoded version of the call
         let mut encoded_call = Vec::<u8>::new();
         // first byte is the pallet id on the destination chain
-        encoded_call.push(T::AcurastPalletId::get());
+        encoded_call.push(pallet_id);
         //second byte the position of the calling function on the enum,
         // and then the arguments SCALE encoded in order.
         encoded_call.append(&mut proxy_call.encode());
@@ -164,11 +176,11 @@ pub mod pallet {
         #[pallet::weight(10_000)]
         pub fn register(
             origin: OriginFor<T>,
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra, T::Reward>,
+            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Register { registration };
-            acurast_call::<T>(proxy_call, caller)
+            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 
         /// Deregisters a job for the given script.
@@ -176,7 +188,7 @@ pub mod pallet {
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Deregister { script };
-            acurast_call::<T>(proxy_call, caller)
+            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 
         /// Updates the allowed sources list of a [Registration].
@@ -188,7 +200,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::UpdateAllowedSources { script, updates };
-            acurast_call::<T>(proxy_call, caller)
+            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 
         /// Fulfills a previously registered job.
@@ -203,7 +215,18 @@ pub mod pallet {
                 fulfillment,
                 requester,
             };
-            acurast_call::<T>(proxy_call, caller)
+            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
+        }
+
+        /// Advertise resources by providing a [Advertisement]. If an advertisement for the same script was previously registered, it will be overwritten.
+        #[pallet::weight(10_000)]
+        pub fn advertise(
+            origin: OriginFor<T>,
+            advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,
+        ) -> DispatchResult {
+            let caller = ensure_signed(origin)?;
+            let proxy_call = ProxyCall::Advertise { advertisement };
+            acurast_call::<T>(proxy_call, caller, T::AcurastMarketplacePalletId::get())
         }
     }
 }
