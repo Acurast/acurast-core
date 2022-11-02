@@ -118,7 +118,7 @@ construct_runtime!(
 
 ### Example integration with EVM parachain
 
-The following example shows a possible integration approach for an EVM parachain (using the [frontier](https://github.com/paritytech/frontier)).
+The following example shows a possible integration approach for an EVM parachain using [frontier](https://github.com/paritytech/frontier).
 The example shows how to route the fulfillment's pyload to a smart contract by calling the `fulfill` mehod on it and passing the payload bytes are argument.
 
 ```rust
@@ -245,7 +245,7 @@ contract SimpleFulfill {
 ### Example integration with WASM smart contract parachain
 
 The following example shows a possible integration approach for a WASM smart contract parachain (using [pallet-contracts](https://github.com/paritytech/substrate/tree/master/frame/contracts)).
-Similarly to the EVM integration, the example shows how to route the fulfillment's pyload to a smart contract by calling the `fulfill` mehod on it and passing the payload bytes are argument.
+Similarly to the EVM integration, the example shows how to route the fulfillment's payload to a smart contract by calling the `fulfill` method on it and passing the payload bytes as argument.
 
 ```rust
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
