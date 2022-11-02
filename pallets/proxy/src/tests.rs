@@ -16,7 +16,7 @@
 
 use crate::mock::*;
 
-use crate::mock::proxy_runtime::AccountId;
+use crate::mock::{acurast_runtime::FeeManagerImpl, proxy_runtime::AccountId};
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
@@ -163,7 +163,7 @@ pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::Acco
     <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating()
 }
 pub fn pallet_fees_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
-    <AcurastRuntime as pallet_acurast::Config>::FeeManager::pallet_id().into_account_truncating()
+    FeeManagerImpl::pallet_id().into_account_truncating()
 }
 pub fn alice_account_id() -> AcurastAccountId {
     [0; 32].into()

@@ -52,8 +52,6 @@ pub mod pallet {
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for update_job_assignments extrinsic call.
         type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
-        // Fee Logic
-        type FeeManager: FeeManager;
         /// Timestamp
         type UnixTime: UnixTime;
         // Weight Logic
