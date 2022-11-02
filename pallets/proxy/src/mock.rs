@@ -252,11 +252,11 @@ pub mod acurast_runtime {
         type RegistrationExtra = ();
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
-        type RewardManager = payments::AssetRewardManager<AcurastAsset, AcurastBarrier>;
+        type RewardManager =
+            payments::AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = AcurastBarrier;
-        type FeeManager = FeeManagerImpl;
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }

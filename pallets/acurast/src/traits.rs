@@ -3,9 +3,9 @@ use crate::{
 };
 use frame_support::{
     pallet_prelude::{DispatchResultWithPostInfo, Member},
-    sp_runtime::{traits::StaticLookup, DispatchError, Percent},
+    sp_runtime::{traits::StaticLookup, DispatchError},
     weights::Weight,
-    Never, PalletId, Parameter,
+    Never, Parameter,
 };
 use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
@@ -61,12 +61,6 @@ pub trait WeightInfo {
     fn fulfill() -> Weight;
     fn submit_attestation() -> Weight;
     fn update_certificate_revocation_list() -> Weight;
-}
-
-// This trait provives methods for managing the fees.
-pub trait FeeManager {
-    fn get_fee_percentage() -> Percent;
-    fn pallet_id() -> PalletId;
 }
 
 pub trait Reward {

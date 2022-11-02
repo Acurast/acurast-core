@@ -260,11 +260,10 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type RewardManager = payments::AssetRewardManager<MultiAsset, Barrier>;
+    type RewardManager = payments::AssetRewardManager<MultiAsset, Barrier, FeeManagerImpl>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
-    type FeeManager = FeeManagerImpl;
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
 }
@@ -406,7 +405,7 @@ pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
 }
 
 pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
-    <Test as crate::Config>::FeeManager::pallet_id().into_account_truncating()
+    FeeManagerImpl::pallet_id().into_account_truncating()
 }
 
 pub fn alice_account_id() -> AccountId {

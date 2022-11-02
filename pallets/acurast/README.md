@@ -76,7 +76,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
 		from: <Runtime as frame_system::Config>::AccountId,
 		fulfillment: pallet_acurast::Fulfillment,
-		registration: pallet_acurast::JobRegistration<AcurastRegistrationExtra>,
+		registration: pallet_acurast::JobRegistrationFor<Runtime>,
 		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
 	) -> DispatchResultWithPostInfo {
 		/// route the fulfillment to its final destination
@@ -85,6 +85,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 
 parameter_types! {
     pub const MaxAllowedSources: u16 = 100;
+	pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
 }
 
 impl pallet_acurast::Config for Runtime {
@@ -92,8 +93,12 @@ impl pallet_acurast::Config for Runtime {
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
 	type MaxAllowedSources = MaxAllowedSources;
+	type RewardManager = (); // provide proper type to enable rewards to be payed on fulfillment
+	type PalletId = AcurastPalletId;
 	type RevocationListUpdateBarrier = ();
 	type JobAssignmentUpdateBarrier = ();
+	type UnixTime = pallet_timestamp::Pallet<Self>;
+	type WeightInfo = pallet_acurast::weights::WeightInfo<Self>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -144,7 +149,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
 		from: <Runtime as frame_system::Config>::AccountId,
 		fulfillment: pallet_acurast::Fulfillment,
-		registration: pallet_acurast::Registration<AcurastRegistrationExtra>,
+		registration: pallet_acurast::JobRegistrationFor<Runtime>,
 		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
 	) -> DispatchResultWithPostInfo {
 		let from_bytes: [u8; 32] = from.try_into().unwrap();
@@ -194,6 +199,7 @@ impl pallet_acurast::Config for Runtime {
 	type Event = Event;
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
+	...
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -272,8 +278,7 @@ impl pallet_acurast::Config for Runtime {
 	type Event = Event;
 	type RegistrationExtra = RegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
-	type MaxAllowedSources = MaxAllowedSources;
-	type AllowedRevocationListUpdate = AllowedRevocationListUpdate;
+	...
 }
 
 pub struct AcurastRouter;
@@ -282,7 +287,7 @@ impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
 		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
 		from: <Runtime as frame_system::Config>::AccountId,
 		fulfillment: pallet_acurast::Fulfillment,
-		registration: pallet_acurast::JobRegistration<AccountId, RegistrationExtra>,
+		registration: pallet_acurast::JobRegistrationFor<Runtime>,
 		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
 	) -> DispatchResultWithPostInfo {
 		Contracts::call(
