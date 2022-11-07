@@ -1,17 +1,15 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobRegistration, RewardFor};
+use pallet_acurast::JobRegistration;
 
+use crate::payments::RewardFor;
 use crate::Config;
 
 pub const MAX_PRICING_VARIANTS: u32 = 100;
 
-pub type JobRegistrationForMarketplace<T> = JobRegistration<
-    <T as frame_system::Config>::AccountId,
-    <T as Config>::RegistrationExtra,
-    RewardFor<T>,
->;
+pub type JobRegistrationForMarketplace<T> =
+    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
 /// The resource advertisement by a source containing pricing and capacity announcements.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
@@ -67,11 +65,18 @@ pub struct SLAEvaluation {
     met: u8,
 }
 
+pub(crate) type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;
+
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements {
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+pub struct JobRequirements<Reward>
+where
+    Reward: Parameter + Member,
+{
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// CPU milliseconds (upper bound) required to execute script.
     pub cpu_milliseconds: u128,
+    /// Reward offered for the job
+    pub reward: Reward,
 }

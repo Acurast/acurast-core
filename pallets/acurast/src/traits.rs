@@ -3,10 +3,9 @@ use crate::{
     JobAssignmentUpdate, JobRegistrationFor, Script,
 };
 use frame_support::{
-    pallet_prelude::{DispatchResultWithPostInfo, Member},
+    pallet_prelude::DispatchResultWithPostInfo,
     sp_runtime::{traits::StaticLookup, DispatchError},
     weights::Weight,
-    Never, Parameter,
 };
 use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
@@ -119,64 +118,5 @@ impl<T: Config> JobHooks<T> for () {
 impl<T: Config> From<()> for Error<T> {
     fn from(_: ()) -> Self {
         Self::JobHookFailed
-    }
-}
-
-pub trait Reward {
-    type AssetId;
-    type Balance;
-    type Error;
-
-    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error>;
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
-}
-
-impl Reward for () {
-    type AssetId = Never;
-    type Balance = Never;
-    type Error = ();
-
-    fn with_amount(&mut self, _: Self::Balance) -> Result<&Self, Self::Error> {
-        Err(())
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        Err(())
-    }
-
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
-        Err(())
-    }
-}
-
-pub trait RewardManager<T: Config> {
-    type Reward: Parameter + Member + Reward;
-
-    fn lock_reward(
-        reward: Self::Reward,
-        owner: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
-    fn pay_reward(
-        reward: Self::Reward,
-        target: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
-}
-
-impl<T: Config> RewardManager<T> for () {
-    type Reward = ();
-
-    fn lock_reward(
-        _reward: Self::Reward,
-        _owner: <<T>::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
-
-    fn pay_reward(
-        _reward: Self::Reward,
-        _target: <<T>::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
-        Ok(())
     }
 }

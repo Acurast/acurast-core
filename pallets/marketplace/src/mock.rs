@@ -12,9 +12,9 @@ use sp_runtime::{bounded_vec, generic, parameter_types, AccountId32, BoundedVec,
 use sp_std::prelude::*;
 
 use pallet_acurast::{
-    AssetBarrier, AttestationChain, CertificateRevocationListUpdate, FeeManager, Fulfillment,
-    FulfillmentRouter, JobAssignmentUpdate, JobAssignmentUpdateBarrier, JobRegistrationFor,
-    RevocationListUpdateBarrier, Reward, RewardManager, Script, SerialNumber,
+    AttestationChain, CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter,
+    JobAssignmentUpdate, JobAssignmentUpdateBarrier, JobRegistrationFor,
+    RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 use crate::*;
@@ -274,16 +274,15 @@ impl parachain_info::Config for Test {}
 
 impl pallet_acurast::Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirements;
+    type RegistrationExtra = JobRequirementsFor<Self>;
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type RewardManager = MockRewardManager;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
     type UnixTime = pallet_timestamp::Pallet<Test>;
-    type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
     type JobHooks = Pallet<Test>;
+    type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
 }
 
 pub struct MockRewardManager {}
@@ -308,11 +307,12 @@ impl<T: Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirements;
+    type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
-    type WeightInfo = weights::WeightInfo<Test>;
     type AssetId = AssetId;
     type AssetAmount = Balance;
+    type RewardManager = MockRewardManager;
+    type WeightInfo = weights::WeightInfo<Test>;
 }
 
 pub fn events() -> Vec<Event> {
@@ -464,10 +464,10 @@ pub fn job_registration_with_reward(
         script,
         allowed_sources: None,
         allow_only_verified_sources: false,
-        reward: asset(reward_value),
         extra: JobRequirements {
             slots: 1,
             cpu_milliseconds,
+            reward: asset(reward_value),
         },
     }
 }

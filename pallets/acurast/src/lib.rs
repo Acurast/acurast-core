@@ -9,7 +9,6 @@ mod tests;
 mod benchmarking;
 
 mod attestation;
-pub mod payments;
 mod traits;
 mod types;
 mod utils;
@@ -17,7 +16,6 @@ pub mod weights;
 pub mod xcm_adapters;
 
 pub use pallet::*;
-pub use payments::*;
 pub use traits::*;
 pub use types::*;
 
@@ -37,14 +35,12 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member + MaxEncodedLen;
+        type RegistrationExtra: Parameter + Member;
         /// The fulfillment router to route a job fulfillment to its final destination.
         type FulfillmentRouter: FulfillmentRouter<Self>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
-        /// Logic for locking and paying tokens for job execution
-        type RewardManager: RewardManager<Self>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
@@ -54,10 +50,10 @@ pub mod pallet {
         type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
         /// Timestamp
         type UnixTime: UnixTime;
-        /// Weight Logic
-        type WeightInfo: WeightInfo;
         /// Hooks used by tightly coupled subpallets.
         type JobHooks: JobHooks<Self>;
+        /// Weight Logic
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::pallet]
@@ -207,11 +203,6 @@ pub mod pallet {
                 );
             }
 
-            T::RewardManager::lock_reward(
-                registration.reward.clone(),
-                T::Lookup::unlookup(who.clone()),
-            )?;
-
             <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
 
             <T as Config>::JobHooks::register_hook(&who, &registration)?;
@@ -278,7 +269,6 @@ pub mod pallet {
                     allowed_sources,
                     extra: registration.extra.clone(),
                     allow_only_verified_sources: registration.allow_only_verified_sources,
-                    reward: registration.reward.clone(),
                 },
             );
 
@@ -341,25 +331,20 @@ pub mod pallet {
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
-            T::RewardManager::pay_reward(
-                registration.reward.clone(),
-                T::Lookup::unlookup(who.clone()),
-            )?;
-
-            // route fulfillment
-            let info = T::FulfillmentRouter::received_fulfillment(
-                origin,
-                who.clone(),
-                fulfillment.clone(),
-                registration.clone(),
-                job_id.0,
-            )?;
-
             // removed fulfilled job from assigned jobs
             let job_id = assigned_jobs.remove(job_index);
             <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
 
             <T as Config>::JobHooks::fulfill_hook(&who, &fulfillment, requester)?;
+
+            // only route fulfillment after calling hooks since not revertable
+            let info = T::FulfillmentRouter::received_fulfillment(
+                origin,
+                who.clone(),
+                fulfillment.clone(),
+                registration.clone(),
+                job_id.0.clone(),
+            )?;
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,

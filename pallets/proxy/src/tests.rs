@@ -14,24 +14,31 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::mock::*;
-
-use crate::mock::{acurast_runtime::FeeManagerImpl, proxy_runtime::AccountId};
-use acurast_runtime::AccountId as AcurastAccountId;
-use acurast_runtime::Runtime as AcurastRuntime;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
-use pallet_acurast::{FeeManager, JobAssignmentUpdate, JobRegistration};
 use polkadot_parachain::primitives::Id as ParaId;
-use xcm::latest::{MultiAsset, MultiLocation};
-use xcm::prelude::{Concrete, Fungible, GeneralIndex, PalletInstance, Parachain, X3};
+use sp_runtime::traits::ConstU32;
+use sp_runtime::{bounded_vec, BoundedVec};
+use xcm::prelude::*;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
+
+use acurast_runtime::AccountId as AcurastAccountId;
+use acurast_runtime::Runtime as AcurastRuntime;
+use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
+use pallet_acurast_marketplace::{
+    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
+};
+
+use crate::mock::*;
+use crate::mock::{acurast_runtime::FeeManagerImpl, proxy_runtime::AccountId};
 
 pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
 pub type AcurastPalletXcm = pallet_xcm::Pallet<acurast_runtime::Runtime>;
 
 pub const ALICE: frame_support::sp_runtime::AccountId32 =
     frame_support::sp_runtime::AccountId32::new([0u8; 32]);
+pub const BOB: frame_support::sp_runtime::AccountId32 =
+    frame_support::sp_runtime::AccountId32::new([1u8; 32]);
 pub const INITIAL_BALANCE: u128 = 1_000_000_000;
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
@@ -171,26 +178,48 @@ pub fn alice_account_id() -> AcurastAccountId {
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn owned_asset() -> MultiAsset {
-    MultiAsset {
+pub fn owned_asset(amount: u128) -> AcurastAsset {
+    AcurastAsset(MultiAsset {
         id: Concrete(MultiLocation {
             parents: 1,
             interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
         }),
-        fun: Fungible(INITIAL_BALANCE / 2),
-    }
+        fun: Fungible(amount),
+    })
 }
-pub fn registration() -> JobRegistration<AccountId, (), MultiAsset> {
+pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset>> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
         allow_only_verified_sources: false,
-        extra: (),
-        reward: owned_asset(),
+        extra: JobRequirements {
+            slots: 1,
+            cpu_milliseconds: 2,
+            reward: owned_asset(1000),
+        },
+    }
+}
+pub fn advertisement(
+    price_per_cpu_millisecond: u128,
+    capacity: u32,
+) -> Advertisement<AccountId, AcurastAssetId, AcurastAssetAmount> {
+    let pricing: BoundedVec<
+        PricingVariant<AcurastAssetId, AcurastAssetAmount>,
+        ConstU32<MAX_PRICING_VARIANTS>,
+    > = bounded_vec![PricingVariant {
+        reward_asset: 22,
+        price_per_cpu_millisecond,
+        bonus: 0,
+        maximum_slash: 0,
+    }];
+    Advertisement {
+        pricing,
+        allowed_consumers: None,
+        capacity,
     }
 }
 pub fn job_assignment_update_for(
-    registration: JobRegistration<AccountId, (), MultiAsset>,
+    registration: JobRegistration<AccountId, JobRequirements<AcurastAsset>>,
     requester: Option<AccountId>,
 ) -> Vec<JobAssignmentUpdate<AccountId>> {
     vec![JobAssignmentUpdate {
@@ -202,12 +231,12 @@ pub fn job_assignment_update_for(
 
 #[cfg(test)]
 mod network_tests {
-    use super::*;
-
     use codec::Encode;
     use frame_support::assert_ok;
     use xcm::latest::prelude::*;
     use xcm_simulator::TestExt;
+
+    use super::*;
 
     // Helper function for forming buy execution message
     fn buy_execution<C>(fees: impl Into<MultiAsset>) -> Instruction<C> {
@@ -440,11 +469,13 @@ mod network_tests {
 
 #[cfg(test)]
 mod proxy_calls {
-    use super::*;
     use frame_support::assert_ok;
     use frame_support::dispatch::Dispatchable;
-    use pallet_acurast::{Fulfillment, ListUpdateOperation};
     use xcm_simulator::TestExt;
+
+    use pallet_acurast::{Fulfillment, ListUpdateOperation};
+
+    use super::*;
 
     #[test]
     fn register() {
@@ -582,6 +613,37 @@ mod proxy_calls {
             assert!(events
                 .iter()
                 .any(|event| matches!(event.event, Event::Acurast(AllowedSourcesUpdated { .. }))));
+        });
+    }
+
+    #[test]
+    fn advertise() {
+        Network::reset();
+
+        CumulusParachain::execute_with(|| {
+            use crate::pallet::Call::advertise;
+            use proxy_runtime::Call::AcurastProxy;
+
+            let message_call = AcurastProxy(advertise {
+                advertisement: advertisement(1000u128, 5u32),
+            });
+            let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
+            let dispatch_status = message_call.dispatch(alice_origin);
+            assert_ok!(dispatch_status);
+        });
+
+        AcurastParachain::execute_with(|| {
+            use acurast_runtime::pallet_acurast_marketplace::Event::AdvertisementStored;
+            use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisement;
+            use acurast_runtime::{Event, Runtime, System};
+
+            let events = System::events();
+            let p_store = StoredAdvertisement::<Runtime>::get(ALICE);
+            assert!(p_store.is_some());
+            assert!(events.iter().any(|event| matches!(
+                event.event,
+                Event::AcurastMarketplace(AdvertisementStored { .. })
+            )));
         });
     }
 

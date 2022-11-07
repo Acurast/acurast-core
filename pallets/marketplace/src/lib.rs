@@ -12,27 +12,29 @@ mod tests;
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
 
+pub mod payments;
 mod traits;
-mod types;
+pub mod types;
 mod utils;
 pub mod weights;
 
+pub use payments::*;
+
 #[frame_support::pallet]
 pub mod pallet {
-    use core::fmt::Debug;
-
-    use codec::EncodeLike;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::{CheckedMul, MaybeDisplay};
+    use sp_runtime::traits::CheckedMul;
     use sp_std::prelude::*;
 
+    use crate::payments::{Reward, RewardFor};
+    use crate::RewardManager;
     use pallet_acurast::{
-        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Reward, RewardFor,
-        RewardManager, Script, StoredJobRegistration,
+        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
+        StoredJobRegistration,
     };
 
     use crate::traits::*;
@@ -46,32 +48,22 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
-            + Into<JobRequirements>
+            + Into<JobRequirements<RewardFor<Self>>>
             + Parameter
-            + Member
-            + MaxEncodedLen;
+            + Member;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
-        type WeightInfo: WeightInfo;
-        type AssetId: EncodeLike
-            + Decode
-            + MaxEncodedLen
-            + TypeInfo
-            + Clone
-            + PartialEq
-            + Eq
-            + Debug
-            + IsType<<RewardFor<Self> as Reward>::AssetId>;
-        type AssetAmount: CheckedMul
-            + From<u128>
-            + Parameter
+        type AssetId: Parameter + Member + IsType<<RewardFor<Self> as Reward>::AssetId>;
+        type AssetAmount: Parameter
             + Member
-            + MaybeSerializeDeserialize
-            + MaybeDisplay
+            + CheckedMul
+            + From<u128>
             + Ord
-            + MaxEncodedLen
             + IsType<<RewardFor<Self> as Reward>::Balance>;
+        /// Logic for locking and paying tokens for job execution
+        type RewardManager: RewardManager<Self>;
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::pallet]
@@ -256,14 +248,14 @@ pub mod pallet {
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirements = e.into();
+            let extra: JobRequirementsFor<T> = e.into();
 
             ensure!(
                 extra.cpu_milliseconds > 0,
                 Error::<T>::JobRegistrationZeroCPUMilliseconds
             );
             ensure!(extra.slots > 0, Error::<T>::JobRegistrationZeroSlots);
-            let reward_amount: T::AssetAmount = registration
+            let reward_amount: T::AssetAmount = extra
                 .reward
                 .try_get_amount()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
@@ -274,7 +266,7 @@ pub mod pallet {
             );
 
             // reward is understood per slot
-            let mut total = registration.reward.clone();
+            let mut total = extra.reward.clone();
             total
                 .with_amount(
                     reward_amount
@@ -283,8 +275,6 @@ pub mod pallet {
                         .into(),
                 )
                 .map_err(|_| Error::<T>::RewardConversionFailed)?;
-            T::RewardManager::lock_reward(total.clone(), T::Lookup::unlookup(who.clone()))
-                .map_err(|_| Error::<T>::InvalidPayment)?;
 
             <StoredJobStatus<T>>::insert(&who, &registration.script, JobStatus::default());
 
@@ -293,6 +283,10 @@ pub mod pallet {
                 let job_id: JobId<T::AccountId> = (who.clone(), registration.script.clone());
                 Self::deposit_event(Event::JobRegistrationMatched(job_id));
             }
+
+            // lock only after all other steps succeeded without errors because locking reward is not revertable
+            T::RewardManager::lock_reward(total.clone(), T::Lookup::unlookup(who.clone()))
+                .map_err(|_| Error::<T>::InvalidPayment)?;
 
             Ok(().into())
         }
@@ -344,20 +338,21 @@ pub mod pallet {
             let job_registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
                 .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
+            let e: <T as Config>::RegistrationExtra = job_registration.extra.clone().into();
+            let extra: JobRequirementsFor<T> = e.into();
+
             // validate
             ensure!(
                 job_status != JobStatus::Assigned,
                 Error::<T>::CannotFulfillJobWhenNotAssigned
             );
 
-            T::RewardManager::pay_reward(
-                job_registration.reward.clone(),
-                T::Lookup::unlookup(who.clone()),
-            )
-            .map_err(|_| Error::<T>::FailedToPay)?;
-
             // removed fulfilled job from assigned jobs
             <StoredJobAssignment<T>>::remove(&job_id, &who);
+
+            // pay only after all other steps succeeded without errors because locking reward is not revertable
+            T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
+                .map_err(|_| Error::<T>::FailedToPay)?;
 
             Ok(().into())
         }
@@ -377,19 +372,19 @@ pub mod pallet {
             registration: &JobRegistrationFor<T>,
         ) -> Result<bool, Error<T>> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirements = e.into();
+            let extra: JobRequirementsFor<T> = e.into();
 
             // strips away the asset amount
-            let reward_asset: <T as Config>::AssetId = registration
+            let reward_asset: <T as Config>::AssetId = extra
                 .reward
                 .try_get_asset_id()
-                .map_err(|_| Error::<T>::AdIndexInconsistent)?
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                 .into();
 
             // filter candidates according to reward asset
             let ads_with_reward = <StoredAdIndex<T>>::get(reward_asset);
             if let Some(ads) = ads_with_reward {
-                let reward_amount: T::AssetAmount = registration
+                let reward_amount: T::AssetAmount = extra
                     .reward
                     .try_get_amount()
                     .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?

@@ -6,10 +6,10 @@ use frame_support::{
         traits::{AccountIdConversion, Get, StaticLookup},
         DispatchError, Percent,
     },
-    PalletId, Parameter,
+    Never, PalletId, Parameter,
 };
 
-use crate::{Config, Reward, RewardManager};
+use crate::Config;
 
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
@@ -18,6 +18,67 @@ pub trait AssetBarrier<Asset> {
 impl<Asset> AssetBarrier<Asset> for () {
     fn can_use_asset(_asset: &Asset) -> bool {
         false
+    }
+}
+
+pub(crate) type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
+
+pub trait Reward {
+    type AssetId;
+    type Balance;
+    type Error;
+
+    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error>;
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
+    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
+}
+
+impl Reward for () {
+    type AssetId = Never;
+    type Balance = Never;
+    type Error = ();
+
+    fn with_amount(&mut self, _: Self::Balance) -> Result<&Self, Self::Error> {
+        Err(())
+    }
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+        Err(())
+    }
+
+    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+        Err(())
+    }
+}
+
+pub trait RewardManager<T: Config> {
+    type Reward: Parameter + Member + Reward;
+
+    fn lock_reward(
+        reward: Self::Reward,
+        owner: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
+    fn pay_reward(
+        reward: Self::Reward,
+        target: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
+}
+
+impl<T: Config> RewardManager<T> for () {
+    type Reward = ();
+
+    fn lock_reward(
+        _reward: Self::Reward,
+        _owner: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
+
+    fn pay_reward(
+        _reward: Self::Reward,
+        _target: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
     }
 }
 
@@ -34,8 +95,13 @@ impl<T: Config, Asset, Barrier, AssetSplit> RewardManager<T>
     for AssetRewardManager<Asset, Barrier, AssetSplit>
 where
     T: pallet_assets::Config,
-    T::AssetId: TryInto<u32>,
-    Asset: Parameter + Member + Reward<AssetId = T::AssetId, Balance = T::Balance>,
+    <T as pallet_assets::Config>::AssetId: TryInto<u32>,
+    Asset: Parameter
+        + Member
+        + Reward<
+            AssetId = <T as pallet_assets::Config>::AssetId,
+            Balance = <T as pallet_assets::Config>::Balance,
+        >,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
 {
@@ -48,7 +114,7 @@ where
         if !Barrier::can_use_asset(&reward) {
             return Err(DispatchError::Other("Invalid asset."));
         }
-        let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
+        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
@@ -74,7 +140,7 @@ where
         reward: Self::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
-        let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
+        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {

@@ -4,13 +4,11 @@ use frame_support::{pallet_prelude::GenesisBuild, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{generic, parameter_types, AccountId32, Percent};
-use xcm::prelude::*;
+use sp_runtime::{generic, parameter_types, AccountId32};
 
 use crate::{
-    payments, AssetBarrier, AttestationChain, FeeManager, Fulfillment, JobAssignmentUpdate,
-    JobAssignmentUpdateBarrier, JobRegistration, RevocationListUpdateBarrier, Reward, Script,
-    SerialNumber,
+    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
+    JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
 };
 
 type AccountId = AccountId32;
@@ -39,40 +37,6 @@ impl JobAssignmentUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl AssetBarrier<MultiAsset> for Barrier {
-    fn can_use_asset(_asset: &MultiAsset) -> bool {
-        true
-    }
-}
-
-impl Reward for MultiAsset {
-    type AssetId = u32;
-    type Balance = u128;
-    type Error = ();
-
-    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error> {
-        self.fun = Fungible(amount);
-        Ok(self)
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        match &self.id {
-            Concrete(location) => match location.last() {
-                Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
-                _ => Err(()),
-            },
-            Abstract(_) => Err(()),
-        }
-    }
-
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
-        match &self.fun {
-            Fungible(amount) => Ok(*amount),
-            _ => Err(()),
-        }
-    }
-}
-
 pub struct Router;
 
 impl crate::FulfillmentRouter<Test> for Router {
@@ -84,18 +48,6 @@ impl crate::FulfillmentRouter<Test> for Router {
         _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
     ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
-    }
-}
-
-pub struct FeeManagerImpl;
-
-impl FeeManager for FeeManagerImpl {
-    fn get_fee_percentage() -> Percent {
-        Percent::from_percent(30)
-    }
-
-    fn pallet_id() -> PalletId {
-        PalletId(*b"acurfees")
     }
 }
 
@@ -115,31 +67,6 @@ impl ExtBuilder {
             &parachain_info_config,
             &mut t,
         )
-        .unwrap();
-
-        pallet_balances::GenesisConfig::<Test> {
-            balances: vec![
-                (alice_account_id(), INITIAL_BALANCE),
-                (pallet_assets_account(), INITIAL_BALANCE),
-                (pallet_fees_account(), INITIAL_BALANCE),
-                (bob_account_id(), INITIAL_BALANCE),
-                (processor_account_id(), INITIAL_BALANCE),
-            ],
-        }
-        .assimilate_storage(&mut t)
-        .unwrap();
-
-        // give alice an initial balance of token 22 (backed by statemint) to pay for a job
-        // get the MultiAsset representing token 22 with owned_asset()
-        pallet_assets::GenesisConfig::<Test> {
-            assets: vec![(22, pallet_assets_account(), false, 1_000)],
-            metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-            accounts: vec![
-                (22, alice_account_id(), INITIAL_BALANCE),
-                (22, bob_account_id(), INITIAL_BALANCE),
-            ],
-        }
-        .assimilate_storage(&mut t)
         .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
@@ -270,7 +197,6 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
-    type RewardManager = payments::AssetRewardManager<MultiAsset, Barrier, FeeManagerImpl>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
@@ -308,18 +234,17 @@ pub fn invalid_script_2() -> Script {
 pub fn job_registration(
     allowed_sources: Option<Vec<AccountId>>,
     allow_only_verified_sources: bool,
-) -> JobRegistration<AccountId, (), MultiAsset> {
+) -> JobRegistration<AccountId, ()> {
     JobRegistration {
         script: script(),
         allowed_sources,
         allow_only_verified_sources,
         extra: (),
-        reward: owned_asset(),
     }
 }
 
 pub fn job_assignment_update_for(
-    registration: &JobRegistration<AccountId, (), MultiAsset>,
+    registration: &JobRegistration<AccountId, ()>,
     requester: Option<AccountId>,
 ) -> Vec<JobAssignmentUpdate<AccountId>> {
     vec![JobAssignmentUpdate {
@@ -332,27 +257,25 @@ pub fn job_assignment_update_for(
     }]
 }
 
-pub fn invalid_job_registration_1() -> JobRegistration<AccountId, (), MultiAsset> {
+pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
     JobRegistration {
         script: invalid_script_1(),
         allowed_sources: None,
         allow_only_verified_sources: false,
-        reward: owned_asset(),
         extra: (),
     }
 }
 
-pub fn invalid_job_registration_2() -> JobRegistration<AccountId, (), MultiAsset> {
+pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
     JobRegistration {
         script: invalid_script_2(),
         allowed_sources: None,
         allow_only_verified_sources: false,
-        reward: owned_asset(),
         extra: (),
     }
 }
 
-pub fn fulfillment_for(registration: &JobRegistration<AccountId, (), MultiAsset>) -> Fulfillment {
+pub fn fulfillment_for(registration: &JobRegistration<AccountId, ()>) -> Fulfillment {
     Fulfillment {
         script: registration.script.clone(),
         payload: hex!("00").to_vec(),
@@ -415,10 +338,6 @@ pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
     <Test as crate::Config>::PalletId::get().into_account_truncating()
 }
 
-pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
-    FeeManagerImpl::pallet_id().into_account_truncating()
-}
-
 pub fn alice_account_id() -> AccountId {
     [0; 32].into()
 }
@@ -437,15 +356,4 @@ pub fn dave_account_id() -> AccountId {
 
 pub fn eve_account_id() -> AccountId {
     [4; 32].into()
-}
-
-// owned by alice
-pub fn owned_asset() -> MultiAsset {
-    MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(INITIAL_BALANCE / 2),
-    }
 }

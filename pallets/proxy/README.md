@@ -73,7 +73,7 @@ to acurast. The pallet id is needed to properly encode the call that we want to 
 ```rust
 parameter_types! {
 	pub const AcurastParachainId: u32 = 2000;
-	pub const AcurastPalletId: u8 = 40;
+	pub const AcurastPalletId: u8 = 41;
 }
 ```
 the parachain id should be found in the chainspec of acurast, and the pallet id in the definition inside the construct_runtime macro
@@ -89,6 +89,6 @@ impl acurast_proxy::Config for Runtime {
 	type AcurastParachainId = AcurastParachainId;
 	type AcurastPalletId = AcurastPalletId;
 	type XcmSender = XcmRouter;
-	type RegistrationExtra = ();
+	type RegistrationExtra = JobRequirements<AcurastAsset>;
 }
 ```
