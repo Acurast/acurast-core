@@ -105,9 +105,9 @@ pub mod pallet {
     pub type StoredJobAssignment<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        JobId<T::AccountId>,
-        Blake2_128Concat,
         T::AccountId,
+        Blake2_128Concat,
+        JobId<T::AccountId>,
         u8,
     >;
 
@@ -329,7 +329,7 @@ pub mod pallet {
         ) -> Result<(), DispatchError> {
             // find assignment
             let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
-            <StoredJobAssignment<T>>::get(&job_id, &who)
+            <StoredJobAssignment<T>>::get(&who, &job_id)
                 .ok_or(pallet_acurast::Error::<T>::FulfillSourceNotAllowed)?;
 
             // find job
@@ -348,7 +348,7 @@ pub mod pallet {
             );
 
             // removed fulfilled job from assigned jobs
-            <StoredJobAssignment<T>>::remove(&job_id, &who);
+            <StoredJobAssignment<T>>::remove(&who, &job_id);
 
             // pay only after all other steps succeeded without errors because locking reward is not revertable
             T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
@@ -435,8 +435,8 @@ pub mod pallet {
                     // all slots matched
                     for (slot, candidate) in candidates.iter().enumerate() {
                         <StoredJobAssignment<T>>::set(
-                            (&who, &registration.script),
                             &candidate.0,
+                            (&who, &registration.script),
                             Some(slot as u8),
                         );
 
