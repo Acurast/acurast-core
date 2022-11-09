@@ -317,40 +317,34 @@ pub mod pallet {
             let who = ensure_signed(origin.clone())?;
             let requester = T::Lookup::lookup(requester)?;
 
-            // find assignment
-            let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
-            let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
-            let job_index = assigned_jobs
-                .iter()
-                .position(|assigned_job_id| assigned_job_id == &job_id)
-                .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
-
             // find registration
-            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            let registration =
+                <StoredJobRegistration<T>>::get(&requester.clone(), &fulfillment.script)
+                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             ensure_source_allowed::<T>(&who, &registration)?;
 
-            // removed fulfilled job from assigned jobs
-            let job_id = assigned_jobs.remove(job_index);
-            <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+            <T as Config>::JobHooks::fulfill_hook(
+                &who,
+                &fulfillment,
+                requester.clone(),
+                &registration,
+            )?;
 
-            <T as Config>::JobHooks::fulfill_hook(&who, &fulfillment, requester)?;
-
-            // only route fulfillment after calling hooks since not revertable
+            // only route fulfillment after all checks succeeded since this call is not revertable
             let info = T::FulfillmentRouter::received_fulfillment(
                 origin,
                 who.clone(),
                 fulfillment.clone(),
                 registration.clone(),
-                job_id.0.clone(),
+                requester.clone(),
             )?;
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,
                 fulfillment,
                 registration,
-                job_id.0,
+                requester,
             ));
             Ok(info)
         }

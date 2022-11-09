@@ -70,7 +70,7 @@ pub mod pallet {
             requester: <T::Lookup as StaticLookup>::Source,
         },
 
-        #[codec(index = 5u8)]
+        #[codec(index = 0u8)]
         Advertise {
             advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,
         },

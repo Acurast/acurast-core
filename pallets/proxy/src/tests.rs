@@ -17,16 +17,16 @@
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
-use sp_runtime::traits::ConstU32;
 use sp_runtime::{bounded_vec, BoundedVec};
+use sp_runtime::traits::ConstU32;
 use xcm::prelude::*;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
-use pallet_acurast::{JobAssignmentUpdate, JobRegistration};
+use pallet_acurast::JobRegistration;
 use pallet_acurast_marketplace::{
-    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
+    Advertisement, FeeManager, JobRequirements, PricingVariant, types::MAX_PRICING_VARIANTS,
 };
 
 use crate::mock::*;
@@ -195,7 +195,7 @@ pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset
         extra: JobRequirements {
             slots: 1,
             cpu_milliseconds: 2,
-            reward: owned_asset(2000),
+            reward: owned_asset(20000),
         },
     }
 }
@@ -217,16 +217,6 @@ pub fn advertisement(
         allowed_consumers: None,
         capacity,
     }
-}
-pub fn job_assignment_update_for(
-    registration: JobRegistration<AccountId, JobRequirements<AcurastAsset>>,
-    requester: Option<AccountId>,
-) -> Vec<JobAssignmentUpdate<AccountId>> {
-    vec![JobAssignmentUpdate {
-        operation: pallet_acurast::ListUpdateOperation::Add,
-        assignee: processor_account_id(),
-        job_id: (requester.unwrap_or(alice_account_id()), registration.script),
-    }]
 }
 
 #[cfg(test)]
@@ -473,15 +463,15 @@ mod proxy_calls {
     use frame_support::dispatch::Dispatchable;
     use xcm_simulator::TestExt;
 
-    use pallet_acurast::{Fulfillment, ListUpdateOperation};
-
     use super::*;
 
     #[test]
     fn register() {
         Network::reset();
-        use pallet_acurast::Script;
+        register_job_alice();
+    }
 
+    fn register_job_alice() {
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::register;
             use proxy_runtime::Call::AcurastProxy;
@@ -498,6 +488,7 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationStored;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Event, Runtime, System};
+            use pallet_acurast::{Script};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
@@ -564,14 +555,12 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::Runtime;
+            use pallet_acurast::{Script};
 
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
             let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
             assert!(p_store.is_some());
         });
-
-        use frame_support::dispatch::Dispatchable;
-        use pallet_acurast::{AllowedSourcesUpdate, Script};
 
         let rand_array: [u8; 32] = rand::random();
         let source = frame_support::sp_runtime::AccountId32::new(rand_array);
@@ -579,6 +568,7 @@ mod proxy_calls {
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::update_allowed_sources;
             use proxy_runtime::Call::AcurastProxy;
+            use pallet_acurast::{AllowedSourcesUpdate, ListUpdateOperation};
 
             let update = AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
@@ -599,6 +589,7 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::AllowedSourcesUpdated;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Event, Runtime, System};
+            use pallet_acurast::{Script};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
@@ -616,91 +607,110 @@ mod proxy_calls {
         });
     }
 
-    // #[test]
-    // fn advertise() {
-    //     Network::reset();
-    //
-    //     CumulusParachain::execute_with(|| {
-    //         use crate::pallet::Call::advertise;
-    //         use proxy_runtime::Call::AcurastProxy;
-    //
-    //         let message_call = AcurastProxy(advertise {
-    //             advertisement: advertisement(1000u128, 5u32),
-    //         });
-    //         let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
-    //         let dispatch_status = message_call.dispatch(alice_origin);
-    //         assert_ok!(dispatch_status);
-    //     });
-    //
-    //     AcurastParachain::execute_with(|| {
-    //         use acurast_runtime::pallet_acurast_marketplace::Event::AdvertisementStored;
-    //         use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisement;
-    //         use acurast_runtime::{Event, Runtime, System};
-    //
-    //         let events = System::events();
-    //         let p_store = StoredAdvertisement::<Runtime>::get(ALICE);
-    //         assert!(p_store.is_some());
-    //         assert!(events.iter().any(|event| matches!(
-    //             event.event,
-    //             Event::AcurastMarketplace(AdvertisementStored { .. })
-    //         )));
-    //     });
-    // }
+    #[test]
+    fn advertise() {
+        advertise_bob();
+    }
 
-    // #[test]
-    // fn fulfill() {
-    //     use frame_support::dispatch::Dispatchable;
-    //
-    //     Network::reset();
-    //
-    //     advertise();
-    //     register();
-    //
-    //     // check that job is stored in the context of this test
-    //     AcurastParachain::execute_with(|| {
-    //         use acurast_runtime::{Call::Acurast, Origin};
-    //         use pallet_acurast::Call::update_job_assignments;
-    //         // StoredJobAssignment::<Runtime>::set(bob.clone(), Some(vec![(ALICE, script)]));
-    //
-    //         let extrinsic_call = Acurast(update_job_assignments {
-    //             updates: job_assignment_update_for(registration(), Some(alice_account_id())),
-    //         });
-    //
-    //         let dispatch_status = extrinsic_call.dispatch(Origin::signed(alice_account_id()));
-    //         assert_ok!(dispatch_status);
-    //     });
-    //
-    //     CumulusParachain::execute_with(|| {
-    //         use crate::pallet::Call::fulfill;
-    //         use proxy_runtime::Call::AcurastProxy;
-    //
-    //         let payload: [u8; 32] = rand::random();
-    //
-    //         let fulfillment = Fulfillment {
-    //             script: registration().script,
-    //             payload: payload.to_vec(),
-    //         };
-    //
-    //         let message_call = AcurastProxy(fulfill {
-    //             fulfillment,
-    //             requester: frame_support::sp_runtime::MultiAddress::Id(alice_account_id()),
-    //         });
-    //
-    //         let processor_origin = proxy_runtime::Origin::signed(processor_account_id());
-    //         let dispatch_status = message_call.dispatch(processor_origin);
-    //         assert_ok!(dispatch_status);
-    //     });
-    //
-    //     AcurastParachain::execute_with(|| {
-    //         use acurast_runtime::pallet_acurast::Event::ReceivedFulfillment;
-    //         use acurast_runtime::{Event, System};
-    //
-    //         let events = System::events();
-    //
-    //         //event emitted
-    //         assert!(events
-    //             .iter()
-    //             .any(|event| matches!(event.event, Event::Acurast(ReceivedFulfillment { .. }))));
-    //     });
-    // }
+    fn advertise_bob() {
+        Network::reset();
+
+        CumulusParachain::execute_with(|| {
+            use crate::pallet::Call::advertise;
+            use proxy_runtime::Call::AcurastProxy;
+
+            let message_call = AcurastProxy(advertise {
+                advertisement: advertisement(10000u128, 5u32),
+            });
+            let bob_origin = proxy_runtime::Origin::signed(bob_account_id());
+            let dispatch_status = message_call.dispatch(bob_origin);
+            assert_ok!(dispatch_status);
+        });
+
+        AcurastParachain::execute_with(|| {
+            use acurast_runtime::pallet_acurast_marketplace::Event::AdvertisementStored;
+            use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisement;
+            use acurast_runtime::{Event, Runtime, System};
+
+            let events = System::events();
+            let p_store = StoredAdvertisement::<Runtime>::get(BOB);
+            assert!(p_store.is_some());
+            assert!(events.iter().any(|event| matches!(
+                event.event,
+                Event::AcurastMarketplace(AdvertisementStored { .. })
+            )));
+        });
+    }
+
+    #[test]
+    fn fulfill() {
+        use frame_support::dispatch::Dispatchable;
+
+        Network::reset();
+
+        // WHEN
+        advertise_bob();
+
+        // THEN check the ad is in index
+        AcurastParachain::execute_with(|| {
+            use acurast_runtime::pallet_acurast_marketplace::StoredAdIndex;
+            use acurast_runtime::{Runtime};
+
+            let p_store = StoredAdIndex::<Runtime>::get(22);
+            assert!(p_store.is_some());
+        });
+
+        // WHEN
+        register_job_alice();
+
+        // THEN check that job got matched
+        AcurastParachain::execute_with(|| {
+            use acurast_runtime::pallet_acurast_marketplace::StoredJobAssignment;
+            use acurast_runtime::{Event, Runtime, System};
+            use pallet_acurast::{Script};
+            use pallet_acurast_marketplace::Event::JobRegistrationMatched;
+
+            let events = System::events();
+            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
+            let p_store = StoredJobAssignment::<Runtime>::get(bob_account_id(), (ALICE, script));
+            assert!(p_store.is_some());
+            assert!(events
+                .iter()
+                .any(|event| matches!(event.event, Event::AcurastMarketplace(JobRegistrationMatched { .. }))));
+        });
+
+        CumulusParachain::execute_with(|| {
+            use crate::pallet::Call::fulfill;
+            use proxy_runtime::Call::AcurastProxy;
+            use pallet_acurast::{Fulfillment};
+
+            let payload: [u8; 32] = rand::random();
+
+            let fulfillment = Fulfillment {
+                script: registration().script,
+                payload: payload.to_vec(),
+            };
+
+            let message_call = AcurastProxy(fulfill {
+                fulfillment,
+                requester: frame_support::sp_runtime::MultiAddress::Id(alice_account_id()),
+            });
+
+            let origin = proxy_runtime::Origin::signed(bob_account_id());
+            let dispatch_status = message_call.dispatch(origin);
+            assert_ok!(dispatch_status);
+        });
+
+        AcurastParachain::execute_with(|| {
+            use acurast_runtime::pallet_acurast::Event::ReceivedFulfillment;
+            use acurast_runtime::{Event, System};
+
+            let events = System::events();
+
+            //event emitted
+            assert!(events
+                .iter()
+                .any(|event| matches!(event.event, Event::Acurast(ReceivedFulfillment { .. }))));
+        });
+    }
 }

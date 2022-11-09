@@ -1,7 +1,3 @@
-use crate::{
-    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, Fulfillment,
-    JobAssignmentUpdate, JobRegistrationFor, Script,
-};
 use frame_support::{
     pallet_prelude::DispatchResultWithPostInfo,
     sp_runtime::{traits::StaticLookup, DispatchError},
@@ -9,6 +5,11 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
+
+use crate::{
+    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, Fulfillment,
+    JobAssignmentUpdate, JobId, JobRegistrationFor, Script, StoredJobAssignment,
+};
 
 /// This trait provides the interface for a fulfillment router.
 pub trait FulfillmentRouter<T: Config> {
@@ -82,6 +83,7 @@ pub trait JobHooks<T: Config> {
         who: &<T as frame_system::Config>::AccountId,
         fulfillment: &Fulfillment,
         requester: <T::Lookup as StaticLookup>::Target,
+        registration: &JobRegistrationFor<T>,
     ) -> Result<(), DispatchError>;
 }
 
@@ -107,10 +109,23 @@ impl<T: Config> JobHooks<T> for () {
         Ok(())
     }
     fn fulfill_hook(
-        _who: &<T as frame_system::Config>::AccountId,
-        _fulfillment: &Fulfillment,
-        _requester: <T::Lookup as StaticLookup>::Target,
+        who: &<T as frame_system::Config>::AccountId,
+        fulfillment: &Fulfillment,
+        requester: <T::Lookup as StaticLookup>::Target,
+        _registration: &JobRegistrationFor<T>,
     ) -> Result<(), DispatchError> {
+        // find assignment
+        let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
+        let mut assigned_jobs = <StoredJobAssignment<T>>::get(&who).unwrap_or_default();
+        let job_index = assigned_jobs
+            .iter()
+            .position(|assigned_job_id| assigned_job_id == &job_id)
+            .ok_or(Error::<T>::FulfillSourceNotAllowed)?;
+
+        // removed fulfilled job from assigned jobs
+        assigned_jobs.remove(job_index);
+        <StoredJobAssignment<T>>::set(&who, Some(assigned_jobs));
+
         Ok(())
     }
 }

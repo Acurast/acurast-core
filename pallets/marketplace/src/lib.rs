@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use payments::*;
 pub use traits::*;
 pub use types::*;
 
@@ -18,25 +19,19 @@ pub mod types;
 mod utils;
 pub mod weights;
 
-pub use payments::*;
-
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{
-        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
-    };
+    use frame_support::{Blake2_128Concat, dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, PalletId, sp_runtime::traits::StaticLookup};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::CheckedMul;
     use sp_std::prelude::*;
 
-    use crate::payments::{Reward, RewardFor};
-    use crate::RewardManager;
     use pallet_acurast::{
         AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
-        StoredJobRegistration,
     };
 
+    use crate::payments::{Reward, RewardFor};
+    use crate::RewardManager;
     use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
@@ -326,6 +321,7 @@ pub mod pallet {
             who: &T::AccountId, // processor
             fulfillment: &Fulfillment,
             requester: <T::Lookup as StaticLookup>::Target, // the consumer that registered the job originally
+            registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
             // find assignment
             let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
@@ -333,12 +329,10 @@ pub mod pallet {
                 .ok_or(pallet_acurast::Error::<T>::FulfillSourceNotAllowed)?;
 
             // find job
-            let job_status = <StoredJobStatus<T>>::get(&who, &fulfillment.script)
+            let job_status = <StoredJobStatus<T>>::get(requester.clone(), &fulfillment.script)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
-            let job_registration = <StoredJobRegistration<T>>::get(&job_id.0, &fulfillment.script)
-                .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            let e: <T as Config>::RegistrationExtra = job_registration.extra.clone().into();
+            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
             let extra: JobRequirementsFor<T> = e.into();
 
             // validate
