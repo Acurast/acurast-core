@@ -52,7 +52,7 @@ pub mod pallet {
             + CheckedMul
             + From<u128>
             + Ord
-            + IsType<<RewardFor<Self> as Reward>::Balance>;
+            + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;

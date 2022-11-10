@@ -17,10 +17,10 @@ pub struct AcurastAsset(pub MultiAsset);
 
 impl Reward for AcurastAsset {
     type AssetId = AcurastAssetId;
-    type Balance = AcurastAssetAmount;
+    type AssetAmount = AcurastAssetAmount;
     type Error = ();
 
-    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error> {
+    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
         self.0 = MultiAsset {
             id: self.0.id.clone(),
             fun: Fungible(amount),
@@ -38,7 +38,7 @@ impl Reward for AcurastAsset {
         }
     }
 
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
         match &self.0.fun {
             Fungible(amount) => Ok(*amount),
             _ => Err(()),

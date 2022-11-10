@@ -25,20 +25,20 @@ pub(crate) type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>
 
 pub trait Reward {
     type AssetId;
-    type Balance;
+    type AssetAmount;
     type Error;
 
-    fn with_amount(&mut self, amount: Self::Balance) -> Result<&Self, Self::Error>;
+    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error>;
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error>;
+    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error>;
 }
 
 impl Reward for () {
     type AssetId = Never;
-    type Balance = Never;
+    type AssetAmount = Never;
     type Error = ();
 
-    fn with_amount(&mut self, _: Self::Balance) -> Result<&Self, Self::Error> {
+    fn with_amount(&mut self, _: Self::AssetAmount) -> Result<&Self, Self::Error> {
         Err(())
     }
 
@@ -46,7 +46,7 @@ impl Reward for () {
         Err(())
     }
 
-    fn try_get_amount(&self) -> Result<Self::Balance, Self::Error> {
+    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
         Err(())
     }
 }
@@ -100,7 +100,7 @@ where
         + Member
         + Reward<
             AssetId = <T as pallet_assets::Config>::AssetId,
-            Balance = <T as pallet_assets::Config>::Balance,
+            AssetAmount= <T as pallet_assets::Config>::Balance,
         >,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
