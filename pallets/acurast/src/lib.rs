@@ -331,7 +331,6 @@ pub mod pallet {
                 &registration,
             )?;
 
-            // only route fulfillment after all checks succeeded since this call is not revertable
             let info = T::FulfillmentRouter::received_fulfillment(
                 origin,
                 who.clone(),

@@ -43,15 +43,12 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
-            + Into<JobRequirements<RewardFor<Self>>>
-            + Parameter
-            + Member;
+            + Into<JobRequirements<RewardFor<Self>>>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
-        type AssetId: Parameter + Member + IsType<<RewardFor<Self> as Reward>::AssetId>;
+        type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
-            + Member
             + CheckedMul
             + From<u128>
             + Ord
@@ -72,7 +69,7 @@ pub mod pallet {
     pub type StoredJobStatus<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, Script, JobStatus>;
 
-    /// The storage for advertisements. They are stored as a map [AccountId] -> [Advertisment] since only one
+    /// The storage for advertisements. They are stored as a map [AccountId] -> [Advertisement] since only one
     /// advertisement per client is allowed.
     #[pallet::storage]
     #[pallet::getter(fn stored_advertisement)]
@@ -91,10 +88,10 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         <T as Config>::AssetId,
-        Vec<AdvertismentIndexValue<T::AccountId, T::AssetAmount>>,
+        Vec<AdvertisementIndexValue<T::AccountId, T::AssetAmount>>,
     >;
 
-    /// Job assignments as a map [JobId] -> source's [AccountId] -> SlotId
+    /// Job assignments as a map source's [AccountId] -> [JobId] -> SlotId
     #[pallet::storage]
     #[pallet::getter(fn stored_job_assignment)]
     pub type StoredJobAssignment<T: Config> = StorageDoubleMap<
@@ -109,14 +106,12 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// A registration was successfully matched. [registration, who]
+        /// A registration was successfully matched. [JobId]
         JobRegistrationMatched(JobId<T::AccountId>),
-        /// A advertisement was successfully stored. [registration, who]
+        /// A advertisement was successfully stored. [advertisement, who]
         AdvertisementStored(AdvertisementFor<T>, T::AccountId),
         /// A registration was successfully removed. [who]
         AdvertisementRemoved(T::AccountId),
-        // /// The job assignemts have been updated. [who, updates]
-        // JobAssignmentUpdate(T::AccountId, Vec<JobAssignmentUpdate<T::AccountId>>),
     }
 
     #[pallet::error]

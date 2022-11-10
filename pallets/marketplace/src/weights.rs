@@ -39,9 +39,4 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(3 as u64))
 	}
-	// fn update_job_matching() -> Weight {
-	// 	Weight::from_ref_time(21_000_000 as u64)
-	// 		.saturating_add(T::DbWeight::get().reads(2 as u64))
-	// 		.saturating_add(T::DbWeight::get().writes(1 as u64))
-	// }
 }

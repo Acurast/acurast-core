@@ -16,7 +16,7 @@ pub type JobRegistrationForMarketplace<T> =
 pub struct Advertisement<AccountId, AssetId, AssetAmount> {
     /// The reward token accepted. Understood as one-of per job assigned.
     pub pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>>,
-    // Capacity not too be exceeded in matching.
+    // Capacity not to be exceeded in matching.
     pub capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
     pub allowed_consumers: Option<Vec<AccountId>>,
@@ -42,7 +42,7 @@ pub struct PricingVariant<AssetId, AssetAmount> {
     pub maximum_slash: AssetAmount,
 }
 
-pub type AdvertismentIndexValue<AccountId, AssetAmount> = (AccountId, AssetAmount);
+pub type AdvertisementIndexValue<AccountId, AssetAmount> = (AccountId, AssetAmount);
 
 /// The allowed sources update operation.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
