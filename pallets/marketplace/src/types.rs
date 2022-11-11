@@ -65,7 +65,7 @@ pub struct SLAEvaluation {
     met: u8,
 }
 
-pub(crate) type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;
+pub type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]

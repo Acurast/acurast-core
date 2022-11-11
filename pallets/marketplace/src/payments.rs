@@ -21,7 +21,7 @@ impl<Asset> AssetBarrier<Asset> for () {
     }
 }
 
-pub(crate) type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
+pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
 pub trait Reward {
     type AssetId;

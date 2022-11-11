@@ -30,7 +30,7 @@ pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
 
 pub fn job_registration_n<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T>
 where
-    <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
+    RewardFor<T>: From<MultiAsset>,
 {
     return JobRegistration {
         script: script(),
@@ -112,7 +112,7 @@ fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>
 where
     T: pallet_assets::Config,
     <T as Config>::RegistrationExtra: Default,
-    <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
+    RewardFor<T>: From<MultiAsset>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
 {
@@ -163,7 +163,7 @@ benchmarks! {
     where_clause {  where
         T: pallet_assets::Config,
         <T as Config>::RegistrationExtra: Default,
-        <<T as Config>::RewardManager as RewardManager<T>>::Reward: From<MultiAsset>,
+        RewardFor<T>: From<MultiAsset>,
         <T as pallet_assets::Config>::AssetId: From<u32>,
         <T as pallet_assets::Config>::Balance: From<u128>,
         <T as frame_system::Config>::AccountId: From<[u8; 32]>,
