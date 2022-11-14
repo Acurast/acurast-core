@@ -24,7 +24,7 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub type BlockNumber = u32;
 
-pub type AssetId = u8;
+pub type AssetId = u32;
 pub type AssetAmount = u128;
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]

@@ -7,17 +7,7 @@
 //! EXECUTION: Some(Wasm), WASM-EXECUTION: Compiled, CHAIN: Some("acurast-dev"), DB CACHE: 1024
 
 // Executed Command:
-// ./target/release/acurast-node
-// benchmark
-// pallet
-// --chain=acurast-dev
-// --execution=wasm
-// --wasm-execution=compiled
-// --pallet=pallet_acurast
-// --extrinsic=*
-// --steps=50
-// --repeat=20
-// --output=./weights.rs
+// ./target/release/acurast-node benchmark pallet --chain=acurast-dev --execution=wasm --wasm-execution=compiled --pallet=pallet_acurast --extrinsic=* --steps=50 --repeat=20 --output=./weights.rs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
@@ -37,6 +27,43 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 	fn delete_advertisement() -> Weight {
 		Weight::from_ref_time(22_000_000 as u64)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+}
+impl<T: frame_system::Config> WeightInfo<T> {
+	pub fn register() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn deregister() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn update_allowed_sources() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn update_job_assignments() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn fulfill() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn submit_attestation() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
+	pub fn update_certificate_revocation_list() -> Weight {
+		Weight::from_ref_time(22_000_000 as u64)
+			.saturating_add(T::DbWeight::get().reads(3 as u64))
 			.saturating_add(T::DbWeight::get().writes(3 as u64))
 	}
 }

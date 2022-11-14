@@ -1,6 +1,3 @@
-use super::*;
-use crate::utils::validate_and_extract_attestation;
-use crate::Pallet as Acurast;
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
@@ -10,8 +7,14 @@ use frame_support::{
 use frame_system::RawOrigin;
 use hex_literal::hex;
 use sp_std::prelude::*;
-use types::{AllowedSourcesUpdate, JobAssignmentUpdate};
-use xcm::prelude::*;
+
+pub use pallet::Config;
+use types::{AttestationChain, JobRegistration, JobRegistrationFor, Script};
+
+use crate::utils::validate_and_extract_attestation;
+use crate::Pallet as Acurast;
+
+use super::*;
 
 pub type Balance = u128;
 
@@ -28,27 +31,13 @@ pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
-pub fn job_registration_n<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T>
-where
-    RewardFor<T>: From<MultiAsset>,
-{
+pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T> {
     return JobRegistration {
         script: script(),
         allowed_sources: None,
-        extra,
-        reward: owned_asset().into(),
         allow_only_verified_sources: false,
+        extra,
     };
-}
-
-pub fn owned_asset() -> MultiAsset {
-    MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(INITIAL_BALANCE / 2),
-    }
 }
 
 pub fn script() -> Script {
@@ -84,7 +73,7 @@ where
     use pallet_assets::Pallet as Assets;
     let caller: T::AccountId = account("token_account", 0, SEED);
     whitelist_account!(caller);
-    let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
+    let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
     let pallet_origin: T::Origin = RawOrigin::Signed(pallet_account.clone()).into();
 
     T::Currency::make_free_balance_be(&caller, u32::MAX.into());
@@ -111,14 +100,14 @@ where
 fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>)
 where
     T: pallet_assets::Config,
-    <T as Config>::RegistrationExtra: Default,
-    RewardFor<T>: From<MultiAsset>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
+    <T as Config>::RegistrationExtra: Default,
 {
     let caller: T::AccountId = token_22_funded_account::<T>();
     whitelist_account!(caller);
-    let job = job_registration_n::<T>(Default::default());
+
+    let job = job_registration::<T>(Default::default());
 
     if submit {
         let register_call =
@@ -145,7 +134,7 @@ where
         job_id: (caller.clone(), job.script.clone()),
     };
 
-    // create processor account by giving it over existential deposit
+    // create processor account by giving t over existential deposit
     T::Currency::make_free_balance_be(&processor_account, u32::MAX.into());
 
     if submit {
@@ -161,32 +150,28 @@ where
 
 benchmarks! {
     where_clause {  where
-        T: pallet_assets::Config,
-        <T as Config>::RegistrationExtra: Default,
-        RewardFor<T>: From<MultiAsset>,
+        T: pallet_assets::Config + pallet_timestamp::Config,
         <T as pallet_assets::Config>::AssetId: From<u32>,
         <T as pallet_assets::Config>::Balance: From<u128>,
+        <T as Config>::RegistrationExtra: Default,
         <T as frame_system::Config>::AccountId: From<[u8; 32]>,
-        T: pallet_timestamp::Config,
         <T as pallet_timestamp::Config>::Moment: From<u64>,
     }
 
     register {
         let (caller, job) = register_job::<T>(false);
-
     }: _(RawOrigin::Signed(caller.clone()), job.clone())
     verify {
-        assert_last_event::<T>(Event::JobRegistrationStored(
+        assert_last_event::<T>(Event::<T>::JobRegistrationStored(
             job, caller
         ).into());
     }
 
     deregister {
         let (caller, job) = register_job::<T>(true);
-
     }: _(RawOrigin::Signed(caller.clone()), job.script.clone())
     verify {
-        assert_last_event::<T>(Event::JobRegistrationRemoved(
+        assert_last_event::<T>(Event::<T>::JobRegistrationRemoved(
             job.script, caller
         ).into());
     }
@@ -202,17 +187,6 @@ benchmarks! {
     verify {
         assert_last_event::<T>(Event::AllowedSourcesUpdated(
             caller, job, sources_update
-        ).into());
-    }
-
-    update_job_assignments {
-        let (caller, job) = register_job::<T>(true);
-        let job_assignment = assign_job::<T>(false, caller.clone(), job.clone());
-
-    }: _(RawOrigin::Signed(caller.clone()), vec![job_assignment.clone()])
-    verify {
-        assert_last_event::<T>(Event::JobAssignmentUpdate(
-            caller, vec![job_assignment]
         ).into());
     }
 
@@ -265,5 +239,5 @@ benchmarks! {
         ).into());
     }
 
-    impl_benchmark_test_suite!(Acurast, mock::ExtBuilder::default().build(), mock::Test)
+    impl_benchmark_test_suite!(Acurast, mock::ExtBuilder::default().build(), mock::Test);
 }

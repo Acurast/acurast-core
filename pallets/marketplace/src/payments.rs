@@ -100,7 +100,7 @@ where
         + Member
         + Reward<
             AssetId = <T as pallet_assets::Config>::AssetId,
-            AssetAmount= <T as pallet_assets::Config>::Balance,
+            AssetAmount = <T as pallet_assets::Config>::Balance,
         >,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,

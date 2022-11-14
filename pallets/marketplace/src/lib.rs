@@ -5,19 +5,20 @@ pub use payments::*;
 pub use traits::*;
 pub use types::*;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "runtime-benchmarks"))]
 pub mod mock;
 #[cfg(test)]
 mod tests;
 
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 pub mod payments;
 mod traits;
 pub mod types;
 mod utils;
 pub mod weights;
+pub mod weights_with_hooks;
 
 #[frame_support::pallet]
 pub mod pallet {
