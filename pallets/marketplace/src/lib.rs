@@ -21,7 +21,10 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{Blake2_128Concat, dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, PalletId, sp_runtime::traits::StaticLookup};
+    use frame_support::{
+        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
+        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
+    };
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::CheckedMul;
     use sp_std::prelude::*;
@@ -31,10 +34,10 @@ pub mod pallet {
     };
 
     use crate::payments::{Reward, RewardFor};
-    use crate::RewardManager;
     use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
+    use crate::RewardManager;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_acurast::Config {
@@ -332,7 +335,7 @@ pub mod pallet {
 
             // validate
             ensure!(
-                job_status != JobStatus::Assigned,
+                job_status == JobStatus::Assigned,
                 Error::<T>::CannotFulfillJobWhenNotAssigned
             );
 
@@ -430,6 +433,12 @@ pub mod pallet {
                         );
 
                         <StoredCapacity<T>>::set(&candidate.0, Some(candidate.1 - 1));
+
+                        <StoredJobStatus<T>>::insert(
+                            &who,
+                            &registration.script,
+                            JobStatus::Assigned,
+                        );
                     }
 
                     return Ok(true);
