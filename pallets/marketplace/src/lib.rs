@@ -26,12 +26,11 @@ pub mod pallet {
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::CheckedMul;
-    use sp_std::prelude::*;
-
     use pallet_acurast::{
         AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
     };
+    use sp_runtime::traits::CheckedMul;
+    use sp_std::prelude::*;
 
     use crate::payments::{Reward, RewardFor};
     use crate::traits::*;
@@ -68,7 +67,7 @@ pub mod pallet {
 
     /// The storage for jobs' status as a map [AccountId] -> [Script] -> [JobStatus].
     #[pallet::storage]
-    #[pallet::getter(fn stored_job_registration)]
+    #[pallet::getter(fn stored_job_status)]
     pub type StoredJobStatus<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, Script, JobStatus>;
 
@@ -257,6 +256,14 @@ pub mod pallet {
                 reward_amount > 0.into(),
                 Error::<T>::JobRegistrationZeroReward
             );
+
+            match <StoredJobStatus<T>>::get(&who, &registration.script) {
+                Some(job_status) => ensure!(
+                    job_status == JobStatus::Open,
+                    Error::<T>::JobRegistrationUnmodifiable
+                ),
+                None => {}
+            }
 
             // reward is understood per slot
             let mut total = extra.reward.clone();

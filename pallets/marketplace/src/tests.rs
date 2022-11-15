@@ -1,7 +1,8 @@
 #![cfg(test)]
 
-use frame_support::assert_ok;
+use frame_support::{assert_err, assert_ok};
 
+use crate::{Error, JobStatus};
 use crate::mock::*;
 
 #[test]
@@ -22,6 +23,19 @@ fn test_match() {
             Origin::signed(alice_account_id()).into(),
             registration.clone(),
         ));
+        assert_eq!(
+            Some(JobStatus::Assigned),
+            AcurastMarketplace::stored_job_status(alice_account_id(), script())
+        );
+
+        // updating job registration is prohibited after match found
+        assert_err!(
+            Acurast::register(
+                Origin::signed(alice_account_id()).into(),
+                registration.clone(),
+            ),
+            Error::<Test>::JobRegistrationUnmodifiable
+        );
 
         assert_eq!(
             events(),
