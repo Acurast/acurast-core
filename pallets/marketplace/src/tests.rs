@@ -1,9 +1,12 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok};
+use hex_literal::hex;
+use pallet_acurast::Fulfillment;
+use sp_runtime::MultiAddress;
 
-use crate::{Error, JobStatus};
 use crate::mock::*;
+use crate::{Error, JobStatus, SLAEvaluation};
 
 #[test]
 fn test_match() {
@@ -27,6 +30,10 @@ fn test_match() {
             Some(JobStatus::Assigned),
             AcurastMarketplace::stored_job_status(alice_account_id(), script())
         );
+        assert_eq!(
+            Some(4),
+            AcurastMarketplace::stored_capacity(processor_account_id())
+        );
 
         // updating job registration is prohibited after match found
         assert_err!(
@@ -35,6 +42,24 @@ fn test_match() {
                 registration.clone(),
             ),
             Error::<Test>::JobRegistrationUnmodifiable
+        );
+
+        let fulfillment = Fulfillment {
+            script: registration.script.clone(),
+            payload: hex!("00").to_vec(),
+        };
+        assert_ok!(Acurast::fulfill(
+            Origin::signed(processor_account_id()).into(),
+            fulfillment.clone(),
+            MultiAddress::Id(alice_account_id()),
+        ));
+        assert_eq!(
+            Some(JobStatus::Fulfilled(SLAEvaluation { total: 1, met: 1 })),
+            AcurastMarketplace::stored_job_status(alice_account_id(), script())
+        );
+        assert_eq!(
+            Some(5),
+            AcurastMarketplace::stored_capacity(processor_account_id())
         );
 
         assert_eq!(
@@ -50,6 +75,12 @@ fn test_match() {
                 ),)),
                 Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
+                    alice_account_id()
+                )),
+                Event::Acurast(pallet_acurast::Event::ReceivedFulfillment(
+                    processor_account_id(),
+                    fulfillment,
+                    registration,
                     alice_account_id()
                 )),
             ]

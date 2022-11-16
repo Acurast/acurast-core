@@ -167,7 +167,7 @@ pub mod pallet {
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
 
             // update capacity to save on operations when checking available capacity
-            if let Some(old) = <StoredAdvertisement<T>>::get(who.clone()) {
+            if let Some(old) = <StoredAdvertisement<T>>::get(&who) {
                 // TODO: relax this check and resort ads according to updated pricing
                 ensure!(
                     old.pricing == advertisement.pricing,
@@ -175,14 +175,20 @@ pub mod pallet {
                 );
 
                 // allow capacity to become negative (in which case source remains assigned but does not receive new jobs assigned)
-                <StoredCapacity<T>>::mutate(who.clone(), |c| {
-                    c.unwrap_or(0) + advertisement.capacity as i32 - old.capacity as i32
+                <StoredCapacity<T>>::mutate(&who, |c| {
+                    *c = Some(
+                        c.unwrap_or(0)
+                            .checked_add(advertisement.capacity as i32)
+                            .unwrap_or(i32::MAX)
+                            .checked_sub(old.capacity as i32)
+                            .unwrap_or(0),
+                    )
                 });
             } else {
-                <StoredCapacity<T>>::insert(who.clone(), advertisement.capacity as i32);
+                <StoredCapacity<T>>::insert(&who, advertisement.capacity as i32);
             }
 
-            <StoredAdvertisement<T>>::insert(who.clone(), advertisement.clone());
+            <StoredAdvertisement<T>>::insert(&who, &advertisement);
 
             // update index
             for pricing in &advertisement.pricing {
@@ -205,19 +211,20 @@ pub mod pallet {
         pub fn delete_advertisement(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let ad = <StoredAdvertisement<T>>::get(who.clone())
-                .ok_or(Error::<T>::AdvertisementNotFound)?;
+            let ad =
+                <StoredAdvertisement<T>>::get(&who).ok_or(Error::<T>::AdvertisementNotFound)?;
 
             // update index
             for pricing in &ad.pricing {
-                <StoredAdIndex<T>>::mutate(&pricing.reward_asset, |ads| {
-                    let mut a = ads.clone().unwrap_or_default();
-                    a.retain(|v| v.0 != who.clone())
+                <StoredAdIndex<T>>::mutate(&pricing.reward_asset, |option_ads| {
+                    option_ads
+                        .as_mut()
+                        .map(|ads| ads.retain(|v| v.0 != who.clone()));
                 });
             }
 
-            <StoredAdvertisement<T>>::remove(who.clone());
-            <StoredCapacity<T>>::remove(who.clone());
+            <StoredAdvertisement<T>>::remove(&who);
+            <StoredCapacity<T>>::remove(&who);
 
             Self::deposit_event(Event::AdvertisementRemoved(who));
             Ok(().into())
@@ -334,7 +341,7 @@ pub mod pallet {
                 .ok_or(pallet_acurast::Error::<T>::FulfillSourceNotAllowed)?;
 
             // find job
-            let job_status = <StoredJobStatus<T>>::get(requester.clone(), &fulfillment.script)
+            let job_status = <StoredJobStatus<T>>::get(&requester, &fulfillment.script)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
 
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
@@ -348,6 +355,15 @@ pub mod pallet {
 
             // removed fulfilled job from assigned jobs
             <StoredJobAssignment<T>>::remove(&who, &job_id);
+
+            <StoredJobStatus<T>>::insert(
+                &requester,
+                &registration.script,
+                JobStatus::Fulfilled(SLAEvaluation { total: 1, met: 1 }),
+            );
+
+            // increase capacity
+            <StoredCapacity<T>>::mutate(&who, |c| *c = c.unwrap_or(0).checked_add(1));
 
             // pay only after all other steps succeeded without errors because locking reward is not revertable
             T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
@@ -402,7 +418,7 @@ pub mod pallet {
                     }
 
                     // CHECK capacity sufficient
-                    let capacity = <StoredCapacity<T>>::get(ad_with_reward.0.clone())
+                    let capacity = <StoredCapacity<T>>::get(&ad_with_reward.0)
                         .ok_or(Error::<T>::CapacityNotFound)?;
                     if capacity <= 0 {
                         continue;
@@ -439,7 +455,9 @@ pub mod pallet {
                             Some(slot as u8),
                         );
 
-                        <StoredCapacity<T>>::set(&candidate.0, Some(candidate.1 - 1));
+                        // We know this check_sub never goes out of bounds since we selected only candidates with capacity > 0
+                        // => the hidden code path that deletes the stored capacity therefore never happens
+                        <StoredCapacity<T>>::set(&candidate.0, candidate.1.checked_sub(1));
 
                         <StoredJobStatus<T>>::insert(
                             &who,
