@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 pub mod reputation {
+    use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub};
     /***
      * - each reputation update carries a weight ∈ [0, 1_000_000) depending on the size of the job reward
      * - reputation scores are discounted with a discounting factor λ
@@ -8,76 +9,97 @@ pub mod reputation {
      * - Reputation scores are ∈ [0, 999_999]
      */
 
-    const PRECISION: i64 = 1_000_000;
-    const LAMBDA_N: i64 = 98; // lambda numerator
-    const LAMBDA_D: i64 = 100; // lambda denominator
+    const PRECISION: u128 = 1_000_000;
+    const LAMBDA_N: u128 = 98; // lambda numerator
+    const LAMBDA_D: u128 = 100; // lambda denominator
 
-    pub trait ReputationEngine {
+    pub trait ReputationEngine<T> {
         fn update_reputation(
-            beta_params: &mut BetaParams,
+            r: T,
+            s: T,
             fulfillment_successful: bool,
-            job_reward: i64,
-            avg_reward: i64,
-        ) -> &BetaParams;
-        fn get_reputation(r: i64, s: i64) -> i64;
-        fn reputation(r: i64, s: i64) -> i64;
+            job_reward: T,
+            avg_reward: T,
+        ) -> BetaParams<T>;
+        fn get_reputation(r: T, s: T) -> T;
+        fn reputation(r: T, s: T) -> T;
+        fn weight(job_reward: T, avg_reward: T) -> T;
     }
     #[derive(Debug, Default, Clone, Copy)]
-    pub struct BetaParams {
-        pub r: i64,
-        pub s: i64,
+    pub struct BetaParams<T> {
+        pub r: T,
+        pub s: T,
     }
 
     pub struct BetaReputation;
-    impl ReputationEngine for BetaReputation {
-        fn get_reputation(r: i64, s: i64) -> i64 {
+    impl<
+            T: Div<Output = T>
+                + Mul<Output = T>
+                + Sub<Output = T>
+                + Add<Output = T>
+                + Copy
+                + PartialEq
+                + PartialOrd
+                + From<u128>
+                + DivAssign
+                + AddAssign
+                + MulAssign
+                + Into<u128>
+                + Eq
+                + Ord,
+        > ReputationEngine<T> for BetaReputation
+    {
+        fn get_reputation(r: T, s: T) -> T {
             /***
              * In presence of discounting factor λ, the maximum reputation is given by (1/1-λ) / (1/1-λ) + 2
              * To scale possible reputation scores to [0,1), we thus have to account for this fact.
              */
+            let n = T::from(LAMBDA_N);
+            let d = T::from(LAMBDA_D);
             let reputation = Self::reputation(r, s);
-            return reputation * ((LAMBDA_D) / (LAMBDA_D - LAMBDA_N) + 2)
-                / ((LAMBDA_D) / (LAMBDA_D - LAMBDA_N));
+            return reputation * ((d) / (d - n) + T::from(2)) / ((d) / (d - n));
         }
 
-        fn reputation(r: i64, s: i64) -> i64 {
-            return (r + 1) * PRECISION / ((r + s) + 2 * PRECISION);
+        fn reputation(r: T, s: T) -> T {
+            return (r + T::from(1)) * T::from(PRECISION)
+                / ((r + s) + T::from(2) * T::from(PRECISION));
+        }
+
+        fn weight(job_reward: T, avg_reward: T) -> T {
+            return (job_reward * T::from(PRECISION)) / (job_reward + avg_reward);
         }
 
         fn update_reputation(
-            mut beta_params: &mut BetaParams,
+            mut r: T,
+            mut s: T,
             fulfillment_successful: bool,
-            job_reward: i64,
-            avg_reward: i64,
-        ) -> &BetaParams {
-            fn weight(job_reward: i64, avg_reward: i64) -> i64 {
-                return ((job_reward as f64 * PRECISION as f64)
-                    / (job_reward as f64 + avg_reward as f64)) as i64;
-            }
-            let w = weight(job_reward, avg_reward);
+            job_reward: T,
+            avg_reward: T,
+        ) -> BetaParams<T> {
+            let w = Self::weight(job_reward, avg_reward);
 
+            let n = T::from(LAMBDA_N);
+            let d = T::from(LAMBDA_D);
             if fulfillment_successful {
                 // a positive reputation update results in a reputation decrease if w < (r-λr+λs-s)/(s+1)
-                let threshold = (beta_params.r - (LAMBDA_N * beta_params.r) / LAMBDA_D
-                    + (LAMBDA_N * beta_params.s) / LAMBDA_D)
-                    / (beta_params.s + 1);
+                let threshold = (r - (n * r) / d + (n * s) / d) / (s + T::from(1));
                 if w > (threshold) {
-                    beta_params.s *= LAMBDA_N;
-                    beta_params.s /= LAMBDA_D;
-                    beta_params.r *= LAMBDA_N;
-                    beta_params.r /= LAMBDA_D;
+                    s *= n;
+                    s /= d;
+                    r *= n;
+                    r /= d;
 
-                    beta_params.r += w;
+                    r += w;
                 }
             } else {
-                beta_params.s *= LAMBDA_N;
-                beta_params.s /= LAMBDA_D;
-                beta_params.r *= LAMBDA_N;
-                beta_params.r /= LAMBDA_D;
+                s *= n;
+                s /= d;
+                r *= n;
+                r /= d;
 
-                beta_params.s += w;
+                s += w;
             }
-            return beta_params;
+            return BetaParams { r, s };
         }
     }
 
@@ -86,12 +108,15 @@ pub mod reputation {
         fn it_successfully_bootstraps() {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
             assert_eq!(beta_params.r, 0);
             assert_eq!(beta_params.s, 0);
 
-            BetaReputation::update_reputation(&mut beta_params, true, 1, 0);
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), 346_666);
+            BetaReputation::update_reputation(beta_params.r, beta_params.s, true, 1, 0);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                346_666
+            );
         }
 
         #[test]
@@ -99,12 +124,21 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
             let job_reward = 108;
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..100 {
-                BetaReputation::update_reputation(&mut beta_params, false, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    false,
+                    job_reward,
+                    job_reward,
+                );
             }
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), 0);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                0
+            );
         }
         #[test]
         fn it_has_reached_max_theoretical_reputation_after_600_fulfillments() {
@@ -114,12 +148,21 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
             let job_reward = 108;
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..600 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, 0);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    0,
+                );
             }
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), 999_999);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                999_999
+            );
         }
 
         #[test]
@@ -130,13 +173,22 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
             let job_reward = 108;
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..600 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    job_reward,
+                );
                 // avg_reward = 0 leads to weight = 1
             }
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), 962_962);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                962_962
+            );
         }
 
         #[test]
@@ -149,30 +201,63 @@ pub mod reputation {
 
             let job_reward = 108;
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..100 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    job_reward,
+                );
             }
             for _i in 1..50 {
-                BetaReputation::update_reputation(&mut beta_params, false, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    false,
+                    job_reward,
+                    job_reward,
+                );
             }
 
             let reputation_i = BetaReputation::get_reputation(beta_params.r, beta_params.s);
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..75 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    job_reward,
+                );
             }
             for _i in 1..50 {
-                BetaReputation::update_reputation(&mut beta_params, false, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    false,
+                    job_reward,
+                    job_reward,
+                );
             }
             for _i in 1..25 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    job_reward,
+                );
             }
 
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), 567908);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                567908
+            );
             assert!(BetaReputation::get_reputation(beta_params.r, beta_params.s) > reputation_i);
         }
 
@@ -191,7 +276,7 @@ pub mod reputation {
             let expected_reputations = [641_350, 674_960];
 
             for (i, iteration) in iterations.iter().enumerate() {
-                let mut beta_params = BetaParams::default();
+                let beta_params = BetaParams::default();
 
                 let mut total_jobs = 0;
                 let mut total_rewards = 0;
@@ -201,7 +286,13 @@ pub mod reputation {
                     total_rewards += reward;
                     total_jobs += 1;
                     avg_reward = total_rewards / total_jobs;
-                    BetaReputation::update_reputation(&mut beta_params, true, *reward, avg_reward);
+                    BetaReputation::update_reputation(
+                        beta_params.r,
+                        beta_params.s,
+                        true,
+                        *reward,
+                        avg_reward,
+                    );
                 }
 
                 assert_eq!(
@@ -223,16 +314,25 @@ pub mod reputation {
 
             let job_reward = 108;
 
-            let mut beta_params = BetaParams::default();
+            let beta_params = BetaParams::default();
 
             for _i in 1..50 {
-                BetaReputation::update_reputation(&mut beta_params, true, job_reward, job_reward);
+                BetaReputation::update_reputation(
+                    beta_params.r,
+                    beta_params.s,
+                    true,
+                    job_reward,
+                    job_reward,
+                );
             }
             let previous_rep = BetaReputation::get_reputation(beta_params.r, beta_params.s);
-            BetaReputation::update_reputation(&mut beta_params, true, 1, job_reward);
-            assert_eq!(BetaReputation::get_reputation(beta_params.r, beta_params.s), previous_rep);
+            BetaReputation::update_reputation(beta_params.r, beta_params.s, true, 1, job_reward);
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                previous_rep
+            );
 
-            BetaReputation::update_reputation(&mut beta_params, false, 1, job_reward);
+            BetaReputation::update_reputation(beta_params.r, beta_params.s, false, 1, job_reward);
             assert!(BetaReputation::get_reputation(beta_params.r, beta_params.s) < previous_rep);
         }
     }

@@ -8,4 +8,7 @@ name = "reputation"
 path = "src/lib.rs"
 crate-type = ["lib"]
 
+[dependencies]
+num = "0.4.0"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
