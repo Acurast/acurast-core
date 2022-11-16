@@ -459,6 +459,7 @@ pub fn job_registration_with_reward(
     script: Script,
     cpu_milliseconds: u128,
     reward_value: u128,
+    min_reputation: Option<u128>,
 ) -> JobRegistrationFor<Test> {
     JobRegistrationFor::<Test> {
         script,
@@ -468,7 +469,7 @@ pub fn job_registration_with_reward(
             slots: 1,
             cpu_milliseconds,
             reward: asset(reward_value),
-            min_reputation: None
+            min_reputation,
         },
     }
 }

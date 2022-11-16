@@ -80,5 +80,5 @@ where
     /// Reward offered for the job
     pub reward: Reward,
     /// Minimum reputation required to process job
-    pub min_reputation: Option<i64>
+    pub min_reputation: Option<u128>,
 }

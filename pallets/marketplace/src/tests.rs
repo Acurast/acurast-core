@@ -1,15 +1,16 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok};
+use sp_runtime::MultiAddress;
 
-use crate::{Error, JobStatus};
 use crate::mock::*;
+use crate::{Error, JobStatus};
 
 #[test]
 fn test_match() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 5);
-    let registration = job_registration_with_reward(script(), 5, 5000);
+    let registration = job_registration_with_reward(script(), 5, 5000, None);
     ExtBuilder::default().build().execute_with(|| {
         assert_ok!(AcurastMarketplace::advertise(
             Origin::signed(processor_account_id()).into(),
@@ -61,8 +62,8 @@ fn test_match() {
 fn test_no_match_insufficient_capacity() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1);
-    let registration = job_registration_with_reward(script(), 2, 2000);
-    let registration2 = job_registration_with_reward(script_random_value(), 2, 2000);
+    let registration = job_registration_with_reward(script(), 2, 2000, None);
+    let registration2 = job_registration_with_reward(script_random_value(), 2, 2000, None);
     ExtBuilder::default().build().execute_with(|| {
         assert_ok!(AcurastMarketplace::advertise(
             Origin::signed(processor_account_id()).into(),
@@ -112,6 +113,74 @@ fn test_no_match_insufficient_capacity() {
                 )),
                 // no match event
             ]
+        );
+    });
+}
+
+#[test]
+fn test_no_match_insufficient_reputation() {
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 5);
+    let registration = job_registration_with_reward(script(), 2, 2000, Some(1));
+    ExtBuilder::default().build().execute_with(|| {
+        assert_ok!(AcurastMarketplace::advertise(
+            Origin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+        assert_eq!(
+            Some(ad.clone()),
+            AcurastMarketplace::stored_advertisement(processor_account_id())
+        );
+
+        assert_ok!(Acurast::register(
+            Origin::signed(alice_account_id()).into(),
+            registration.clone(),
+        ));
+
+        assert_eq!(
+            events(),
+            [
+                Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration.clone(),
+                    alice_account_id()
+                )),
+                // no match event
+            ]
+        );
+    });
+}
+
+#[test]
+fn test_reputation_update_on_fulfill() {
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 5);
+    let registration = job_registration_with_reward(script(), 5, 5000, None);
+    let fulfillment = fulfillment_for(&registration);
+
+    ExtBuilder::default().build().execute_with(|| {
+        assert_ok!(AcurastMarketplace::advertise(
+            Origin::signed(bob_account_id()).into(),
+            ad.clone(),
+        ));
+
+        assert_ok!(Acurast::register(
+            Origin::signed(alice_account_id()).into(),
+            registration.clone(),
+        ));
+
+        assert_ok!(Acurast::fulfill(
+            Origin::signed(bob_account_id()),
+            fulfillment.clone(),
+            MultiAddress::Id(alice_account_id())
+        ));
+
+        assert_eq!(
+            Some(crate::BetaParams { r: 1_000_000, s: 0 }),
+            AcurastMarketplace::stored_reputation(bob_account_id())
         );
     });
 }
