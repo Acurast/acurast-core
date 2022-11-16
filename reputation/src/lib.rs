@@ -108,11 +108,12 @@ pub mod reputation {
         fn it_successfully_bootstraps() {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
             assert_eq!(beta_params.r, 0);
             assert_eq!(beta_params.s, 0);
 
-            BetaReputation::update_reputation(beta_params.r, beta_params.s, true, 1, 0);
+            beta_params =
+                BetaReputation::update_reputation(beta_params.r, beta_params.s, true, 1, 0);
             assert_eq!(
                 BetaReputation::get_reputation(beta_params.r, beta_params.s),
                 346_666
@@ -124,10 +125,10 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
             let job_reward = 108;
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..100 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     false,
@@ -148,10 +149,10 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
             let job_reward = 108;
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..600 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -173,10 +174,10 @@ pub mod reputation {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
             let job_reward = 108;
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..600 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -201,10 +202,10 @@ pub mod reputation {
 
             let job_reward = 108;
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..100 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -213,7 +214,7 @@ pub mod reputation {
                 );
             }
             for _i in 1..50 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     false,
@@ -224,10 +225,10 @@ pub mod reputation {
 
             let reputation_i = BetaReputation::get_reputation(beta_params.r, beta_params.s);
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..75 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -236,7 +237,7 @@ pub mod reputation {
                 );
             }
             for _i in 1..50 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     false,
@@ -245,7 +246,7 @@ pub mod reputation {
                 );
             }
             for _i in 1..25 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -276,7 +277,7 @@ pub mod reputation {
             let expected_reputations = [641_350, 674_960];
 
             for (i, iteration) in iterations.iter().enumerate() {
-                let beta_params = BetaParams::default();
+                let mut beta_params = BetaParams::default();
 
                 let mut total_jobs = 0;
                 let mut total_rewards = 0;
@@ -286,7 +287,7 @@ pub mod reputation {
                     total_rewards += reward;
                     total_jobs += 1;
                     avg_reward = total_rewards / total_jobs;
-                    BetaReputation::update_reputation(
+                    beta_params = BetaReputation::update_reputation(
                         beta_params.r,
                         beta_params.s,
                         true,
@@ -314,10 +315,10 @@ pub mod reputation {
 
             let job_reward = 108;
 
-            let beta_params = BetaParams::default();
+            let mut beta_params = BetaParams::default();
 
             for _i in 1..50 {
-                BetaReputation::update_reputation(
+                beta_params = BetaReputation::update_reputation(
                     beta_params.r,
                     beta_params.s,
                     true,
@@ -326,13 +327,25 @@ pub mod reputation {
                 );
             }
             let previous_rep = BetaReputation::get_reputation(beta_params.r, beta_params.s);
-            BetaReputation::update_reputation(beta_params.r, beta_params.s, true, 1, job_reward);
+            beta_params = BetaReputation::update_reputation(
+                beta_params.r,
+                beta_params.s,
+                true,
+                1,
+                job_reward,
+            );
             assert_eq!(
                 BetaReputation::get_reputation(beta_params.r, beta_params.s),
                 previous_rep
             );
 
-            BetaReputation::update_reputation(beta_params.r, beta_params.s, false, 1, job_reward);
+            beta_params = BetaReputation::update_reputation(
+                beta_params.r,
+                beta_params.s,
+                false,
+                1,
+                job_reward,
+            );
             assert!(BetaReputation::get_reputation(beta_params.r, beta_params.s) < previous_rep);
         }
     }
