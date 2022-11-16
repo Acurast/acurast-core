@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
 pub use payments::*;
@@ -23,22 +23,21 @@ pub mod weights;
 pub mod pallet {
     use reputation::reputation::{BetaReputation, ReputationEngine};
 
+    use crate::payments::{Reward, RewardFor};
+    use crate::traits::*;
+    use crate::types::*;
+    use crate::utils::*;
+    use crate::RewardManager;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use pallet_acurast::{
-        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script, BetaParams
+        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
     };
-    use sp_runtime::traits::CheckedMul;
+    use sp_runtime::traits::{CheckedAdd, CheckedMul};
     use sp_std::prelude::*;
-
-    use crate::payments::{Reward, RewardFor};
-    use crate::traits::*;
-    use crate::types::*;
-    use crate::utils::*;
-    use crate::RewardManager;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_acurast::Config {
@@ -54,14 +53,23 @@ pub mod pallet {
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
             + CheckedMul
+            + CheckedAdd
             + From<u128>
+            + Into<u128> // TODO JGD needed?
             + Ord
+            + Default
+            + Copy
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;
     }
 
+    #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Default)]
+    pub struct BetaParams<T: From<u128>> {
+        pub r: T,
+        pub s: T,
+    }
     #[pallet::pallet]
     #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
@@ -84,13 +92,24 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn stored_reputation)]
     pub type StoredReputation<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, BetaParams>; // TODO JGD perhaps make this generic
-    
+        StorageMap<_, Blake2_128Concat, T::AccountId, BetaParams<u128>>; // TODO JGD perhaps make this generic
+
     /// The storage for remaining capacity for each source. Can be negative if capacity is reduced beyond the number of jobs currently assigned.
     #[pallet::storage]
     #[pallet::getter(fn stored_capacity)]
     pub type StoredCapacity<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, i32>;
 
+    /// The storage for total jobs assigned // TODO JGD description
+    #[pallet::storage]
+    #[pallet::getter(fn total_jobs_assigned)]
+    pub type StoredTotalJobsAssigned<T: Config> =
+        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, <T as Config>::AssetAmount>;
+
+    /// The storage for average job reward // TODO JGD description
+    #[pallet::storage]
+    #[pallet::getter(fn avg_job_reward)]
+    pub type StoredAvgJobReward<T> =
+        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, <T as Config>::AssetAmount>;
     /// Index with sorted advertisement by reward asset as a map [AssetId] -> Vec<([AccountId], [Price])>
     #[pallet::storage]
     #[pallet::getter(fn stored_ad_index)]
@@ -110,7 +129,7 @@ pub mod pallet {
         T::AccountId,
         Blake2_128Concat,
         JobId<T::AccountId>,
-        u8,
+        u8, // SlotId
     >;
 
     #[pallet::event]
@@ -159,7 +178,11 @@ pub mod pallet {
         /// Capacity not known for a source. SEVERE error
         CapacityNotFound,
         /// Reputation not known for a source. SEVERE error
-        ReputationNotFound
+        ReputationNotFound,
+        /// average job reward not known for a source. SEVERE error
+        AvgJobRewardNotFound,
+        /// total jobs not known for a source. SEVERE error
+        TotalJobsNotFound,
     }
 
     #[pallet::hooks]
@@ -189,9 +212,12 @@ pub mod pallet {
                     c.unwrap_or(0) + advertisement.capacity as i32 - old.capacity as i32
                 });
             } else {
+                if <StoredReputation<T>>::get(who.clone()).is_none() {
+                    let default_params = BetaParams::default();
+                    <StoredReputation<T>>::insert(who.clone(), default_params);
+                }
                 <StoredCapacity<T>>::insert(who.clone(), advertisement.capacity as i32);
             }
-
             <StoredAdvertisement<T>>::insert(who.clone(), advertisement.clone());
 
             // update index
@@ -359,6 +385,53 @@ pub mod pallet {
             // removed fulfilled job from assigned jobs
             <StoredJobAssignment<T>>::remove(&who, &job_id);
 
+            // strips away the asset amount
+            let reward_asset: <T as Config>::AssetId = extra
+                .reward
+                .try_get_asset_id()
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                .into();
+
+            let reward_amount: T::AssetAmount = extra
+                .reward
+                .try_get_amount()
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                .into();
+            // TODO JGD update avg_job_reward
+
+            // total_rewards = avg_job_reward * total_jobs
+            // total_jobs+=1
+            // total_rewards+=reward
+            // avg_job_reward = total_rewards / total_jobs
+
+            //
+            let avg_job_reward = <StoredAvgJobReward<T>>::get(&reward_asset).unwrap_or_default();
+            let total_jobs_assigned =
+                <StoredTotalJobsAssigned<T>>::get(&reward_asset).unwrap_or_default();
+
+            let total_rewards = avg_job_reward * total_jobs_assigned;
+
+            let new_avg_job_reward = total_rewards + reward_amount;
+
+            let beta_params =
+                <StoredReputation<T>>::get(who.clone()).ok_or(Error::<T>::ReputationNotFound)?;
+
+            let new_beta_params = BetaReputation::update_reputation(
+                beta_params.r,
+                beta_params.s,
+                true,
+                reward_amount.try_into().unwrap(),
+                avg_job_reward.try_into().unwrap(),
+            );
+
+            let pallet_params = BetaParams {
+                r: new_beta_params.r,
+                s: new_beta_params.s,
+            }; // TODO JGD not ideal
+
+            <StoredAvgJobReward<T>>::mutate(reward_asset.clone(), |_c| return new_avg_job_reward);
+            <StoredReputation<T>>::insert(who.clone(), pallet_params);
+
             // pay only after all other steps succeeded without errors because locking reward is not revertable
             T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
                 .map_err(|_| Error::<T>::FailedToPay)?;
@@ -391,7 +464,7 @@ pub mod pallet {
                 .into();
 
             // filter candidates according to reward asset
-            let ads_with_reward = <StoredAdIndex<T>>::get(reward_asset);
+            let ads_with_reward = <StoredAdIndex<T>>::get(&reward_asset);
             if let Some(ads) = ads_with_reward {
                 let reward_amount: T::AssetAmount = extra
                     .reward
@@ -433,16 +506,18 @@ pub mod pallet {
 
                     if let Some(min_reputation) = extra.min_reputation {
                         // CHECK min_reputation sufficient
+
                         let beta_params = <StoredReputation<T>>::get(ad_with_reward.0.clone())
                             .ok_or(Error::<T>::ReputationNotFound)?;
-                        
-                        let reputation = BetaReputation::get_reputation(beta_params.r, beta_params.s);
-                    
-                        if reputation < min_reputation  {
+
+                        let reputation =
+                            BetaReputation::get_reputation(beta_params.r, beta_params.s);
+
+                        if reputation < min_reputation {
                             continue;
                         }
                     }
-                    
+
                     // CANDIDATE FOUND
                     candidates.push((ad_with_reward.0, capacity));
 
