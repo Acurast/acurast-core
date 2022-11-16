@@ -79,4 +79,6 @@ where
     pub cpu_milliseconds: u128,
     /// Reward offered for the job
     pub reward: Reward,
+    /// Minimum reputation required to process job
+    pub min_reputation: Option<i64>
 }

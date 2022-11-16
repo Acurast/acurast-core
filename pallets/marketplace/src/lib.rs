@@ -21,13 +21,15 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use reputation::reputation::{BetaReputation, ReputationEngine};
+
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use pallet_acurast::{
-        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
+        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script, BetaParams
     };
     use sp_runtime::traits::CheckedMul;
     use sp_std::prelude::*;
@@ -78,6 +80,12 @@ pub mod pallet {
     pub type StoredAdvertisement<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, AdvertisementFor<T>>;
 
+    /// The storage for reputation. They are stored by [AccountId].
+    #[pallet::storage]
+    #[pallet::getter(fn stored_reputation)]
+    pub type StoredReputation<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, BetaParams>; // TODO JGD perhaps make this generic
+    
     /// The storage for remaining capacity for each source. Can be negative if capacity is reduced beyond the number of jobs currently assigned.
     #[pallet::storage]
     #[pallet::getter(fn stored_capacity)]
@@ -150,6 +158,8 @@ pub mod pallet {
         AdIndexInconsistent,
         /// Capacity not known for a source. SEVERE error
         CapacityNotFound,
+        /// Reputation not known for a source. SEVERE error
+        ReputationNotFound
     }
 
     #[pallet::hooks]
@@ -421,6 +431,18 @@ pub mod pallet {
                         continue;
                     }
 
+                    if let Some(min_reputation) = extra.min_reputation {
+                        // CHECK min_reputation sufficient
+                        let beta_params = <StoredReputation<T>>::get(ad_with_reward.0.clone())
+                            .ok_or(Error::<T>::ReputationNotFound)?;
+                        
+                        let reputation = BetaReputation::get_reputation(beta_params.r, beta_params.s);
+                    
+                        if reputation < min_reputation  {
+                            continue;
+                        }
+                    }
+                    
                     // CANDIDATE FOUND
                     candidates.push((ad_with_reward.0, capacity));
 

@@ -468,6 +468,7 @@ pub fn job_registration_with_reward(
             slots: 1,
             cpu_milliseconds,
             reward: asset(reward_value),
+            min_reputation: None
         },
     }
 }

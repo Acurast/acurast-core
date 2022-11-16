@@ -37,6 +37,11 @@ pub struct Fulfillment {
     pub payload: Vec<u8>,
 }
 
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub struct BetaParams {
+    pub r: i64,
+    pub s: i64,
+}
 /// Structure used to updated the allowed sources list of a [Registration].
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct AllowedSourcesUpdate<A>

@@ -79,6 +79,7 @@ pub mod pallet {
     pub type StoredAttestation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, Attestation>;
 
+
     /// Certificate revocation list storage.
     #[pallet::storage]
     #[pallet::getter(fn stored_revoked_certificate)]
