@@ -104,6 +104,7 @@ pub mod reputation {
     }
 
     mod tests {
+
         #[test]
         fn it_successfully_bootstraps() {
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
@@ -304,7 +305,7 @@ pub mod reputation {
         }
 
         #[test]
-        fn it_may_decrease_reputation_after_positive_update() {
+        fn it_never_decreases_reputation_after_positive_update() {
             /***
              * The combination of the weight and discounting parameter leads to an interesting behaviour:
              * A *positive* reputation update may lead to a *decrease* in reputation if the job reward and
@@ -327,6 +328,7 @@ pub mod reputation {
                 );
             }
             let previous_rep = BetaReputation::get_reputation(beta_params.r, beta_params.s);
+
             beta_params = BetaReputation::update_reputation(
                 beta_params.r,
                 beta_params.s,
@@ -342,11 +344,15 @@ pub mod reputation {
             beta_params = BetaReputation::update_reputation(
                 beta_params.r,
                 beta_params.s,
-                false,
+                true,
                 1,
                 job_reward,
             );
-            assert!(BetaReputation::get_reputation(beta_params.r, beta_params.s) < previous_rep);
+
+            assert_eq!(
+                BetaReputation::get_reputation(beta_params.r, beta_params.s),
+                previous_rep
+            );
         }
     }
 }
