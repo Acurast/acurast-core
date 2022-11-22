@@ -188,8 +188,8 @@ fn test_reputation_update_on_fulfill() {
 #[test]
 fn test_match_sufficient_reputation() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
-    let ad = advertisement(1000, 5);
-    let ad1 = advertisement(800, 5);
+    let ad = advertisement(1200, 5);
+    let ad1 = advertisement(1000, 5);
     let registration1 = job_registration_with_reward(script(), 5, 5000, None);
     let registration2 = job_registration_with_reward(script_random_value(), 5, 5000, Some(1));
     let fulfillment = fulfillment_for(&registration1);
