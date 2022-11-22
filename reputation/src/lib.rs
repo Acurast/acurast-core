@@ -310,7 +310,9 @@ pub mod reputation {
              * The combination of the weight and discounting parameter leads to an interesting behaviour:
              * A *positive* reputation update may lead to a *decrease* in reputation if the job reward and
              * thus the weight is sufficiently small.
-             * Precisely, a positive reputation update results in a reputation decrease if w < (r-λr+λs-s)/(s+1)
+             * Precisely, a positive reputation update would result in a reputation decrease if w < (r-λr+λs-s)/(s+1)
+             * To prevent this behaviour, we don't perform a reputation update in either direction if the weight
+             * is lower than the threshold value mentioned above
              */
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
