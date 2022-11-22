@@ -55,7 +55,7 @@ pub mod pallet {
             + CheckedMul
             + CheckedAdd
             + From<u128>
-            + Into<u128> // TODO JGD needed?
+            + Into<u128>
             + Ord
             + Default
             + Copy
@@ -92,20 +92,20 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn stored_reputation)]
     pub type StoredReputation<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, BetaParams<u128>>; // TODO JGD perhaps make this generic
+        StorageMap<_, Blake2_128Concat, T::AccountId, BetaParams<u128>>;
 
     /// The storage for remaining capacity for each source. Can be negative if capacity is reduced beyond the number of jobs currently assigned.
     #[pallet::storage]
     #[pallet::getter(fn stored_capacity)]
     pub type StoredCapacity<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, i32>;
 
-    /// The storage for total jobs assigned // TODO JGD description
+    /// Number of total jobs assigned as a map [AssetId] -> AssetAmount>
     #[pallet::storage]
     #[pallet::getter(fn total_jobs_assigned)]
     pub type StoredTotalJobsAssigned<T: Config> =
         StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, <T as Config>::AssetAmount>;
 
-    /// The storage for average job reward // TODO JGD description
+    /// Average job reward as a map [AssetId] -> AssetAmount>
     #[pallet::storage]
     #[pallet::getter(fn avg_job_reward)]
     pub type StoredAvgJobReward<T> =
@@ -397,14 +397,7 @@ pub mod pallet {
                 .try_get_amount()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                 .into();
-            // TODO JGD update avg_job_reward
 
-            // total_rewards = avg_job_reward * total_jobs
-            // total_jobs+=1
-            // total_rewards+=reward
-            // avg_job_reward = total_rewards / total_jobs
-
-            //
             let avg_job_reward = <StoredAvgJobReward<T>>::get(&reward_asset).unwrap_or_default();
             let total_jobs_assigned =
                 <StoredTotalJobsAssigned<T>>::get(&reward_asset).unwrap_or_default();
@@ -429,7 +422,7 @@ pub mod pallet {
                 s: new_beta_params.s,
             }; // TODO JGD not ideal
 
-            <StoredAvgJobReward<T>>::mutate(reward_asset.clone(), |_c| return new_avg_job_reward);
+            <StoredAvgJobReward<T>>::insert(reward_asset.clone(), new_avg_job_reward);
             <StoredReputation<T>>::insert(who.clone(), pallet_params);
 
             // pay only after all other steps succeeded without errors because locking reward is not revertable
@@ -544,6 +537,14 @@ pub mod pallet {
                             JobStatus::Assigned,
                         );
                     }
+                    let total_jobs_assigned =
+                        <StoredTotalJobsAssigned<T>>::get(&reward_asset).unwrap_or_default();
+                    let new_total_jobs_assigned = total_jobs_assigned + T::AssetAmount::from(1);
+
+                    <StoredTotalJobsAssigned<T>>::insert(
+                        reward_asset.clone(),
+                        new_total_jobs_assigned,
+                    );
 
                     return Ok(true);
                 }

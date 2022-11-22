@@ -182,6 +182,16 @@ fn test_reputation_update_on_fulfill() {
             Some(crate::BetaParams { r: 1_000_000, s: 0 }),
             AcurastMarketplace::stored_reputation(bob_account_id())
         );
+
+        assert_eq!(
+            Some(1),
+            AcurastMarketplace::total_jobs_assigned(AssetId::from(0))
+        );
+
+        assert_eq!(
+            Some(5000),
+            AcurastMarketplace::avg_job_reward(AssetId::from(0))
+        );
     });
 }
 
