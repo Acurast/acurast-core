@@ -185,18 +185,13 @@ fn test_reputation_update_on_fulfill() {
     });
 }
 
-// TODO JGD test that job is allocated to transmitter with sufficient reputation
 #[test]
 fn test_match_sufficient_reputation() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 5);
-
     let ad1 = advertisement(800, 5);
-    let ad2 = advertisement(1000, 5);
-
     let registration1 = job_registration_with_reward(script(), 5, 5000, None);
-    let registration2 = job_registration_with_reward(script(), 5, 5000, Some(1));
-
+    let registration2 = job_registration_with_reward(script_random_value(), 5, 5000, Some(1));
     let fulfillment = fulfillment_for(&registration1);
 
     ExtBuilder::default().build().execute_with(|| {
@@ -221,21 +216,46 @@ fn test_match_sufficient_reputation() {
             ad1.clone(),
         ));
 
-        assert_ok!(AcurastMarketplace::advertise(
-            Origin::signed(bob_account_id()).into(),
-            ad2.clone(),
-        ));
-
         assert_ok!(Acurast::register(
             Origin::signed(dave_account_id()).into(),
             registration2.clone(),
         ));
 
-        // Bob is assigned the job since he has a sufficient reputation.
-        // Note that Alice's advertisement actually has a better price
-        Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
-            bob_account_id(),
-            registration2.script.clone(),
-        )))
+        assert_eq!(
+            events(),
+            [
+                Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    bob_account_id()
+                )),
+                // first job assigned to Bob
+                Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+                    charlie_account_id(),
+                    registration1.script.clone()
+                ))),
+                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration1.clone(),
+                    charlie_account_id()
+                )),
+                Event::Acurast(pallet_acurast::Event::ReceivedFulfillment(
+                    bob_account_id(),
+                    fulfillment,
+                    registration1,
+                    charlie_account_id()
+                )),
+                Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad1.clone(),
+                    alice_account_id()
+                )),
+                Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+                    dave_account_id(),
+                    registration2.script.clone()
+                ))),
+                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration2.clone(),
+                    dave_account_id()
+                )),
+            ]
+        );
     });
 }
