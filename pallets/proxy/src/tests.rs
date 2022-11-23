@@ -17,8 +17,8 @@
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
-use sp_runtime::{bounded_vec, BoundedVec};
 use sp_runtime::traits::ConstU32;
+use sp_runtime::{bounded_vec, BoundedVec};
 use xcm::prelude::*;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
 
@@ -26,7 +26,7 @@ use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use pallet_acurast::JobRegistration;
 use pallet_acurast_marketplace::{
-    Advertisement, FeeManager, JobRequirements, PricingVariant, types::MAX_PRICING_VARIANTS,
+    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
 };
 
 use crate::mock::*;
@@ -488,7 +488,7 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationStored;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Event, Runtime, System};
-            use pallet_acurast::{Script};
+            use pallet_acurast::Script;
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
@@ -555,7 +555,7 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::Runtime;
-            use pallet_acurast::{Script};
+            use pallet_acurast::Script;
 
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
             let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
@@ -567,8 +567,8 @@ mod proxy_calls {
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::update_allowed_sources;
-            use proxy_runtime::Call::AcurastProxy;
             use pallet_acurast::{AllowedSourcesUpdate, ListUpdateOperation};
+            use proxy_runtime::Call::AcurastProxy;
 
             let update = AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
@@ -589,7 +589,7 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::AllowedSourcesUpdated;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Event, Runtime, System};
-            use pallet_acurast::{Script};
+            use pallet_acurast::Script;
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
@@ -654,7 +654,7 @@ mod proxy_calls {
         // THEN check the ad is in index
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast_marketplace::StoredAdIndex;
-            use acurast_runtime::{Runtime};
+            use acurast_runtime::Runtime;
 
             let p_store = StoredAdIndex::<Runtime>::get(22);
             assert!(p_store.is_some());
@@ -667,22 +667,23 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast_marketplace::StoredJobAssignment;
             use acurast_runtime::{Event, Runtime, System};
-            use pallet_acurast::{Script};
+            use pallet_acurast::Script;
             use pallet_acurast_marketplace::Event::JobRegistrationMatched;
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
             let p_store = StoredJobAssignment::<Runtime>::get(bob_account_id(), (ALICE, script));
             assert!(p_store.is_some());
-            assert!(events
-                .iter()
-                .any(|event| matches!(event.event, Event::AcurastMarketplace(JobRegistrationMatched { .. }))));
+            assert!(events.iter().any(|event| matches!(
+                event.event,
+                Event::AcurastMarketplace(JobRegistrationMatched { .. })
+            )));
         });
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::fulfill;
+            use pallet_acurast::Fulfillment;
             use proxy_runtime::Call::AcurastProxy;
-            use pallet_acurast::{Fulfillment};
 
             let payload: [u8; 32] = rand::random();
 

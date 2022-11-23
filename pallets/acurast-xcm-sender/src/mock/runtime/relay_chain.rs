@@ -1,14 +1,15 @@
 use frame_support::{
     construct_runtime, parameter_types,
     sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
-    traits::{Everything, Nothing}
+    traits::{Everything, Nothing},
 };
-use sp_core::H256;
 use polkadot_runtime_parachains::{configuration, shared, ump};
+use sp_core::H256;
 use xcm::latest::prelude::*;
 use xcm_builder::{
-    AllowUnpaidExecutionFrom, FixedRateOfFungible, FixedWeightBounds,
-    LocationInverter,SignedToAccountId32};
+    AllowUnpaidExecutionFrom, FixedRateOfFungible, FixedWeightBounds, LocationInverter,
+    SignedToAccountId32,
+};
 use xcm_executor::{Config, XcmExecutor};
 
 pub type AccountId = AccountId32;
@@ -43,7 +44,6 @@ impl frame_system::Config for Runtime {
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
-
 
 impl shared::Config for Runtime {}
 

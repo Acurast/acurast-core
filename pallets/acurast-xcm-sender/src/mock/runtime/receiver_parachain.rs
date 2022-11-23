@@ -1,8 +1,8 @@
-use sp_std::prelude::*;
 use codec::{Decode, Encode};
+use frame_support::traits::Get;
 use frame_support::{
     construct_runtime, parameter_types,
-    traits::{Everything, Nothing, ConstU32},
+    traits::{ConstU32, Everything, Nothing},
     weights::Weight,
     BoundedVec,
 };
@@ -12,7 +12,7 @@ use sp_runtime::{
     traits::{AccountIdLookup, Hash},
     AccountId32,
 };
-use frame_support::traits::Get;
+use sp_std::prelude::*;
 
 use pallet_xcm::XcmPassthrough;
 use polkadot_core_primitives::BlockNumber as RelayBlockNumber;
@@ -21,10 +21,8 @@ use polkadot_parachain::primitives::{
 };
 use xcm::{latest::prelude::*, VersionedXcm};
 use xcm_builder::{
-    AllowUnpaidExecutionFrom,
-    EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, LocationInverter,
-    NativeAsset, SignedAccountId32AsNative,
-    SignedToAccountId32,
+    AllowUnpaidExecutionFrom, EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds,
+    LocationInverter, NativeAsset, SignedAccountId32AsNative, SignedToAccountId32,
 };
 use xcm_executor::{Config, XcmExecutor};
 pub type AccountId = AccountId32;
@@ -170,10 +168,14 @@ pub mod mock_msg_queue {
                     let location = (1, Parachain(sender.into()));
                     match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
                         Outcome::Error(e) => (Err(e.clone()), Event::Fail(Some(hash), e)),
-                        Outcome::Complete(w) => (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash))),
+                        Outcome::Complete(w) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash)))
+                        }
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete(w, e) => (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e)),
+                        Outcome::Incomplete(w, e) => {
+                            (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e))
+                        }
                     }
                 }
                 Err(()) => (
@@ -187,10 +189,7 @@ pub mod mock_msg_queue {
     }
 
     impl<T: Config> XcmpMessageHandler for Pallet<T> {
-        fn handle_xcmp_messages<
-            'a,
-            I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>,
-        >(
+        fn handle_xcmp_messages<'a, I: Iterator<Item = (ParaId, RelayBlockNumber, &'a [u8])>>(
             iter: I,
             max_weight: Weight,
         ) -> Weight {
@@ -219,8 +218,8 @@ pub mod mock_msg_queue {
         ) -> Weight {
             for (_i, (_sent_at, data)) in iter.enumerate() {
                 let id = sp_io::hashing::blake2_256(&data[..]);
-                let maybe_msg = VersionedXcm::<T::Call>::decode(&mut &data[..])
-                    .map(Xcm::<T::Call>::try_from);
+                let maybe_msg =
+                    VersionedXcm::<T::Call>::decode(&mut &data[..]).map(Xcm::<T::Call>::try_from);
                 match maybe_msg {
                     Err(_) => {
                         Self::deposit_event(Event::InvalidFormat(id));
@@ -229,7 +228,8 @@ pub mod mock_msg_queue {
                         Self::deposit_event(Event::UnsupportedVersion(id));
                     }
                     Ok(Ok(x)) => {
-                        let outcome = T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
+                        let outcome =
+                            T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
                         <ReceivedDmp<T>>::append(x);
                         Self::deposit_event(Event::ExecutedDownward(id, outcome));
                     }
@@ -268,8 +268,12 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
 pub struct AllowAcurastBarrier {}
-impl<T: pallet_acurast_receiver::Config> pallet_acurast_receiver::traits::ParachainBarrier<T> for AllowAcurastBarrier {
-    fn ensure_xcm_origin(_: <T as frame_system::Config>::Origin) -> Result<(), sp_runtime::DispatchError> {
+impl<T: pallet_acurast_receiver::Config> pallet_acurast_receiver::traits::ParachainBarrier<T>
+    for AllowAcurastBarrier
+{
+    fn ensure_xcm_origin(
+        _: <T as frame_system::Config>::Origin,
+    ) -> Result<(), sp_runtime::DispatchError> {
         Ok(())
     }
 }
@@ -284,7 +288,10 @@ impl pallet_acurast_receiver::Config for Runtime {
 
 pub struct OnFulfillment;
 impl pallet_acurast_receiver::traits::OnFulfillment<Runtime> for OnFulfillment {
-    fn fulfill(_fulfillment: Vec<u8>, _parameters: Option<Vec<u8>>,) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
+    fn fulfill(
+        _fulfillment: Vec<u8>,
+        _parameters: Option<Vec<u8>>,
+    ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
         Ok(().into())
     }
 }
