@@ -1,9 +1,9 @@
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
-    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
     traits::{Currency, OriginTrait},
 };
+use sp_runtime::traits::{AccountIdConversion, Get, StaticLookup};
 use frame_system::RawOrigin;
 use hex_literal::hex;
 use sp_std::prelude::*;

@@ -57,11 +57,14 @@ runtime-benchmarks = [
 	"hex-literal",
 	"parachain-info",
 	"pallet-balances",
-	"sp-core"
+	"sp-core",
 ]
 
 
 std = [
 	"pallet-acurast/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-core/std"
 ]
 try-runtime = [ "frame-support/try-runtime" ]

@@ -4,7 +4,7 @@ pub use pallet::*;
 pub use traits::*;
 pub use types::*;
 
-#[cfg(any(test, feature = "runtime-benchmarks"))]
+#[cfg(any(test))]
 pub mod mock;
 #[cfg(test)]
 mod tests;

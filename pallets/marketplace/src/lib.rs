@@ -5,13 +5,13 @@ pub use payments::*;
 pub use traits::*;
 pub use types::*;
 
-#[cfg(any(test, feature = "runtime-benchmarks"))]
+#[cfg(any(test))]
 pub mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// #[cfg(feature = "runtime-benchmarks")]
+// mod benchmarking;
 
 pub mod payments;
 mod traits;
