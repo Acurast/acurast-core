@@ -2,8 +2,8 @@
 pub mod reputation {
     use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub};
     /***
-     * - each reputation update carries a weight ∈ [0, 1_000_000) depending on the size of the job reward
-     * - reputation scores are discounted with a discounting factor λ
+     * - Each reputation update carries a weight ∈ [0, 1_000_000) depending on the size of the job reward
+     * - Reputation scores are discounted with a discounting factor λ
      * - Note that we apply integer arithmetic in the following calculations, due to floats not being allowed in the Substrate Runtime Storage
      * - Reputation scores have a precision of six decimal points
      * - Reputation scores are ∈ [0, 999_999]
