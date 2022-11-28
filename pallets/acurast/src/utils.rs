@@ -12,7 +12,7 @@ use crate::{
     ValidatingCertIds,
 };
 
-pub(crate) fn validate_and_extract_attestation<T: Config>(
+pub fn validate_and_extract_attestation<T: Config>(
     source: &T::AccountId,
     attestation_chain: &AttestationChain,
 ) -> Result<Attestation, Error<T>> {

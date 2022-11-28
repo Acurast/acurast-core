@@ -11,7 +11,7 @@ mod benchmarking;
 mod attestation;
 mod traits;
 mod types;
-mod utils;
+pub mod utils;
 pub mod weights;
 pub mod xcm_adapters;
 
@@ -52,7 +52,7 @@ pub mod pallet {
         type UnixTime: UnixTime;
         /// Hooks used by tightly coupled subpallets.
         type JobHooks: JobHooks<Self>;
-        /// Weight Logic
+        /// Weight Info for extrinsics. Needs to include weight of hooks called. The weights in this pallet or only correct when using the default hooks [()].
         type WeightInfo: WeightInfo;
     }
 
@@ -78,7 +78,6 @@ pub mod pallet {
     #[pallet::getter(fn stored_attestation)]
     pub type StoredAttestation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, Attestation>;
-
 
     /// Certificate revocation list storage.
     #[pallet::storage]

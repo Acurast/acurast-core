@@ -46,6 +46,7 @@ p384 = { package = "p384_vendored", path = "p384", default-features = false, fea
 sha2 = { version = "0.10", default-features = false }
 num-bigint = { version = "0.4.3", default-features = false }
 ecdsa-vendored = { package = "ecdsa_vendored", path = "p384/ecdsa", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
 
 # benchmarks
 hex-literal = { version = "0.3", optional = true }
@@ -70,9 +71,6 @@ pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-fe
 parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, branch = "polkadot-v0.9.29" }
 parachains-common = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.29", default-features = false }
 
-# Acurast
-acurast-p256-crypto = { path = "../../p256-crypto" }
-
 [features]
 default = ["std"]
 runtime-benchmarks = [
@@ -86,7 +84,6 @@ runtime-benchmarks = [
 ]
 
 std = [
-  "acurast-p256-crypto/std",
   "asn1/std",
   "base64/std",
   "codec/std",

@@ -61,8 +61,8 @@ impl Default for JobStatus {
 /// Represents an evaluation of the SLA after a job's schedule is completed.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
 pub struct SLAEvaluation {
-    total: u8,
-    met: u8,
+    pub total: u8,
+    pub met: u8,
 }
 
 pub type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;

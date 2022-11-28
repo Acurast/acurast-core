@@ -101,7 +101,7 @@ where
         + Member
         + Reward<
             AssetId = <T as pallet_assets::Config>::AssetId,
-            AssetAmount= <T as pallet_assets::Config>::Balance,
+            AssetAmount = <T as pallet_assets::Config>::Balance,
         >,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
@@ -141,7 +141,6 @@ where
         reward: Self::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
-        info!("Pay reward");
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::Origin = raw_origin.into();

@@ -290,7 +290,7 @@ pub mod acurast_runtime {
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
-        type WeightInfo = pallet_acurast_marketplace::weights::WeightInfo<Runtime>;
+        type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
 
     impl pallet_xcm::Config for Runtime {

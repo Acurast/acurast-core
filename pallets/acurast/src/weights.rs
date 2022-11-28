@@ -7,17 +7,17 @@
 //! EXECUTION: Some(Wasm), WASM-EXECUTION: Compiled, CHAIN: Some("acurast-dev"), DB CACHE: 1024
 
 // Executed Command:
-// ./target/release/acurast-node
-// benchmark
-// pallet
-// --chain=acurast-dev
-// --execution=wasm
-// --wasm-execution=compiled
-// --pallet=pallet_acurast
-// --extrinsic=*
-// --steps=50
-// --repeat=20
-// --output=./weights.rs
+// ./target/release/acurast-node benchmark \
+// pallet \
+// --chain=acurast-dev \
+// --execution=wasm \
+// --wasm-execution=compiled \
+// --pallet=pallet_acurast \
+// --extrinsic \
+// "*" \
+// --steps=50 \
+// --repeat=20 \
+// --output=../acurast-core/pallets/acurast/src/weights.rs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
