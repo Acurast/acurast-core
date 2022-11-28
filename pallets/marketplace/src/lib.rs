@@ -417,13 +417,14 @@ pub mod pallet {
                 avg_job_reward.try_into().unwrap(),
             );
 
-            let pallet_params = BetaParams {
-                r: new_beta_params.r,
-                s: new_beta_params.s,
-            }; // TODO JGD not ideal
-
             <StoredAvgJobReward<T>>::insert(reward_asset.clone(), new_avg_job_reward);
-            <StoredReputation<T>>::insert(who.clone(), pallet_params);
+            <StoredReputation<T>>::insert(
+                who.clone(),
+                BetaParams {
+                    r: new_beta_params.r,
+                    s: new_beta_params.s,
+                },
+            );
 
             // pay only after all other steps succeeded without errors because locking reward is not revertable
             T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
