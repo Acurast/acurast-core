@@ -8,7 +8,6 @@ use frame_support::{
     },
     Never, PalletId, Parameter,
 };
-use frame_support::log::info;
 
 use crate::Config;
 
@@ -153,12 +152,9 @@ where
         // Extract fee from the processor reward
         let fee_percentage = AssetSplit::get_fee_percentage(); // TODO: fee will be indexed by version in the future
         let fee = fee_percentage.mul_floor(amount);
-        info!("Extracted fee is {:?}", fee);
 
         // Subtract the fee from the reward
         let reward_after_fee = amount - fee;
-
-        info!("Reward after fee {:?}", reward_after_fee);
 
         // Transfer fees to Acurast fees manager account
         let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
@@ -168,8 +164,6 @@ where
             T::Lookup::unlookup(fee_pallet_account),
             fee,
         )?;
-
-        info!("pallet_assets::transfer");
 
         // Transfer reward to the processor
         pallet_assets::Pallet::<T>::transfer(
