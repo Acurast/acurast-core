@@ -322,8 +322,6 @@ pub mod pallet {
                 <StoredJobRegistration<T>>::get(&requester.clone(), &fulfillment.script)
                     .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-            ensure_source_allowed::<T>(&who, &registration)?;
-
             <T as Config>::JobHooks::fulfill_hook(
                 &who,
                 &fulfillment,

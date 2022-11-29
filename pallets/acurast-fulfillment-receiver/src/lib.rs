@@ -1,34 +1,32 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod mock;
+#[cfg(test)]
+mod tests;
+pub mod traits;
+
 pub use pallet::*;
 pub use pallet_acurast::Fulfillment;
 
-pub mod traits;
-
-#[cfg(test)]
-mod mock;
-
-#[cfg(test)]
-mod tests;
-
 #[frame_support::pallet]
 pub mod pallet {
-    use traits::*;
-    use types::*;
-    use frame_support::pallet_prelude::*;
-    use frame_system::pallet_prelude::OriginFor;
+    use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
+    use frame_system::{ensure_signed, pallet_prelude::OriginFor};
+    use pallet_acurast::Fulfillment;
     use sp_std::prelude::*;
-    use pallet_acur
+
+    use crate::traits::*;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-        /// The fulfillment payload.
-        type Payload: Parameter + Member + Clone + IsType<Vec<u8>>;
         /// Handler to notify the runtime when a new fulfillment is received.
         type OnFulfillment: OnFulfillment<Self>;
+        /// Weight Info for extrinsics.
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::pallet]
@@ -38,37 +36,29 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        FulfillReceived(T::Payload, Option<T::Parameters>),
+        FulfillReceived(T::AccountId, Fulfillment),
     }
 
     // Errors inform users that something went wrong.
     #[pallet::error]
-    pub enum Error<T> {}
+    pub enum Error<T> {
+        FulfillmentRejected,
+    }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-
-        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().writes(1)))]
+        /// Submit a fulfillment for an acurast job.
+        #[pallet::weight(T::WeightInfo::fulfill())]
         pub fn fulfill(
             origin: OriginFor<T>,
-            payload: T::Payload,
-        ) -> DispatchResult {
-            // Check that the extrinsic comes from a trusted xcm channel.
+            fulfillment: Fulfillment,
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
             // Notify the runtime about the fulfillment.
-            match T::OnFulfillment::fulfill(
-                payload.clone().into(),
-                parameters.clone().map(|parameters| parameters.into()),
-            ) {
-                Err(err) => Err(err.error),
-                Ok(_) => {
-                    // Emit events
-                    Self::deposit_event(Event::FulfillReceived(payload, parameters));
-
-                    Ok(())
-                }
-            }
+            let info = T::OnFulfillment::on_fulfillment(who.clone(), fulfillment.clone())?;
+            Self::deposit_event(Event::FulfillReceived(who, fulfillment));
+            Ok(info)
         }
     }
 }
