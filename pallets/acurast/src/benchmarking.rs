@@ -1,3 +1,4 @@
+use acurast_common::{AttestationChain, JobRegistration, Script};
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
@@ -9,7 +10,6 @@ use hex_literal::hex;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use types::{AttestationChain, JobRegistration, JobRegistrationFor, Script};
 
 use crate::utils::validate_and_extract_attestation;
 use crate::Pallet as Acurast;

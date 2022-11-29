@@ -6,14 +6,14 @@ mod mock;
 mod tests;
 pub mod traits;
 
+pub use acurast_common::{is_valid_script, Fulfillment, Script};
 pub use pallet::*;
-pub use pallet_acurast::Fulfillment;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use acurast_common::Fulfillment;
     use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
-    use pallet_acurast::Fulfillment;
     use sp_std::prelude::*;
 
     use crate::traits::*;

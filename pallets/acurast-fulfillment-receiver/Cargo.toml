@@ -17,7 +17,7 @@ sp-std = { git = "https://github.com/paritytech/substrate", default-features = f
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
 
 # Acurast
-pallet-acurast = { path = "../acurast", default-features = false } # needed for the Fulfillment type, but eventually the types in pallet-acurast should be moved to a shared package.
+acurast-common = { path = "../acurast/common", default-features = false }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -35,6 +35,6 @@ std = [
   "sp-core/std",
   "sp-io/std",
   "sp-std/std",
-  "pallet-acurast/std",
+  "acurast-common/std",
 ]
 try-runtime = ["frame-support/try-runtime"]

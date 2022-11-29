@@ -1,11 +1,11 @@
+use acurast_common::{
+    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
+    PublicKey,
+};
 use codec::Encode;
 use frame_support::{ensure, traits::UnixTime};
 use sp_std::prelude::*;
 
-use crate::attestation::{
-    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
-    PublicKey,
-};
 use crate::{
     Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
     JobRegistrationFor, SerialNumber, StoredAttestation, StoredRevokedCertificate,

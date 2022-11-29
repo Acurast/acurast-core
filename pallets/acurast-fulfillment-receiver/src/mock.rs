@@ -1,7 +1,7 @@
+use acurast_common::{Fulfillment, Script};
 use frame_support::sp_runtime::DispatchError;
 use frame_support::{sp_runtime, traits::Everything, weights::Weight, PalletId};
 use hex_literal::hex;
-use pallet_acurast::{Fulfillment, Script};
 use sp_runtime::traits::{AccountIdLookup, BlakeTwo256};
 use sp_runtime::{generic, parameter_types, AccountId32};
 
