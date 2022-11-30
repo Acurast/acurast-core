@@ -81,16 +81,12 @@ pub mod reputation {
             let n = T::from(LAMBDA_N);
             let d = T::from(LAMBDA_D);
             if fulfillment_successful {
-                // a positive reputation update results in a reputation decrease if w < (r-λr+λs-s)/(s+1)
-                let threshold = (r - (n * r) / d + (n * s) / d) / (s + T::from(1));
-                if w > (threshold) {
-                    s *= n;
-                    s /= d;
-                    r *= n;
-                    r /= d;
+                s *= n;
+                s /= d;
+                r *= n;
+                r /= d;
 
-                    r += w;
-                }
+                r += w;
             } else {
                 s *= n;
                 s /= d;
@@ -310,9 +306,7 @@ pub mod reputation {
              * The combination of the weight and discounting parameter leads to an interesting behaviour:
              * A *positive* reputation update may lead to a *decrease* in reputation if the job reward and
              * thus the weight is sufficiently small.
-             * Precisely, a positive reputation update would result in a reputation decrease if w < (r-λr+λs-s)/(s+1)
-             * To prevent this behaviour, we don't perform a reputation update in either direction if the weight
-             * is lower than the threshold value mentioned above
+             * Precisely, a positive reputation update results in a reputation decrease if w < (r-λr+λs-s)/(s+1)
              */
             use crate::reputation::{BetaParams, BetaReputation, ReputationEngine};
 
@@ -329,7 +323,6 @@ pub mod reputation {
                     job_reward,
                 );
             }
-            let previous_rep = BetaReputation::get_reputation(beta_params.r, beta_params.s);
 
             beta_params = BetaReputation::update_reputation(
                 beta_params.r,
@@ -340,7 +333,7 @@ pub mod reputation {
             );
             assert_eq!(
                 BetaReputation::get_reputation(beta_params.r, beta_params.s),
-                previous_rep
+                920_493
             );
 
             beta_params = BetaReputation::update_reputation(
@@ -353,7 +346,7 @@ pub mod reputation {
 
             assert_eq!(
                 BetaReputation::get_reputation(beta_params.r, beta_params.s),
-                previous_rep
+                918_404
             );
         }
     }
