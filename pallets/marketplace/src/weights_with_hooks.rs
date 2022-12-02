@@ -26,6 +26,7 @@
 
 use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use sp_std::marker::PhantomData;
+use pallet_acurast;
 
 /// Weights for pallet_acurast_marketplace using the Substrate node and recommended hardware.
 pub struct Weights<T>(PhantomData<T>);
@@ -61,15 +62,15 @@ impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInf
     }
 
     fn update_allowed_sources() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_allowed_sources()
+        pallet_acurast::weights::WeightInfo::<T>::update_allowed_sources()
     }
     fn update_job_assignments() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_job_assignments()
+        pallet_acurast::weights::WeightInfo::<T>::update_job_assignments()
     }
     fn submit_attestation() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::submit_attestation()
+        pallet_acurast::weights::WeightInfo::<T>::submit_attestation()
     }
     fn update_certificate_revocation_list() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_certificate_revocation_list()
+        pallet_acurast::weights::WeightInfo::<T>::update_certificate_revocation_list()
     }
 }
