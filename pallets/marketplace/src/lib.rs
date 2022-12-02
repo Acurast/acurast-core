@@ -27,6 +27,7 @@ pub mod pallet {
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
+    use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
         AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
     };
@@ -409,6 +410,13 @@ pub mod pallet {
                 // either all or no candidate gets assigned after checking if all slots can be filled
                 let mut candidates = Vec::new();
                 for ad_with_reward in ads {
+                    // CHECK attestation
+                    if registration.allow_only_verified_sources
+                        && !ensure_source_verified::<T>(&ad_with_reward.0).is_ok()
+                    {
+                        continue;
+                    }
+
                     // CHECK price not exceeding reward
                     let total = ad_with_reward
                         .1

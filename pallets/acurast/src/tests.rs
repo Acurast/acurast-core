@@ -683,7 +683,7 @@ fn test_update_revocation_list_submit_attestation() {
 }
 
 #[test]
-fn test_update_revocation_list_fulfill() {
+fn test_update_revocation_list_assign_job() {
     ExtBuilder::default().build().execute_with(|| {
         let updates = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
@@ -692,7 +692,6 @@ fn test_update_revocation_list_fulfill() {
         let chain = attestation_chain();
         let registration = job_registration(None, true);
         let assignment_updates = job_assignment_update_for(&registration, Some(bob_account_id()));
-        let fulfillment = fulfillment_for(&registration);
         let _ = Timestamp::set(Origin::none(), 1657363915001);
         assert_ok!(Acurast::submit_attestation(
             Origin::signed(processor_account_id()).into(),
@@ -702,19 +701,14 @@ fn test_update_revocation_list_fulfill() {
             Origin::signed(bob_account_id()).into(),
             registration.clone()
         ));
-        assert_ok!(Acurast::update_job_assignments(
-            Origin::signed(bob_account_id()),
-            assignment_updates.clone()
-        ));
         assert_ok!(Acurast::update_certificate_revocation_list(
             Origin::signed(alice_account_id()).into(),
             updates.clone(),
         ));
         assert_err!(
-            Acurast::fulfill(
-                Origin::signed(processor_account_id()),
-                fulfillment.clone(),
-                MultiAddress::Id(bob_account_id())
+            Acurast::update_job_assignments(
+                Origin::signed(bob_account_id()),
+                assignment_updates.clone()
             ),
             Error::<Test>::RevokedCertificate
         );
@@ -732,10 +726,6 @@ fn test_update_revocation_list_fulfill() {
                 Event::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
                     bob_account_id()
-                )),
-                Event::Acurast(crate::Event::JobAssignmentUpdate(
-                    bob_account_id(),
-                    assignment_updates
                 )),
                 Event::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),

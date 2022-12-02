@@ -4,5 +4,6 @@ panic = "unwind"
 [workspace]
 members = [
 	"pallets/*",
+	"pallets/acurast/common",
 	"p256-crypto",
 ]

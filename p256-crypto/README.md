@@ -1,10 +1,11 @@
 # Acurast P256 crypto
+## 🚧🚧🚧 The project is still a work in progress 🚧🚧🚧
 
-# Introduction
+## Introduction
 
 This crate provides types that allow to add P256 (a.k.a secp256r1) signature verification support to substrate based chains.
 
-## Setup
+### Setup
 
 Add the following dependency to your Cargo manifest:
 
@@ -13,7 +14,7 @@ Add the following dependency to your Cargo manifest:
 acurast-p256-crypto = { git = "https://github.com/Acurast/acurast-core.git" }
 ```
 
-## Integration
+### Integration
 
 Use the `acurast_p256_crypto::MultiSignature` as your parachain `Signature` type:
 

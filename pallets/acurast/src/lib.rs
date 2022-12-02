@@ -8,28 +8,29 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-mod attestation;
 mod traits;
-mod types;
 pub mod utils;
 pub mod weights;
 pub mod xcm_adapters;
 
+pub use acurast_common::*;
 pub use pallet::*;
 pub use traits::*;
-pub use types::*;
+
+pub type JobRegistrationFor<T> =
+    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::traits::*;
-    use crate::types::*;
-    use crate::utils::*;
+    use acurast_common::*;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
         sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
+
+    use crate::{traits::*, utils::*, JobRegistrationFor};
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -181,13 +182,8 @@ pub mod pallet {
             registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let script_len: u32 = registration
-                .script
-                .len()
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidScriptValue)?;
             ensure!(
-                script_len == SCRIPT_LENGTH && registration.script.starts_with(SCRIPT_PREFIX),
+                is_valid_script(&registration.script),
                 Error::<T>::InvalidScriptValue
             );
             let allowed_sources_len = registration
@@ -321,8 +317,6 @@ pub mod pallet {
             let registration =
                 <StoredJobRegistration<T>>::get(&requester.clone(), &fulfillment.script)
                     .ok_or(Error::<T>::JobRegistrationNotFound)?;
-
-            ensure_source_allowed::<T>(&who, &registration)?;
 
             <T as Config>::JobHooks::fulfill_hook(
                 &who,

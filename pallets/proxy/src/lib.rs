@@ -26,7 +26,7 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
-    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
+    use acurast_common::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.

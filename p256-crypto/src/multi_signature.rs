@@ -228,6 +228,7 @@ impl std::fmt::Display for MultiSigner {
 
 impl Verify for MultiSignature {
     type Signer = MultiSigner;
+
     fn verify<L: Lazy<[u8]>>(&self, mut msg: L, signer: &AccountId32) -> bool {
         match (self, signer) {
             (Self::Ed25519(multi_sig), _) => {
