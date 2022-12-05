@@ -29,8 +29,8 @@ use sp_std::marker::PhantomData;
 use pallet_acurast;
 
 /// Weights for pallet_acurast_marketplace using the Substrate node and recommended hardware.
-pub struct Weights<T>(PhantomData<T>);
-impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInfo for Weights<T> {
+pub struct Weights<T, W>(PhantomData<(T, W)>);
+impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::WeightInfo> pallet_acurast::WeightInfo for Weights<T, W> {
     // Storage: AcurastMarketplace StoredJobStatus (r:1 w:1)
     // Storage: AcurastMarketplace StoredAdIndex (r:1 w:0)
     // Storage: AcurastMarketplace StoredCapacity (r:1 w:1)
@@ -62,15 +62,15 @@ impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInf
     }
 
     fn update_allowed_sources() -> Weight {
-        pallet_acurast::weights::WeightInfo::<T>::update_allowed_sources()
+        W::update_allowed_sources()
     }
     fn update_job_assignments() -> Weight {
-        pallet_acurast::weights::WeightInfo::<T>::update_job_assignments()
+        W::update_job_assignments()
     }
     fn submit_attestation() -> Weight {
-        pallet_acurast::weights::WeightInfo::<T>::submit_attestation()
+        W::submit_attestation()
     }
     fn update_certificate_revocation_list() -> Weight {
-        pallet_acurast::weights::WeightInfo::<T>::update_certificate_revocation_list()
+        W::update_certificate_revocation_list()
     }
 }
