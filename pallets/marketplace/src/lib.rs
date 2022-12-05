@@ -112,6 +112,8 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// A registration was successfully matched. [JobId]
         JobRegistrationMatched(JobId<T::AccountId>),
+        /// A registration didn't find a suitable match. Will get matched later on
+        JobRegistrationAwaitingMatch(JobId<T::AccountId>),
         /// A advertisement was successfully stored. [advertisement, who]
         AdvertisementStored(AdvertisementFor<T>, T::AccountId),
         /// A registration was successfully removed. [who]
@@ -287,10 +289,13 @@ pub mod pallet {
 
             <StoredJobStatus<T>>::insert(&who, &registration.script, JobStatus::default());
 
+            let job_id: JobId<T::AccountId> = (who.clone(), registration.script.clone());
+
             if Self::match_job(&who, &registration)? {
                 // TODO improve event to contain list of matched sources
-                let job_id: JobId<T::AccountId> = (who.clone(), registration.script.clone());
                 Self::deposit_event(Event::JobRegistrationMatched(job_id));
+            } else {
+                Self::deposit_event(Event::JobRegistrationAwaitingMatch(job_id))
             }
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
