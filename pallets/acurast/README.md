@@ -97,6 +97,7 @@ impl pallet_acurast::Config for Runtime {
 	type PalletId = AcurastPalletId;
 	type RevocationListUpdateBarrier = ();
 	type JobAssignmentUpdateBarrier = ();
+	type KeyAttestationBarrier = ();
 	type UnixTime = pallet_timestamp::Pallet<Self>;
 	type WeightInfo = pallet_acurast::weights::WeightInfo<Self>;
 }
