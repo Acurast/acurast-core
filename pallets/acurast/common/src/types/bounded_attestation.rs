@@ -21,7 +21,9 @@ pub(crate) const MGF_DIGEST_MAX_LENGTH: u32 = 32;
 pub(crate) const VERIFIED_BOOT_KEY_MAX_LENGTH: u32 = 32;
 pub(crate) const VERIFIED_BOOT_HASH_MAX_LENGTH: u32 = 32;
 pub(crate) const ATTESTATION_ID_MAX_LENGTH: u32 = 256;
-pub(crate) const BOUDNED_SET_PROPERTY: u32 = 16;
+pub(crate) const BOUNDED_SET_PROPERTY: u32 = 16;
+pub(crate) const PACKAGE_NAME_MAX_LENGTH: u32 = 128;
+pub(crate) const SIGNATURE_DIGEST_SET_MAX_LENGTH: u32 = 16;
 
 pub type Purpose = BoundedVec<u8, ConstU32<PURPOSE_MAX_LENGTH>>;
 pub type Digest = BoundedVec<u8, ConstU32<DIGEST_MAX_LENGTH>>;
@@ -32,7 +34,10 @@ pub type VerifiedBootHash = BoundedVec<u8, ConstU32<VERIFIED_BOOT_HASH_MAX_LENGT
 pub type AttestationIdProperty = BoundedVec<u8, ConstU32<ATTESTATION_ID_MAX_LENGTH>>;
 pub type CertId = (IssuerName, SerialNumber);
 pub type ValidatingCertIds = BoundedVec<CertId, ConstU32<CHAIN_MAX_LENGTH>>;
-pub type BoundedSetProperty = BoundedVec<CertId, ConstU32<BOUDNED_SET_PROPERTY>>;
+pub type BoundedSetProperty = BoundedVec<CertId, ConstU32<BOUNDED_SET_PROPERTY>>;
+pub type PackageName = BoundedVec<u8, ConstU32<PACKAGE_NAME_MAX_LENGTH>>;
+pub type SignatureDigestSet = BoundedVec<Digest, ConstU32<SIGNATURE_DIGEST_SET_MAX_LENGTH>>;
+pub type PackageInfoSet = BoundedVec<BoundedAttestationPackageInfo, ConstU32<16>>;
 
 /// Structure representing a submitted attestation chain.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
@@ -192,7 +197,7 @@ pub struct BoundedAuthorizationList {
     pub root_of_trust: Option<BoundedRootOfTrust>,
     pub os_version: Option<u32>,
     pub os_patch_level: Option<u32>,
-    pub attestation_application_id: Option<AttestationIdProperty>,
+    pub attestation_application_id: Option<BoundedAttestationApplicationId>,
     pub attestation_id_brand: Option<AttestationIdProperty>,
     pub attestation_id_device: Option<AttestationIdProperty>,
     pub attestation_id_product: Option<AttestationIdProperty>,
@@ -324,7 +329,11 @@ impl TryFrom<asn::AuthorizationListV2<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
                 .map_or(Ok(None), |r| r.map(Some))?,
             attestation_id_brand: data
                 .attestation_id_brand
@@ -406,7 +415,11 @@ impl TryFrom<asn::AuthorizationListV3<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
                 .map_or(Ok(None), |r| r.map(Some))?,
             attestation_id_brand: data
                 .attestation_id_brand
@@ -488,7 +501,11 @@ impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
                 .map_or(Ok(None), |r| r.map(Some))?,
             attestation_id_brand: data
                 .attestation_id_brand
@@ -567,7 +584,11 @@ impl TryFrom<asn::AuthorizationListV100V200<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
                 .map_or(Ok(None), |r| r.map(Some))?,
             attestation_id_brand: data
                 .attestation_id_brand
@@ -660,5 +681,49 @@ impl From<asn::VerifiedBootState> for VerifiedBootState {
             2 => VerifiedBootState::Unverified,
             _ => VerifiedBootState::Failed,
         }
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct BoundedAttestationApplicationId {
+    pub package_infos: PackageInfoSet,
+    pub signature_digests: SignatureDigestSet,
+}
+
+impl<'a> TryFrom<asn::AttestationApplicationId<'a>> for BoundedAttestationApplicationId {
+    type Error = ();
+
+    fn try_from(value: asn::AttestationApplicationId<'a>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            package_infos: value
+                .package_infos
+                .map(|package_info| BoundedAttestationPackageInfo::try_from(package_info))
+                .collect::<Result<Vec<BoundedAttestationPackageInfo>, ()>>()?
+                .try_into()
+                .map_err(|_| ())?,
+            signature_digests: value
+                .signature_digests
+                .map(|digest| Digest::try_from(digest.to_vec()))
+                .collect::<Result<Vec<Digest>, ()>>()?
+                .try_into()
+                .map_err(|_| ())?,
+        })
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct BoundedAttestationPackageInfo {
+    pub package_name: PackageName,
+    pub version: i64,
+}
+
+impl<'a> TryFrom<asn::AttestationPackageInfo<'a>> for BoundedAttestationPackageInfo {
+    type Error = ();
+
+    fn try_from(value: asn::AttestationPackageInfo<'a>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            package_name: value.package_name.to_vec().try_into().map_err(|_| ())?,
+            version: value.version,
+        })
     }
 }

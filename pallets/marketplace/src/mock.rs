@@ -240,6 +240,7 @@ impl pallet_acurast::Config for Test {
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
+    type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type JobHooks = Pallet<Test>;
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;

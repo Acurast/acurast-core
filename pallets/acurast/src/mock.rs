@@ -201,6 +201,7 @@ impl crate::Config for Test {
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type JobAssignmentUpdateBarrier = Barrier;
+    type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type JobHooks = ();
