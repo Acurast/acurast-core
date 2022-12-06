@@ -578,6 +578,18 @@ pub struct ECDSASignature<'a> {
     pub s: asn1::BigInt<'a>,
 }
 
+#[derive(asn1::Asn1Read, asn1::Asn1Write)]
+pub struct AttestationApplicationId<'a> {
+    pub package_infos: SetOf<'a, AttestationPackageInfo<'a>>,
+    pub signature_digests: SetOf<'a, &'a [u8]>,
+}
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write)]
+pub struct AttestationPackageInfo<'a> {
+    pub package_name: &'a [u8],
+    pub version: i64,
+}
+
 /// One of Verified (0),
 /// SelfSigned (1),
 /// Unverified (2),

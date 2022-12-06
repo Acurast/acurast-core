@@ -1,3 +1,4 @@
+use acurast_common::Attestation;
 use frame_support::{
     pallet_prelude::DispatchResultWithPostInfo,
     sp_runtime::{traits::StaticLookup, DispatchError},
@@ -51,6 +52,16 @@ impl<T: Config> JobAssignmentUpdateBarrier<T> for () {
         _updates: &Vec<JobAssignmentUpdate<T::AccountId>>,
     ) -> bool {
         false
+    }
+}
+
+pub trait KeyAttestationBarrier<T: Config> {
+    fn accept_attestation_for_origin(origin: &T::AccountId, attestation: &Attestation) -> bool;
+}
+
+impl<T: Config> KeyAttestationBarrier<T> for () {
+    fn accept_attestation_for_origin(_origin: &<T>::AccountId, _attestation: &Attestation) -> bool {
+        true
     }
 }
 

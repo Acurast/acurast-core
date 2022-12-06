@@ -49,6 +49,8 @@ pub mod pallet {
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for update_job_assignments extrinsic call.
         type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
+        /// Barrier for submit_attestation extrinsic call.
+        type KeyAttestationBarrier: KeyAttestationBarrier<Self>;
         /// Timestamp
         type UnixTime: UnixTime;
         /// Hooks used by tightly coupled subpallets.
@@ -154,6 +156,8 @@ pub mod pallet {
         CannotGetCertificateId,
         /// Failed to convert the attestation to its bounded type.
         AttestationToBoundedTypeConversionFailed,
+        /// Attestation was rejected by [Config::KeyAttestationBarrier].
+        AttestationRejected,
         /// Timestamp error.
         FailedTimestampConversion,
         /// Certificate was revoked.
@@ -361,6 +365,10 @@ pub mod pallet {
             );
 
             let attestation = validate_and_extract_attestation::<T>(&who, &attestation_chain)?;
+
+            if !T::KeyAttestationBarrier::accept_attestation_for_origin(&who, &attestation) {
+                return Err(Error::<T>::AttestationRejected.into());
+            }
 
             ensure_not_expired::<T>(&attestation)?;
             ensure_not_revoked::<T>(&attestation)?;

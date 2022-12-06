@@ -278,6 +278,7 @@ pub mod acurast_runtime {
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type JobAssignmentUpdateBarrier = AcurastBarrier;
+        type KeyAttestationBarrier = ();
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type JobHooks = pallet_acurast_marketplace::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
