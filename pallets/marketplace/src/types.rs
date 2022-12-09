@@ -82,3 +82,9 @@ where
     /// Minimum reputation required to process job
     pub min_reputation: Option<u128>,
 }
+
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Default)]
+pub struct BetaParams<T: From<u128>> {
+    pub r: T,
+    pub s: T,
+}

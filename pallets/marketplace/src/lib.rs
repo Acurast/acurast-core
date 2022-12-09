@@ -31,7 +31,7 @@ pub mod pallet {
         AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
     };
     use reputation::reputation::{BetaReputation, ReputationEngine};
-    use sp_runtime::traits::{CheckedAdd, CheckedMul};
+    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
     use sp_std::prelude::*;
 
     use crate::payments::{Reward, RewardFor};
@@ -48,29 +48,26 @@ pub mod pallet {
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirements<RewardFor<Self>>>;
-        /// The ID for this pallet
+        /// The ID for this pallet;
         #[pallet::constant]
         type PalletId: Get<PalletId>;
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
             + CheckedMul
+            + CheckedDiv
             + CheckedAdd
+            + CheckedSub
             + From<u128>
             + Into<u128>
             + Default
             + Ord
-            + Copy
+            + Clone
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;
     }
 
-    #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Default)]
-    pub struct BetaParams<T: From<u128>> {
-        pub r: T,
-        pub s: T,
-    }
     #[pallet::pallet]
     #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
@@ -104,13 +101,12 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn total_jobs_assigned)]
     pub type StoredTotalJobsAssigned<T: Config> =
-        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, <T as Config>::AssetAmount>;
+        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, u128>;
 
-    /// Average job reward as a map [AssetId] -> AssetAmount>
+    /// Average job reward as a map [AssetId] -> AssetAmount
     #[pallet::storage]
     #[pallet::getter(fn avg_job_reward)]
-    pub type StoredAvgJobReward<T> =
-        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, <T as Config>::AssetAmount>;
+    pub type StoredAvgJobReward<T> = StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, u128>;
     /// Index with sorted advertisement by reward asset as a map [AssetId] -> Vec<([AccountId], [Price])>
     #[pallet::storage]
     #[pallet::getter(fn stored_ad_index)]
@@ -403,13 +399,21 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                 .into();
 
-            let avg_job_reward = <StoredAvgJobReward<T>>::get(&reward_asset).unwrap_or_default();
+            let avg_job_reward = <StoredAvgJobReward<T>>::get(&reward_asset).unwrap_or(0);
             let total_jobs_assigned =
                 <StoredTotalJobsAssigned<T>>::get(&reward_asset).unwrap_or_default();
 
-            let total_rewards = avg_job_reward * total_jobs_assigned;
+            let total_rewards = avg_job_reward
+                .checked_mul(total_jobs_assigned - 1u128)
+                .ok_or(Error::<T>::RewardCalculationOverflow)?;
 
-            let new_avg_job_reward = total_rewards + reward_amount;
+            let new_total_rewards = total_rewards
+                .checked_add(reward_amount.clone().into())
+                .ok_or(Error::<T>::RewardCalculationOverflow)?;
+
+            let new_avg_job_reward = new_total_rewards
+                .checked_div(total_jobs_assigned)
+                .ok_or(Error::<T>::RewardCalculationOverflow)?;
 
             let beta_params =
                 <StoredReputation<T>>::get(who.clone()).ok_or(Error::<T>::ReputationNotFound)?;
@@ -555,7 +559,7 @@ pub mod pallet {
                     }
                     let total_jobs_assigned =
                         <StoredTotalJobsAssigned<T>>::get(&reward_asset).unwrap_or_default();
-                    let new_total_jobs_assigned = total_jobs_assigned + T::AssetAmount::from(1);
+                    let new_total_jobs_assigned = total_jobs_assigned + 1;
 
                     <StoredTotalJobsAssigned<T>>::insert(
                         reward_asset.clone(),

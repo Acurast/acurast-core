@@ -1,6 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 pub mod reputation {
     use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub};
+    use num::{CheckedDiv, CheckedMul};
     /***
      * - Each reputation update carries a weight ∈ [0, 1_000_000) depending on the size of the job reward
      * - Reputation scores are discounted with a discounting factor λ
@@ -9,6 +10,7 @@ pub mod reputation {
      * - Reputation scores are ∈ [0, 999_999]
      */
 
+    // TODO JGD introduce CheckedMul everywhere (also CheckedDiv?)
     const PRECISION: u128 = 1_000_000;
     const LAMBDA_N: u128 = 98; // lambda numerator
     const LAMBDA_D: u128 = 100; // lambda denominator
@@ -35,6 +37,8 @@ pub mod reputation {
     impl<
             T: Div<Output = T>
                 + Mul<Output = T>
+                + CheckedMul
+                + CheckedDiv
                 + Sub<Output = T>
                 + Add<Output = T>
                 + Copy
@@ -57,16 +61,26 @@ pub mod reputation {
             let n = T::from(LAMBDA_N);
             let d = T::from(LAMBDA_D);
             let reputation = Self::reputation(r, s);
-            return reputation * ((d) / (d - n) + T::from(2)) / ((d) / (d - n));
+            reputation.checked_mul(&n);
+            return reputation
+                .checked_mul(&((d) / (d - n) + T::from(2)))
+                .unwrap()
+                / ((d) / (d - n));
         }
 
         fn reputation(r: T, s: T) -> T {
-            return (r + T::from(1)) * T::from(PRECISION)
-                / ((r + s) + T::from(2) * T::from(PRECISION));
+            // (r+1)/(r+s+2)
+            return (r + T::from(1))
+                .checked_mul(&T::from(PRECISION))
+                .unwrap()
+                .checked_div(&((r + s) + T::from(2).checked_mul(&T::from(PRECISION)).unwrap()))
+                .unwrap();
         }
 
         fn weight(job_reward: T, avg_reward: T) -> T {
-            return (job_reward * T::from(PRECISION)) / (job_reward + avg_reward);
+            return (job_reward.checked_mul(&T::from(PRECISION)).unwrap())
+                .checked_div(&(job_reward + avg_reward))
+                .unwrap();
         }
 
         fn update_reputation(
@@ -139,7 +153,7 @@ pub mod reputation {
             );
         }
         #[test]
-        fn it_has_reached_max_theoretical_reputation_after_600_fulfillments() {
+        fn it_has_reached_max_theoretical_reputation_after_600_consecutive_fulfillments() {
             /***
              * in the theoretical case that each update has a weight of 1 (job_reward = 0)
              */
@@ -154,7 +168,7 @@ pub mod reputation {
                     beta_params.s,
                     true,
                     job_reward,
-                    0,
+                    0, // avg_reward = 0 leads to weight = 1
                 );
             }
             assert_eq!(
@@ -164,7 +178,7 @@ pub mod reputation {
         }
 
         #[test]
-        fn it_has_reached_max_practical_reputation_after_600_fulfillments() {
+        fn it_has_reached_max_practical_reputation_after_600_consecutive_fulfillments() {
             /***
              * in the practical case that each update has a weight of 0.5 (job_reward == avg_reward)
              */
@@ -181,8 +195,8 @@ pub mod reputation {
                     job_reward,
                     job_reward,
                 );
-                // avg_reward = 0 leads to weight = 1
             }
+
             assert_eq!(
                 BetaReputation::get_reputation(beta_params.r, beta_params.s),
                 962_962
