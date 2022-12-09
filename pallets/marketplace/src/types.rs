@@ -80,3 +80,38 @@ where
     /// Reward offered for the job
     pub reward: Reward,
 }
+
+pub type AssetId = u32;
+pub type AssetAmount = u128;
+
+// interface to make possible to create assets in the benchmark without knowing the concrete representation
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct MinimumAssetImplementation {
+    pub id: AssetId,
+    pub amount: AssetAmount,
+}
+
+impl crate::payments::Reward for MinimumAssetImplementation {
+    type AssetId = AssetId;
+    type AssetAmount = AssetAmount;
+    type Error = ();
+
+    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
+        self.amount = amount;
+        Ok(self)
+    }
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+        Ok(self.id)
+    }
+
+    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
+        Ok(self.amount)
+    }
+}
+
+impl From<MinimumAssetImplementation> for () {
+    fn from(_: MinimumAssetImplementation) -> Self {
+        ()
+    }
+}

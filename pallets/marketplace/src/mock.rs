@@ -44,8 +44,8 @@ impl JobAssignmentUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl AssetBarrier<MockAsset> for Barrier {
-    fn can_use_asset(_asset: &MockAsset) -> bool {
+impl AssetBarrier<MinimumAssetImplementation> for Barrier {
+    fn can_use_asset(_asset: &MinimumAssetImplementation) -> bool {
         true
     }
 }
@@ -95,13 +95,27 @@ impl ExtBuilder {
         .unwrap();
 
         pallet_balances::GenesisConfig::<Test> {
-            balances: vec![
-                (alice_account_id(), INITIAL_BALANCE),
-                (pallet_assets_account(), INITIAL_BALANCE),
-                (pallet_fees_account(), INITIAL_BALANCE),
-                (bob_account_id(), INITIAL_BALANCE),
-                (processor_account_id(), INITIAL_BALANCE),
-            ],
+            balances: {
+                #[allow(unused_mut)]
+                let mut accounts = vec![
+                    (alice_account_id(), INITIAL_BALANCE),
+                    (pallet_assets_account(), INITIAL_BALANCE),
+                    (pallet_fees_account(), INITIAL_BALANCE),
+                    (bob_account_id(), INITIAL_BALANCE),
+                    (processor_account_id(), INITIAL_BALANCE),
+                ];
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="runtime-benchmarks")] {
+                        accounts.push(
+                            (crate::benchmarking::processor_account::<Test>(), INITIAL_BALANCE)
+                        );
+                        accounts.push(
+                            (crate::benchmarking::consumer_account::<Test>(), INITIAL_BALANCE)
+                        )
+                    }
+                }
+                accounts
+            },
         }
         .assimilate_storage(&mut t)
         .unwrap();
@@ -111,10 +125,22 @@ impl ExtBuilder {
         pallet_assets::GenesisConfig::<Test> {
             assets: vec![(22, pallet_assets_account(), false, 1_000)],
             metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-            accounts: vec![
-                (22, alice_account_id(), INITIAL_BALANCE),
-                (22, bob_account_id(), INITIAL_BALANCE),
-            ],
+            accounts: {
+                #[allow(unused_mut)]
+                let mut accounts = vec![
+                    (22, alice_account_id(), INITIAL_BALANCE),
+                    (22, bob_account_id(), INITIAL_BALANCE),
+                ];
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="runtime-benchmarks")] {
+                        accounts.push(
+                            (22, crate::benchmarking::consumer_account::<Test>(), INITIAL_BALANCE)
+                        )
+                    }
+                }
+                accounts
+            },
         }
         .assimilate_storage(&mut t)
         .unwrap();
@@ -249,7 +275,7 @@ impl pallet_acurast::Config for Test {
 pub struct MockRewardManager {}
 
 impl<T: Config> RewardManager<T> for MockRewardManager {
-    type Reward = MockAsset;
+    type Reward = MinimumAssetImplementation;
 
     fn lock_reward(
         _reward: Self::Reward,
@@ -273,6 +299,7 @@ impl Config for Test {
     type AssetId = AssetId;
     type AssetAmount = AssetAmount;
     type RewardManager = MockRewardManager;
+    type Reward = MinimumAssetImplementation;
     type WeightInfo = weights::Weights<Test>;
 }
 

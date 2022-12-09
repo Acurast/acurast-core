@@ -7,7 +7,7 @@ use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-use pallet_acurast_marketplace::Reward;
+use pallet_acurast_marketplace::{MinimumAssetImplementation, Reward};
 
 pub type AcurastAssetId = u32;
 pub type AcurastAssetAmount = u128;
@@ -43,6 +43,22 @@ impl Reward for AcurastAsset {
             Fungible(amount) => Ok(*amount),
             _ => Err(()),
         }
+    }
+}
+
+impl From<MinimumAssetImplementation> for AcurastAsset {
+    fn from(asset: MinimumAssetImplementation) -> Self {
+        AcurastAsset(MultiAsset {
+            id: Concrete(MultiLocation {
+                parents: 1,
+                interior: X3(
+                    Parachain(1000),
+                    PalletInstance(50),
+                    GeneralIndex(asset.id as u128),
+                ),
+            }),
+            fun: Fungible(asset.amount),
+        })
     }
 }
 
@@ -290,6 +306,7 @@ pub mod acurast_runtime {
         type PalletId = AcurastPalletId;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
+        type Reward = AcurastAsset;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
