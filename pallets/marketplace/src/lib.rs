@@ -3,7 +3,7 @@
 #[cfg(test)]
 pub mod mock;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
-mod stub;
+pub mod stub;
 #[cfg(test)]
 mod tests;
 
@@ -41,22 +41,33 @@ pub mod pallet {
     use crate::RewardManager;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_acurast::Config {
+    pub trait Config:
+        frame_system::Config + pallet_acurast::Config + pallet_balances::Config
+    {
         type Event: From<Event<Self>>
             + IsType<<Self as pallet_acurast::Config>::Event>
             + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
-            + Into<JobRequirements<RewardFor<Self>>>;
+            // JobRequirements is a mandatory field, where you are free to chose the asset type. Just extract this info when calling into()
+            + Into<JobRequirements<RewardFor<Self>>>
+            // Should also be able to convert the other way around, by providing default values on the rest
+            // of the fields of your type
+            + From<JobRequirements<RewardFor<Self>>>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
-        type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
+
+        // constraint the associated types inside RewardManager.
+        type Reward: IsType<RewardFor<Self>> + From<MinimumAssetImplementation>;
+        type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId> + From<u32>;
         type AssetAmount: Parameter
             + CheckedMul
             + From<u128>
             + Ord
-            + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
+            + IsType<<RewardFor<Self> as Reward>::AssetAmount>
+            + From<u128>;
+
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;

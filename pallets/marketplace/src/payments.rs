@@ -9,7 +9,7 @@ use frame_support::{
     Never, PalletId, Parameter,
 };
 
-use crate::Config;
+use crate::{Config, MinimumAssetImplementation};
 
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
@@ -52,7 +52,7 @@ impl Reward for () {
 }
 
 pub trait RewardManager<T: Config> {
-    type Reward: Parameter + Member + Reward;
+    type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
 
     fn lock_reward(
         reward: Self::Reward,
@@ -101,7 +101,7 @@ where
         + Reward<
             AssetId = <T as pallet_assets::Config>::AssetId,
             AssetAmount = <T as pallet_assets::Config>::Balance,
-        >,
+        > + From<MinimumAssetImplementation>,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
 {

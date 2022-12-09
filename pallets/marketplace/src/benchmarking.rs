@@ -1,9 +1,5 @@
 use frame_benchmarking::{account, benchmarks, whitelist_account};
-use frame_support::{
-    assert_ok,
-    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
-    traits::Currency,
-};
+use frame_support::{assert_ok, sp_runtime::traits::StaticLookup};
 use frame_system::RawOrigin;
 use hex_literal::hex;
 use sp_core::*;
@@ -28,16 +24,11 @@ pub fn assert_last_acurast_event<T: Config>(generic_event: <T as pallet_acurast:
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
+// return a usable advertisement for use inside an extrinsic call
 pub fn advertisement<T: Config>(
     price_per_cpu_millisecond: u128,
     capacity: u32,
-) -> AdvertisementFor<T>
-where
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
-    RewardFor<T>: From<MockAsset>,
-    <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
-{
+) -> AdvertisementFor<T> {
     let mut pricing: BoundedVec<
         PricingVariant<<T as Config>::AssetId, <T as Config>::AssetAmount>,
         ConstU32<MAX_PRICING_VARIANTS>,
@@ -56,19 +47,16 @@ where
     }
 }
 
+/// return a usable job registration for use inside an extrinsic call
 pub fn job_registration_with_reward<T: Config>(
     script: Script,
     cpu_milliseconds: u128,
-    reward_value: u128,
-) -> JobRegistrationFor<T>
-where
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
-    RewardFor<T>: From<MockAsset>,
-{
-    let r = JobRequirements {
+    reward: MinimumAssetImplementation,
+) -> JobRegistrationFor<T> {
+    let r = JobRequirementsFor::<T> {
         slots: 1,
         cpu_milliseconds,
-        reward: asset(reward_value).into(),
+        reward: reward.into(),
     };
     let r: <T as Config>::RegistrationExtra = r.into();
     let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
@@ -84,50 +72,16 @@ pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
 }
 
-fn token_22_funded_account<T: Config>() -> T::AccountId
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-{
-    use pallet_assets::Pallet as Assets;
-    let caller: T::AccountId = account("token_account", 0, SEED);
-    whitelist_account!(caller);
-    let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-    let pallet_origin: T::Origin = RawOrigin::Signed(pallet_account.clone()).into();
-
-    T::Currency::make_free_balance_be(&caller, u32::MAX.into());
-
-    // might fail if asset is already created in genesis config. Fail doesn't affect later mint
-    let _create_token_call = Assets::<T>::create(
-        pallet_origin.clone(),
-        22.into(),
-        T::Lookup::unlookup(pallet_account.clone()),
-        10u32.into(),
-    );
-
-    let mint_token_call = Assets::<T>::mint(
-        pallet_origin,
-        22.into(),
-        T::Lookup::unlookup(caller.clone()),
-        INITIAL_BALANCE.into(),
-    );
-    assert_ok!(mint_token_call);
-
-    caller
+pub fn processor_account<T: Config>() -> T::AccountId {
+    account("processor", 0, SEED)
 }
 
-fn advertise_helper<T: Config>(submit: bool) -> (T::AccountId, AdvertisementFor<T>)
-where
-    T: pallet_assets::Config,
-    <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
-    RewardFor<T>: From<MockAsset>,
-{
-    let caller: T::AccountId = token_22_funded_account::<T>();
+pub fn consumer_account<T: Config>() -> T::AccountId {
+    account("consumer", 0, SEED)
+}
+
+fn advertise_helper<T: Config>(submit: bool) -> (T::AccountId, AdvertisementFor<T>) {
+    let caller: T::AccountId = processor_account::<T>();
     whitelist_account!(caller);
 
     let ad = advertisement::<T>(10000, 5);
@@ -143,20 +97,15 @@ where
     (caller, ad)
 }
 
-fn register_helper<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>)
-where
-    T: pallet_assets::Config,
-    <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
-    RewardFor<T>: From<MockAsset>,
-{
-    let caller: T::AccountId = token_22_funded_account::<T>();
+fn register_helper<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>) {
+    let caller: T::AccountId = consumer_account::<T>();
     whitelist_account!(caller);
 
-    let job = job_registration_with_reward::<T>(script(), 2, 20100);
+    let asset_representation = MinimumAssetImplementation {
+        id: 22,
+        amount: 100,
+    };
+    let job = job_registration_with_reward::<T>(script(), 2, asset_representation);
 
     if submit {
         let register_call =
@@ -168,16 +117,6 @@ where
 }
 
 benchmarks! {
-    where_clause {  where
-        T: pallet_assets::Config + pallet_acurast::Config,
-        <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
-        RewardFor<T>: From<MockAsset>,
-        <T as Config>::AssetId: From<u32>,
-        <T as Config>::AssetAmount: From<u128>,
-        <T as pallet_assets::Config>::AssetId: From<u32>,
-        <T as pallet_assets::Config>::Balance: From<u128>,
-    }
-
     advertise {
         // just create the data, do not submit the actual call (we want to benchmark `advertise`)
         let (caller, ad) = advertise_helper::<T>(false);
