@@ -1,3 +1,4 @@
+use acurast_common::BenchmarkDefault;
 use frame_support::sp_runtime;
 use frame_support::traits::Everything;
 use frame_support::weights::Weight;

@@ -8,6 +8,7 @@ use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
+pub use pallet_acurast::benchmarking::{consumer_account, processor_account};
 use pallet_acurast::Pallet as Acurast;
 use pallet_acurast::{Event as AcurastEvent, Fulfillment, JobRegistrationFor, Script};
 
@@ -24,17 +25,29 @@ pub fn assert_last_acurast_event<T: Config>(generic_event: <T as pallet_acurast:
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
+fn extract_reward_id<T: Config>() -> T::AssetId {
+    // extract the reward id from the BenchmarkDefault implementation by the runtime.
+    // first get the job requirements by getting default RegistrationExtra, and converting
+    let benchmark_job_requirements: JobRequirementsFor<T> =
+        <T as Config>::RegistrationExtra::benchmark_default().into();
+    // then convert the nested reward to a T::Reward that is equal to it, but extended with other traits
+    let reward_asset: T::Reward = benchmark_job_requirements.reward.into();
+    // convert the reward to MinimumAssetImplementation to extract the asset id
+    let reward_base_impl: MinimumAssetImplementation = reward_asset.into();
+    reward_base_impl.id.into()
+}
 // return a usable advertisement for use inside an extrinsic call
 pub fn advertisement<T: Config>(
     price_per_cpu_millisecond: u128,
     capacity: u32,
 ) -> AdvertisementFor<T> {
+    // extract asset to be matched by processor
     let mut pricing: BoundedVec<
         PricingVariant<<T as Config>::AssetId, <T as Config>::AssetAmount>,
         ConstU32<MAX_PRICING_VARIANTS>,
     > = Default::default();
     let r = pricing.try_push(PricingVariant {
-        reward_asset: 0.into(),
+        reward_asset: extract_reward_id::<T>(),
         price_per_cpu_millisecond: price_per_cpu_millisecond.into(),
         bonus: 0.into(),
         maximum_slash: 0.into(),
@@ -51,33 +64,26 @@ pub fn advertisement<T: Config>(
 pub fn job_registration_with_reward<T: Config>(
     script: Script,
     cpu_milliseconds: u128,
-    reward: MinimumAssetImplementation,
+    // reward: MinimumAssetImplementation,
 ) -> JobRegistrationFor<T> {
-    let r = JobRequirementsFor::<T> {
-        slots: 1,
-        cpu_milliseconds,
-        reward: reward.into(),
-    };
-    let r: <T as Config>::RegistrationExtra = r.into();
-    let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
+    // let r = JobRequirementsFor::<T> {
+    //     slots: 1,
+    //     cpu_milliseconds,
+    //     reward: reward.into(),
+    // };
+    // let r: <T as Config>::RegistrationExtra = r.into();
+    // let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
+    let r = <T as Config>::RegistrationExtra::benchmark_default();
     JobRegistrationFor::<T> {
         script,
         allowed_sources: None,
         allow_only_verified_sources: false,
-        extra: r,
+        extra: r.into(),
     }
 }
 
 pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
-}
-
-pub fn processor_account<T: Config>() -> T::AccountId {
-    account("processor", 0, SEED)
-}
-
-pub fn consumer_account<T: Config>() -> T::AccountId {
-    account("consumer", 0, SEED)
 }
 
 fn advertise_helper<T: Config>(submit: bool) -> (T::AccountId, AdvertisementFor<T>) {
@@ -101,11 +107,11 @@ fn register_helper<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor
     let caller: T::AccountId = consumer_account::<T>();
     whitelist_account!(caller);
 
-    let asset_representation = MinimumAssetImplementation {
-        id: 22,
-        amount: 100,
-    };
-    let job = job_registration_with_reward::<T>(script(), 2, asset_representation);
+    // let asset_representation = MinimumAssetImplementation {
+    //     id: 22,
+    //     amount: 100,
+    // };
+    let job = job_registration_with_reward::<T>(script(), 2);
 
     if submit {
         let register_call =
@@ -117,6 +123,7 @@ fn register_helper<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor
 }
 
 benchmarks! {
+
     advertise {
         // just create the data, do not submit the actual call (we want to benchmark `advertise`)
         let (caller, ad) = advertise_helper::<T>(false);

@@ -20,8 +20,11 @@ pub use pallet::*;
 pub use payments::*;
 pub use types::*;
 
+use acurast_common::BenchmarkDefault;
+
 #[frame_support::pallet]
 pub mod pallet {
+    use acurast_common::BenchmarkDefault;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
         sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
@@ -53,13 +56,17 @@ pub mod pallet {
             + Into<JobRequirements<RewardFor<Self>>>
             // Should also be able to convert the other way around, by providing default values on the rest
             // of the fields of your type
-            + From<JobRequirements<RewardFor<Self>>>;
+            + From<JobRequirements<RewardFor<Self>>>
+            + BenchmarkDefault;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
 
         // constraint the associated types inside RewardManager.
-        type Reward: IsType<RewardFor<Self>> + From<MinimumAssetImplementation>;
+        type Reward: IsType<RewardFor<Self>>
+            + From<MinimumAssetImplementation>
+            + Into<MinimumAssetImplementation>;
+
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId> + From<u32>;
         type AssetAmount: Parameter
             + CheckedMul
@@ -175,7 +182,10 @@ pub mod pallet {
         pub fn advertise(
             origin: OriginFor<T>,
             advertisement: AdvertisementFor<T>,
-        ) -> DispatchResultWithPostInfo {
+        ) -> DispatchResultWithPostInfo
+// where
+        //     AdvertisementFor<T>: BenchmarkDefault,
+        {
             let who = ensure_signed(origin)?;
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
 

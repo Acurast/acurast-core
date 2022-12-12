@@ -12,7 +12,7 @@ use sp_runtime::{bounded_vec, BoundedVec};
 use sp_runtime::{generic, parameter_types, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::Script;
+use pallet_acurast::{BenchmarkDefault, Script};
 use pallet_acurast::{
     CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter, JobAssignmentUpdate,
     JobAssignmentUpdateBarrier, JobRegistrationFor, RevocationListUpdateBarrier,
@@ -106,9 +106,6 @@ impl ExtBuilder {
                 ];
                 cfg_if::cfg_if! {
                     if #[cfg(feature="runtime-benchmarks")] {
-                        accounts.push(
-                            (crate::benchmarking::processor_account::<Test>(), INITIAL_BALANCE)
-                        );
                         accounts.push(
                             (crate::benchmarking::consumer_account::<Test>(), INITIAL_BALANCE)
                         )
@@ -272,6 +269,20 @@ impl pallet_acurast::Config for Test {
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
 }
 
+// used by benchmark tests
+impl BenchmarkDefault for JobRequirementsFor<Test> {
+    fn benchmark_default() -> Self {
+        JobRequirements {
+            slots: 1,
+            cpu_milliseconds: 5000,
+            reward: MinimumAssetImplementation {
+                id: 22,
+                amount: 1_000_000_000,
+            },
+        }
+    }
+}
+
 pub struct MockRewardManager {}
 
 impl<T: Config> RewardManager<T> for MockRewardManager {
@@ -296,10 +307,10 @@ impl Config for Test {
     type Event = Event;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
+    type Reward = MinimumAssetImplementation;
     type AssetId = AssetId;
     type AssetAmount = AssetAmount;
     type RewardManager = MockRewardManager;
-    type Reward = MinimumAssetImplementation;
     type WeightInfo = weights::Weights<Test>;
 }
 

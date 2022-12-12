@@ -3,7 +3,7 @@ use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
     sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
-    traits::{Currency, OriginTrait},
+    traits::OriginTrait,
 };
 use frame_system::RawOrigin;
 use hex_literal::hex;
@@ -31,12 +31,12 @@ pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
-pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T> {
+pub fn job_registration<T: Config>() -> JobRegistrationFor<T> {
     return JobRegistration {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
-        extra,
+        extra: T::RegistrationExtra::benchmark_default(),
     };
 }
 
@@ -44,11 +44,16 @@ pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
 }
 
-pub fn processor_account_id<T: Config>() -> T::AccountId
-where
-    T::AccountId: From<[u8; 32]>,
-{
-    hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
+pub fn processor_account<T: Config>() -> T::AccountId {
+    let pub_key = hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694");
+    codec::Decode::decode(&mut sp_runtime::traits::TrailingZeroInput::new(
+        pub_key.as_ref(),
+    ))
+    .expect("infinite length input; no invalid inputs for type; qed")
+}
+
+pub fn consumer_account<T: Config>() -> T::AccountId {
+    account("consumer", 0, SEED)
 }
 
 pub fn attestation_chain() -> AttestationChain {
@@ -64,82 +69,37 @@ pub fn attestation_chain() -> AttestationChain {
     }
 }
 
-fn token_22_funded_account<T: Config>() -> T::AccountId
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-{
-    use pallet_assets::Pallet as Assets;
-    let caller: T::AccountId = account("token_account", 0, SEED);
-    whitelist_account!(caller);
-    let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-    let pallet_origin: T::Origin = RawOrigin::Signed(pallet_account.clone()).into();
+fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>) {
+    let consumer: T::AccountId = consumer_account::<T>();
+    whitelist_account!(consumer);
 
-    T::Currency::make_free_balance_be(&caller, u32::MAX.into());
-
-    // might fail if asset is already created in genesis config. Fail doesn't affect later mint
-    let _create_token_call = Assets::<T>::create(
-        pallet_origin.clone(),
-        22.into(),
-        T::Lookup::unlookup(pallet_account.clone()),
-        10u32.into(),
-    );
-
-    let mint_token_call = Assets::<T>::mint(
-        pallet_origin,
-        22.into(),
-        T::Lookup::unlookup(caller.clone()),
-        INITIAL_BALANCE.into(),
-    );
-    assert_ok!(mint_token_call);
-
-    caller
-}
-
-fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>)
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: Default,
-{
-    let caller: T::AccountId = token_22_funded_account::<T>();
-    whitelist_account!(caller);
-
-    let job = job_registration::<T>(Default::default());
+    let job = job_registration::<T>();
 
     if submit {
         let register_call =
-            Acurast::<T>::register(RawOrigin::Signed(caller.clone()).into(), job.clone());
+            Acurast::<T>::register(RawOrigin::Signed(consumer.clone()).into(), job.clone());
         assert_ok!(register_call);
     }
 
-    (caller, job)
+    (consumer, job)
 }
 
 fn assign_job<T: Config>(
     submit: bool,
-    caller: T::AccountId,
     job: JobRegistrationFor<T>,
-) -> JobAssignmentUpdate<T::AccountId>
-where
-    T: pallet_assets::Config,
-{
-    let processor_account: T::AccountId = account("processor", 0, SEED);
+) -> JobAssignmentUpdate<T::AccountId> {
+    let consumer_account: T::AccountId = consumer_account::<T>();
+    let processor_account: T::AccountId = processor_account::<T>();
 
     let job_assignment = JobAssignmentUpdate {
         operation: ListUpdateOperation::Add,
-        assignee: processor_account.clone(),
-        job_id: (caller.clone(), job.script.clone()),
+        assignee: processor_account,
+        job_id: (consumer_account.clone(), job.script.clone()),
     };
-
-    // create processor account by giving t over existential deposit
-    T::Currency::make_free_balance_be(&processor_account, u32::MAX.into());
 
     if submit {
         let assignment_call = Acurast::<T>::update_job_assignments(
-            RawOrigin::Signed(caller.clone()).into(),
+            RawOrigin::Signed(consumer_account).into(),
             vec![job_assignment.clone()],
         );
         assert_ok!(assignment_call);
@@ -150,11 +110,7 @@ where
 
 benchmarks! {
     where_clause {  where
-        T: pallet_assets::Config + pallet_timestamp::Config,
-        <T as pallet_assets::Config>::AssetId: From<u32>,
-        <T as pallet_assets::Config>::Balance: From<u128>,
-        <T as Config>::RegistrationExtra: Default,
-        <T as frame_system::Config>::AccountId: From<[u8; 32]>,
+        T: pallet_timestamp::Config,
         <T as pallet_timestamp::Config>::Moment: From<u64>,
     }
 
@@ -180,7 +136,7 @@ benchmarks! {
         let (caller, job) = register_job::<T>(true);
         let sources_update = vec![AllowedSourcesUpdate {
             operation: ListUpdateOperation::Add,
-            account_id: account("processor", 0, SEED),
+            account_id: processor_account::<T>(),
         }];
 
     }: _(RawOrigin::Signed(caller.clone()), job.script.clone(), sources_update.clone())
@@ -192,7 +148,7 @@ benchmarks! {
 
     fulfill {
         let (caller, job) = register_job::<T>(true);
-        let job_assignment = assign_job::<T>(true, caller.clone(), job.clone());
+        let job_assignment = assign_job::<T>(true, job.clone());
         let fulfillment = Fulfillment {
             script: job.script.clone(),
             payload: hex!("00").to_vec(),
@@ -209,7 +165,7 @@ benchmarks! {
     }
 
     submit_attestation {
-        let processor_account: T::AccountId = processor_account_id::<T>();
+        let processor_account = processor_account::<T>();
         let attestation_chain = attestation_chain();
         let timestamp_call = pallet_timestamp::Pallet::<T>::set(T::Origin::none(), 1657363915001u64.into());
         assert_ok!(timestamp_call);
