@@ -268,7 +268,7 @@ pub mod pallet {
 
             match <StoredJobStatus<T>>::get(&who, &registration.script) {
                 Some(job_status) => ensure!(
-                    job_status == JobStatus::Open,
+                    job_status != JobStatus::Assigned,
                     Error::<T>::JobRegistrationUnmodifiable
                 ),
                 None => {}
