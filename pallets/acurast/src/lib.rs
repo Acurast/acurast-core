@@ -318,9 +318,8 @@ pub mod pallet {
             let requester = T::Lookup::lookup(requester)?;
 
             // find registration
-            let registration =
-                <StoredJobRegistration<T>>::get(&requester.clone(), &fulfillment.script)
-                    .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            let registration = <StoredJobRegistration<T>>::get(&requester, &fulfillment.script)
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             <T as Config>::JobHooks::fulfill_hook(
                 &who,
@@ -336,6 +335,8 @@ pub mod pallet {
                 registration.clone(),
                 requester.clone(),
             )?;
+
+            <StoredJobRegistration<T>>::remove(&requester, &fulfillment.script);
 
             Self::deposit_event(Event::ReceivedFulfillment(
                 who,
