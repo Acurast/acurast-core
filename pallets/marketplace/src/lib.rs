@@ -266,13 +266,10 @@ pub mod pallet {
                 Error::<T>::JobRegistrationZeroReward
             );
 
-            match <StoredJobStatus<T>>::get(&who, &registration.script) {
-                Some(job_status) => ensure!(
-                    job_status != JobStatus::Assigned,
-                    Error::<T>::JobRegistrationUnmodifiable
-                ),
-                None => {}
-            }
+            ensure!(
+                Some(JobStatus::Assigned) != <StoredJobStatus<T>>::get(&who, &registration.script),
+                Error::<T>::JobRegistrationUnmodifiable
+            );
 
             // reward is understood per slot
             let mut total = extra.reward.clone();
