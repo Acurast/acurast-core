@@ -37,7 +37,7 @@ pub mod pallet {
     use sp_runtime::traits::CheckedMul;
     use sp_std::prelude::*;
 
-    use crate::payments::{Reward, RewardFor};
+    use crate::payments::Reward;
     use crate::types::*;
     use crate::utils::*;
     use crate::weights::WeightInfo;
@@ -53,29 +53,30 @@ pub mod pallet {
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             // JobRequirements is a mandatory field, where you are free to chose the asset type. Just extract this info when calling into()
-            + Into<JobRequirements<RewardFor<Self>>>
+            + Into<JobRequirements<Self>>
             // Should also be able to convert the other way around, by providing default values on the rest
             // of the fields of your type
-            + From<JobRequirements<RewardFor<Self>>>
+            + From<JobRequirements<Self>>
             + BenchmarkDefault;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
 
-        // constraint the associated types inside RewardManager.
-        type Reward: IsType<RewardFor<Self>>
-            + From<MinimumAssetImplementation>
-            + Into<MinimumAssetImplementation>;
+        // // constraint the associated types inside RewardManager.
+        // type Reward: IsType<RewardFor<Self>>
+        //     + From<MinimumAssetImplementation>
+        //     + Into<MinimumAssetImplementation>;
 
-        type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId> + From<u32>;
+        type AssetId: Parameter + IsType<<Self::Reward as Reward>::AssetId> + From<u32>;
         type AssetAmount: Parameter
             + CheckedMul
             + From<u128>
             + Ord
-            + IsType<<RewardFor<Self> as Reward>::AssetAmount>
+            + IsType<<Self::Reward as Reward>::AssetAmount>
             + From<u128>;
 
         /// Logic for locking and paying tokens for job execution
+        type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;
     }
@@ -270,7 +271,7 @@ pub mod pallet {
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
+            let extra: JobRequirements<T> = e.into();
 
             ensure!(
                 extra.cpu_milliseconds > 0,
@@ -365,7 +366,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::JobStatusNotFound)?;
 
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
+            let extra: JobRequirements<T> = e.into();
 
             // validate
             ensure!(
@@ -407,7 +408,7 @@ pub mod pallet {
             registration: &JobRegistrationFor<T>,
         ) -> Result<bool, Error<T>> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
+            let extra: JobRequirements<T> = e.into();
 
             // strips away the asset amount
             let reward_asset: <T as Config>::AssetId = extra

@@ -28,13 +28,19 @@ pub fn assert_last_acurast_event<T: Config>(generic_event: <T as pallet_acurast:
 fn extract_reward_id<T: Config>() -> T::AssetId {
     // extract the reward id from the BenchmarkDefault implementation by the runtime.
     // first get the job requirements by getting default RegistrationExtra, and converting
-    let benchmark_job_requirements: JobRequirementsFor<T> =
+    let benchmark_job_requirements: JobRequirements<T> =
         <T as Config>::RegistrationExtra::benchmark_default().into();
     // then convert the nested reward to a T::Reward that is equal to it, but extended with other traits
-    let reward_asset: T::Reward = benchmark_job_requirements.reward.into();
-    // convert the reward to MinimumAssetImplementation to extract the asset id
-    let reward_base_impl: MinimumAssetImplementation = reward_asset.into();
-    reward_base_impl.id.into()
+    // let reward_asset: T::Reward = benchmark_job_requirements.reward.into();
+    // // convert the reward to MinimumAssetImplementation to extract the asset id
+    // let reward_base_impl: MinimumAssetImplementation = reward_asset.into();
+    // reward_base_impl.id.into()
+    // reward_asset.ass
+    benchmark_job_requirements
+        .reward
+        .try_get_asset_id()
+        .unwrap_or_else(|_| panic!("can't get asset id from default registration extra"))
+        .into()
 }
 // return a usable advertisement for use inside an extrinsic call
 pub fn advertisement<T: Config>(
@@ -52,6 +58,7 @@ pub fn advertisement<T: Config>(
         bonus: 0.into(),
         maximum_slash: 0.into(),
     });
+
     assert!(r.is_ok(), "Expected Ok(_). Got {:#?}", r);
     Advertisement {
         pricing,

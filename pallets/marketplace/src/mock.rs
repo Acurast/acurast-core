@@ -1,7 +1,7 @@
 use frame_support::pallet_prelude::*;
 use frame_support::traits::Everything;
 use frame_support::weights::Weight;
-use frame_support::{pallet_prelude::GenesisBuild, PalletId};
+use frame_support::{pallet_prelude::GenesisBuild, Never, PalletId};
 use hex_literal::hex;
 use sp_core::*;
 use sp_io;
@@ -257,7 +257,7 @@ impl parachain_info::Config for Test {}
 
 impl pallet_acurast::Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtra = JobRequirements<Self>;
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
@@ -269,34 +269,18 @@ impl pallet_acurast::Config for Test {
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
 }
 
-// used by benchmark tests
-impl BenchmarkDefault for JobRequirementsFor<Test> {
-    fn benchmark_default() -> Self {
-        JobRequirements {
-            slots: 1,
-            cpu_milliseconds: 5000,
-            reward: MinimumAssetImplementation {
-                id: 22,
-                amount: 1_000_000_000,
-            },
-        }
-    }
-}
-
 pub struct MockRewardManager {}
 
 impl<T: Config> RewardManager<T> for MockRewardManager {
-    type Reward = MinimumAssetImplementation;
-
     fn lock_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _owner: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _target: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
@@ -305,11 +289,11 @@ impl<T: Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtra = JobRequirements<Self>;
     type PalletId = AcurastPalletId;
+    type AssetId = u32;
+    type AssetAmount = u128;
     type Reward = MinimumAssetImplementation;
-    type AssetId = AssetId;
-    type AssetAmount = AssetAmount;
     type RewardManager = MockRewardManager;
     type WeightInfo = weights::Weights<Test>;
 }

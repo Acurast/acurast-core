@@ -21,7 +21,7 @@ impl<Asset> AssetBarrier<Asset> for () {
     }
 }
 
-pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
+// pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
 pub trait Reward {
     type AssetId;
@@ -34,8 +34,8 @@ pub trait Reward {
 }
 
 impl Reward for () {
-    type AssetId = Never;
-    type AssetAmount = Never;
+    type AssetId = u32;
+    type AssetAmount = u128;
     type Error = ();
 
     fn with_amount(&mut self, _: Self::AssetAmount) -> Result<&Self, Self::Error> {
@@ -52,30 +52,26 @@ impl Reward for () {
 }
 
 pub trait RewardManager<T: Config> {
-    type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
-
     fn lock_reward(
-        reward: Self::Reward,
+        reward: T::Reward,
         owner: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError>;
     fn pay_reward(
-        reward: Self::Reward,
+        reward: T::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError>;
 }
 
-impl<T: Config> RewardManager<T> for () {
-    type Reward = ();
-
+impl<T: Config<Reward = ()>> RewardManager<T> for () {
     fn lock_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _owner: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _target: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
@@ -88,27 +84,20 @@ pub trait FeeManager {
     fn pallet_id() -> PalletId;
 }
 
-pub struct AssetRewardManager<Asset, Barrier, AssetSplit>(
-    PhantomData<(Asset, Barrier, AssetSplit)>,
-);
-impl<T: Config, Asset, Barrier, AssetSplit> RewardManager<T>
-    for AssetRewardManager<Asset, Barrier, AssetSplit>
+pub struct AssetRewardManager<Barrier, AssetSplit>(PhantomData<(Barrier, AssetSplit)>);
+impl<T: Config, Barrier, AssetSplit> RewardManager<T> for AssetRewardManager<Barrier, AssetSplit>
 where
     T: pallet_assets::Config,
     <T as pallet_assets::Config>::AssetId: TryInto<u32>,
-    Asset: Parameter
-        + Member
-        + Reward<
-            AssetId = <T as pallet_assets::Config>::AssetId,
-            AssetAmount = <T as pallet_assets::Config>::Balance,
-        > + From<MinimumAssetImplementation>,
-    Barrier: AssetBarrier<Asset>,
+    T::Reward: Reward<
+        AssetId = <T as pallet_assets::Config>::AssetId,
+        AssetAmount = <T as pallet_assets::Config>::Balance,
+    >,
+    Barrier: AssetBarrier<T::Reward>,
     AssetSplit: FeeManager,
 {
-    type Reward = Asset;
-
     fn lock_reward(
-        reward: Self::Reward,
+        reward: T::Reward,
         owner: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         if !Barrier::can_use_asset(&reward) {
@@ -137,7 +126,7 @@ where
     }
 
     fn pay_reward(
-        reward: Self::Reward,
+        reward: T::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();

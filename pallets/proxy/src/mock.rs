@@ -63,6 +63,7 @@ impl From<MinimumAssetImplementation> for AcurastAsset {
 }
 
 pub mod acurast_runtime {
+    use acurast_common::BenchmarkDefault;
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32},
@@ -85,7 +86,7 @@ pub mod acurast_runtime {
     pub use pallet_acurast;
     use pallet_acurast::JobAssignmentUpdateBarrier;
     pub use pallet_acurast_marketplace;
-    use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
+    use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirementsFor};
 
     use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
 
@@ -286,9 +287,25 @@ pub mod acurast_runtime {
         }
     }
 
+    // pub type ProxyJobRequirements = JobRequirements<AcurastAsset>;
+    // // used by benchmark tests
+    // impl BenchmarkDefault for ProxyJobRequirements {
+    //     fn benchmark_default() -> Self {
+    //         JobRequirements {
+    //             slots: 1,
+    //             cpu_milliseconds: 5000,
+    //             reward: MinimumAssetImplementation {
+    //                 id: 22,
+    //                 amount: 1_000_000_000,
+    //             }
+    //             .into(),
+    //         }
+    //     }
+    // }
+
     impl pallet_acurast::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirementsFor<Self>;
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
         type PalletId = AcurastPalletId;
@@ -302,11 +319,10 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirementsFor<Self>;
         type PalletId = AcurastPalletId;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
-        type Reward = AcurastAsset;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
@@ -353,9 +369,9 @@ pub mod proxy_runtime {
     };
     use xcm_executor::{Config, XcmExecutor};
 
-    use pallet_acurast_marketplace::JobRequirements;
+    use pallet_acurast_marketplace::JobRequirementsFor;
 
-    use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
+    use crate::mock::{AcurastAssetAmount, AcurastAssetId};
 
     pub type AccountId = AccountId32;
     pub type LocationToAccountId = (
@@ -506,7 +522,7 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirementsFor<Self>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;

@@ -1,9 +1,10 @@
+use acurast_common::BenchmarkDefault;
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
 use pallet_acurast::JobRegistration;
 
-use crate::payments::RewardFor;
+// use crate::payments::RewardFor;
 use crate::Config;
 
 pub const MAX_PRICING_VARIANTS: u32 = 100;
@@ -65,20 +66,32 @@ pub struct SLAEvaluation {
     pub met: u8,
 }
 
-pub type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;
+// pub type JobRequirementsFor<T> = JobRequirements<RewardFor<T>>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements<Reward>
-where
-    Reward: Parameter + Member,
-{
+pub struct JobRequirements<T: Config> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// CPU milliseconds (upper bound) required to execute script.
     pub cpu_milliseconds: u128,
     /// Reward offered for the job
-    pub reward: Reward,
+    pub reward: T::Reward,
+}
+
+// used by benchmark tests
+impl<T: Config> BenchmarkDefault for JobRequirements<T> {
+    fn benchmark_default() -> Self {
+        let reward: T::Reward = T::Reward::from(MinimumAssetImplementation {
+            id: 22,
+            amount: 1_000_000_000,
+        });
+        JobRequirements {
+            slots: 1,
+            cpu_milliseconds: 5000,
+            reward,
+        }
+    }
 }
 
 pub type AssetId = u32;

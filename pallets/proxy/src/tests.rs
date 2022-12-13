@@ -24,7 +24,7 @@ use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chai
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
-use pallet_acurast::JobRegistration;
+use pallet_acurast::{JobRegistration, JobRegistrationFor};
 use pallet_acurast_marketplace::{
     types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
 };
@@ -187,7 +187,7 @@ pub fn owned_asset(amount: u128) -> AcurastAsset {
         fun: Fungible(amount),
     })
 }
-pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset>> {
+pub fn registration<T: pallet_acurast_marketplace::Config>() -> JobRegistrationFor<T> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -477,7 +477,7 @@ mod proxy_calls {
             use proxy_runtime::Call::AcurastProxy;
 
             let message_call = AcurastProxy(register {
-                registration: registration(),
+                registration: registration::<proxy_runtime::Runtime>(),
             });
             let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
             let dispatch_status = message_call.dispatch(alice_origin);
@@ -688,7 +688,7 @@ mod proxy_calls {
             let payload: [u8; 32] = rand::random();
 
             let fulfillment = Fulfillment {
-                script: registration().script,
+                script: registration::<proxy_runtime::Runtime>().script,
                 payload: payload.to_vec(),
             };
 

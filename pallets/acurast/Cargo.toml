@@ -60,6 +60,7 @@ runtime-benchmarks = [
   "sp-core",
   "pallet-timestamp",
   "parachains-common",
+  "sp-runtime"
 ]
 
 std = [

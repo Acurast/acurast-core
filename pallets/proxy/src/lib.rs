@@ -26,15 +26,21 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
-    use acurast_common::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
-    use pallet_acurast_marketplace::Advertisement;
+    use acurast_common::{
+        AllowedSourcesUpdate, BenchmarkDefault, Fulfillment, JobRegistration, Script,
+    };
+    use pallet_acurast_marketplace::{Advertisement, JobRequirements};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member;
+        type RegistrationExtra: Into<JobRequirements<Self>>
+            // Should also be able to convert the other way around, by providing default values on the rest
+            // of the fields of your type
+            + From<JobRequirements<Self>>
+            + BenchmarkDefault;
         type AssetId: Parameter + Member;
         type AssetAmount: Parameter;
         type XcmSender: SendXcm;
