@@ -70,7 +70,7 @@ pub struct SLAEvaluation {
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements<T: Config> {
+pub struct JobRequirements<T: crate::Config> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// CPU milliseconds (upper bound) required to execute script.

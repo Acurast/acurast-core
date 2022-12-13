@@ -62,11 +62,6 @@ pub mod pallet {
         #[pallet::constant]
         type PalletId: Get<PalletId>;
 
-        // // constraint the associated types inside RewardManager.
-        // type Reward: IsType<RewardFor<Self>>
-        //     + From<MinimumAssetImplementation>
-        //     + Into<MinimumAssetImplementation>;
-
         type AssetId: Parameter + IsType<<Self::Reward as Reward>::AssetId> + From<u32>;
         type AssetAmount: Parameter
             + CheckedMul
@@ -183,10 +178,7 @@ pub mod pallet {
         pub fn advertise(
             origin: OriginFor<T>,
             advertisement: AdvertisementFor<T>,
-        ) -> DispatchResultWithPostInfo
-// where
-        //     AdvertisementFor<T>: BenchmarkDefault,
-        {
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
 

@@ -29,18 +29,19 @@ pub mod pallet {
     use acurast_common::{
         AllowedSourcesUpdate, BenchmarkDefault, Fulfillment, JobRegistration, Script,
     };
-    use pallet_acurast_marketplace::{Advertisement, JobRequirements};
+    use pallet_acurast_marketplace::{payments::Reward, Advertisement, MinimumAssetImplementation};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Into<JobRequirements<Self>>
-            // Should also be able to convert the other way around, by providing default values on the rest
-            // of the fields of your type
+        type RegistrationExtra: Parameter
+            + Member
+            + Into<JobRequirements<Self>>
             + From<JobRequirements<Self>>
             + BenchmarkDefault;
+        type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
         type AssetId: Parameter + Member;
         type AssetAmount: Parameter;
         type XcmSender: SendXcm;
@@ -99,6 +100,32 @@ pub mod pallet {
                 ProxyCall::UpdateAllowedSources { .. } => ExtrinsicName::UpdateAllowedSources,
                 ProxyCall::Fulfill { .. } => ExtrinsicName::Fulfill,
                 ProxyCall::Advertise { .. } => ExtrinsicName::Advertise,
+            }
+        }
+    }
+
+    /// Structure representing a job registration.
+    #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+    pub struct JobRequirements<T: Config> {
+        /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+        pub slots: u8,
+        /// CPU milliseconds (upper bound) required to execute script.
+        pub cpu_milliseconds: u128,
+        /// Reward offered for the job
+        pub reward: T::Reward,
+    }
+
+    // used by benchmark tests
+    impl<T: Config> BenchmarkDefault for JobRequirements<T> {
+        fn benchmark_default() -> Self {
+            let reward: T::Reward = T::Reward::from(MinimumAssetImplementation {
+                id: 22,
+                amount: 1_000_000_000,
+            });
+            JobRequirements {
+                slots: 1,
+                cpu_milliseconds: 5000,
+                reward,
             }
         }
     }

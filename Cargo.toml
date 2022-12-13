@@ -12,7 +12,7 @@ members = [
 	"pallets/acurast-xcm-sender",
 	"pallets/acurast-fulfillment-receiver",
 	"pallets/fee-manager",
-	# "pallets/proxy",
+	"pallets/proxy",
 
 
 	"p256-crypto",

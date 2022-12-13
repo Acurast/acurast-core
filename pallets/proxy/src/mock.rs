@@ -86,7 +86,7 @@ pub mod acurast_runtime {
     pub use pallet_acurast;
     use pallet_acurast::JobAssignmentUpdateBarrier;
     pub use pallet_acurast_marketplace;
-    use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirementsFor};
+    use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager};
 
     use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
 
@@ -305,7 +305,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirementsFor<Self>;
+        type RegistrationExtra = pallet_acurast_marketplace::JobRequirements<Self>;
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
         type PalletId = AcurastPalletId;
@@ -319,11 +319,12 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirementsFor<Self>;
+        type RegistrationExtra = pallet_acurast_marketplace::JobRequirements<Self>;
         type PalletId = AcurastPalletId;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
-        type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
+        type Reward = AcurastAsset;
+        type RewardManager = AssetRewardManager<AcurastBarrier, FeeManagerImpl>;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
 
@@ -351,6 +352,7 @@ pub mod acurast_runtime {
 }
 
 pub mod proxy_runtime {
+    use super::*;
     use frame_support::{
         construct_runtime, parameter_types,
         traits::{Everything, Nothing},
@@ -368,8 +370,6 @@ pub mod proxy_runtime {
         SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::{Config, XcmExecutor};
-
-    use pallet_acurast_marketplace::JobRequirementsFor;
 
     use crate::mock::{AcurastAssetAmount, AcurastAssetId};
 
@@ -522,7 +522,8 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type Event = Event;
-        type RegistrationExtra = JobRequirementsFor<Self>;
+        type RegistrationExtra = crate::JobRequirements<Self>;
+        type Reward = AcurastAsset;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;
