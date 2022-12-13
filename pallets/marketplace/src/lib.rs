@@ -67,8 +67,7 @@ pub mod pallet {
             + CheckedMul
             + From<u128>
             + Ord
-            + IsType<<Self::Reward as Reward>::AssetAmount>
-            + From<u128>;
+            + IsType<<Self::Reward as Reward>::AssetAmount>;
 
         /// Logic for locking and paying tokens for job execution
         type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
