@@ -17,11 +17,25 @@
 
 use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use sp_std::marker::PhantomData;
-use pallet_acurast;
+
+/// Weight functions needed for {{pallet}}.
+pub trait WeightInfo {
+    {{#each benchmarks as |benchmark|}}
+    fn {{benchmark.name~}}
+    (
+        {{~#each benchmark.components as |c| ~}}
+        {{c.name}}: u32, {{/each~}}
+    ) -> Weight;
+    {{/each}}
+}
 
 /// Weights for {{pallet}} using the Substrate node and recommended hardware.
-pub struct Weights<T, W>(PhantomData<(T, W)>);
-impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::WeightInfo> pallet_acurast::WeightInfo for Weights<T, W> {
+pub struct Weights<T>(PhantomData<T>);
+{{#if (eq pallet "frame_system")}}
+impl<T: crate::Config> WeightInfo for Weights<T> {
+{{else}}
+impl<T: frame_system::Config> WeightInfo for Weights<T> {
+{{/if}}
     {{#each benchmarks as |benchmark|}}
     {{#each benchmark.comments as |comment|}}
     // {{comment}}
@@ -55,17 +69,7 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
     }
     {{/each}}
 
-    fn update_allowed_sources() -> Weight {
-        W::update_allowed_sources()
-    }
-    fn submit_attestation() -> Weight {
-        W::submit_attestation()
-    }
-    fn update_certificate_revocation_list() -> Weight {
-        W::update_certificate_revocation_list()
-    }
-
     fn fulfill() -> Weight {
-        W::fulfill()
+        Weight::from_ref_time(10_000)
     }
 }
