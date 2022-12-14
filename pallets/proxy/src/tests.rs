@@ -196,6 +196,7 @@ pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset
             slots: 1,
             cpu_milliseconds: 2,
             reward: owned_asset(20000),
+            min_reputation: None,
         },
     }
 }

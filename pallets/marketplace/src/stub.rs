@@ -6,6 +6,8 @@ use sp_core::*;
 use sp_runtime::AccountId32;
 use sp_std::prelude::*;
 
+use rand::distributions::{Alphanumeric, DistString};
+
 use pallet_acurast::{AttestationChain, Script, SerialNumber};
 
 use crate::*;
@@ -56,6 +58,16 @@ pub const LEAF_CERT: [u8; 672] = hex!("3082029c30820241a003020102020101300c06082
 
 pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
+}
+
+pub fn random_script() -> Script {
+    let string = Alphanumeric.sample_string(&mut rand::thread_rng(), 46);
+    let hex = hex::encode("ipfs://".to_owned() + string.as_str());
+    let mut bytes = [0u8; 53];
+    hex::decode_to_slice(hex, &mut bytes as &mut [u8])
+        .map_err(|err| println!("{:?}", err))
+        .ok();
+    bytes.to_vec().try_into().unwrap()
 }
 
 pub fn invalid_script_1() -> Script {
@@ -139,6 +151,10 @@ pub fn dave_account_id() -> AccountId {
 
 pub fn eve_account_id() -> AccountId {
     [4; 32].into()
+}
+
+pub fn account_id(i: u8) -> AccountId {
+    [i; 32].into()
 }
 
 pub fn script_random_value() -> Script {

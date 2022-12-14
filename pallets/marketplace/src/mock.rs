@@ -302,7 +302,11 @@ pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
 }
 
-pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> AdvertisementFor<Test> {
+pub fn advertisement(
+    price_per_cpu_millisecond: u128,
+    capacity: u32,
+    allowed_consumers: Option<Vec<<Test as frame_system::Config>::AccountId>>,
+) -> AdvertisementFor<Test> {
     let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
         bounded_vec![PricingVariant {
             reward_asset: 0,
@@ -312,7 +316,7 @@ pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> Advertis
         }];
     Advertisement {
         pricing,
-        allowed_consumers: None,
+        allowed_consumers,
         capacity,
     }
 }
@@ -321,6 +325,7 @@ pub fn job_registration_with_reward(
     script: Script,
     cpu_milliseconds: u128,
     reward_value: u128,
+    min_reputation: Option<u128>,
 ) -> JobRegistrationFor<Test> {
     JobRegistrationFor::<Test> {
         script,
@@ -330,6 +335,7 @@ pub fn job_registration_with_reward(
             slots: 1,
             cpu_milliseconds,
             reward: asset(reward_value),
+            min_reputation,
         },
     }
 }
