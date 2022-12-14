@@ -19,6 +19,7 @@ use pallet_acurast::{
 };
 
 use crate::stub::*;
+use crate::types::{AcurastAsset, AcurastAssetAmount as AssetAmount, AcurastAssetId as AssetId};
 use crate::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -44,8 +45,8 @@ impl JobAssignmentUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl AssetBarrier<MinimumAssetImplementation> for Barrier {
-    fn can_use_asset(_asset: &MinimumAssetImplementation) -> bool {
+impl AssetBarrier<AcurastAsset> for Barrier {
+    fn can_use_asset(_asset: &AcurastAsset) -> bool {
         true
     }
 }
@@ -291,9 +292,7 @@ impl Config for Test {
     type Event = Event;
     type RegistrationExtra = JobRequirements<Self>;
     type PalletId = AcurastPalletId;
-    type AssetId = u32;
-    type AssetAmount = u128;
-    type Reward = MinimumAssetImplementation;
+    type Reward = AcurastAsset;
     type RewardManager = MockRewardManager;
     type WeightInfo = weights::Weights<Test>;
 }
@@ -327,7 +326,7 @@ pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
 pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> AdvertisementFor<Test> {
     let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
         bounded_vec![PricingVariant {
-            reward_asset: 0,
+            reward_asset: 22,
             price_per_cpu_millisecond,
             bonus: 0,
             maximum_slash: 0,
@@ -351,7 +350,7 @@ pub fn job_registration_with_reward(
         extra: JobRequirements {
             slots: 1,
             cpu_milliseconds,
-            reward: asset(reward_value),
+            reward: (22, reward_value).into(),
         },
     }
 }

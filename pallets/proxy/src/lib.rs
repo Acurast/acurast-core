@@ -29,7 +29,7 @@ pub mod pallet {
     use acurast_common::{
         AllowedSourcesUpdate, BenchmarkDefault, Fulfillment, JobRegistration, Script,
     };
-    use pallet_acurast_marketplace::{payments::Reward, Advertisement, MinimumAssetImplementation};
+    use pallet_acurast_marketplace::{payments::Reward, types::AcurastAsset, Advertisement};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -41,7 +41,7 @@ pub mod pallet {
             + Into<JobRequirements<Self>>
             + From<JobRequirements<Self>>
             + BenchmarkDefault;
-        type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
+        type Reward: Parameter + Member + Reward;
         type AssetId: Parameter + Member;
         type AssetAmount: Parameter;
         type XcmSender: SendXcm;
@@ -116,12 +116,9 @@ pub mod pallet {
     }
 
     // used by benchmark tests
-    impl<T: Config> BenchmarkDefault for JobRequirements<T> {
+    impl<T: Config<Reward = AcurastAsset>> acurast_common::BenchmarkDefault for JobRequirements<T> {
         fn benchmark_default() -> Self {
-            let reward: T::Reward = T::Reward::from(MinimumAssetImplementation {
-                id: 22,
-                amount: 1_000_000_000,
-            });
+            let reward: T::Reward = (22u32, 1_000_000_000u128).into();
             JobRequirements {
                 slots: 1,
                 cpu_milliseconds: 5000,

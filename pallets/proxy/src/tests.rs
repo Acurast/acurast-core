@@ -26,7 +26,8 @@ use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
 use pallet_acurast::{JobRegistration, JobRegistrationFor};
 use pallet_acurast_marketplace::{
-    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
+    types::{AcurastAssetAmount, AcurastAssetId, MAX_PRICING_VARIANTS},
+    Advertisement, FeeManager, JobRequirements, PricingVariant,
 };
 
 use crate::mock::*;
@@ -178,15 +179,6 @@ pub fn alice_account_id() -> AcurastAccountId {
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn owned_asset(amount: u128) -> AcurastAsset {
-    AcurastAsset(MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(amount),
-    })
-}
 pub fn acurast_registration() -> JobRegistrationFor<acurast_runtime::Runtime> {
     JobRegistrationFor::<acurast_runtime::Runtime> {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
@@ -195,7 +187,7 @@ pub fn acurast_registration() -> JobRegistrationFor<acurast_runtime::Runtime> {
         extra: JobRequirements::<acurast_runtime::Runtime> {
             slots: 1,
             cpu_milliseconds: 2,
-            reward: owned_asset(20000),
+            reward: (22, 20000).into(),
         },
     }
 }
@@ -211,7 +203,7 @@ pub fn proxy_registration() -> JobRegistration<
         extra: crate::JobRequirements::<proxy_runtime::Runtime> {
             slots: 1,
             cpu_milliseconds: 2,
-            reward: owned_asset(20000),
+            reward: (22, 20000).into(),
         },
     }
 }

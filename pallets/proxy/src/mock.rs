@@ -7,60 +7,7 @@ use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-use pallet_acurast_marketplace::{MinimumAssetImplementation, Reward};
-
-pub type AcurastAssetId = u32;
-pub type AcurastAssetAmount = u128;
-
-#[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
-pub struct AcurastAsset(pub MultiAsset);
-
-impl Reward for AcurastAsset {
-    type AssetId = AcurastAssetId;
-    type AssetAmount = AcurastAssetAmount;
-    type Error = ();
-
-    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
-        self.0 = MultiAsset {
-            id: self.0.id.clone(),
-            fun: Fungible(amount),
-        };
-        Ok(self)
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        match &self.0.id {
-            Concrete(location) => match location.last() {
-                Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
-                _ => Err(()),
-            },
-            Abstract(_) => Err(()),
-        }
-    }
-
-    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        match &self.0.fun {
-            Fungible(amount) => Ok(*amount),
-            _ => Err(()),
-        }
-    }
-}
-
-impl From<MinimumAssetImplementation> for AcurastAsset {
-    fn from(asset: MinimumAssetImplementation) -> Self {
-        AcurastAsset(MultiAsset {
-            id: Concrete(MultiLocation {
-                parents: 1,
-                interior: X3(
-                    Parachain(1000),
-                    PalletInstance(50),
-                    GeneralIndex(asset.id as u128),
-                ),
-            }),
-            fun: Fungible(asset.amount),
-        })
-    }
-}
+use pallet_acurast_marketplace::{types::AcurastAsset, AcurastAssetAmount, AcurastAssetId, Reward};
 
 pub mod acurast_runtime {
     use acurast_common::BenchmarkDefault;
@@ -321,8 +268,6 @@ pub mod acurast_runtime {
         type Event = Event;
         type RegistrationExtra = pallet_acurast_marketplace::JobRequirements<Self>;
         type PalletId = AcurastPalletId;
-        type AssetId = AcurastAssetId;
-        type AssetAmount = AcurastAssetAmount;
         type Reward = AcurastAsset;
         type RewardManager = AssetRewardManager<AcurastBarrier, FeeManagerImpl>;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;

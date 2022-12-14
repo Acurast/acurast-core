@@ -1,3 +1,4 @@
+use codec::Encode;
 use core::marker::PhantomData;
 use frame_support::{
     dispatch::RawOrigin,
@@ -8,8 +9,9 @@ use frame_support::{
     },
     Never, PalletId, Parameter,
 };
+use sp_runtime::traits::CheckedMul;
 
-use crate::{Config, MinimumAssetImplementation};
+use crate::Config;
 
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
@@ -24,8 +26,8 @@ impl<Asset> AssetBarrier<Asset> for () {
 // pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
 pub trait Reward {
-    type AssetId;
-    type AssetAmount;
+    type AssetId: From<u32> + Parameter;
+    type AssetAmount: CheckedMul + From<u128> + Ord + Parameter;
     type Error;
 
     fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error>;

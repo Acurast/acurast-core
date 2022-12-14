@@ -14,7 +14,7 @@ use crate::*;
 pub type AccountId = AccountId32;
 pub type BlockNumber = u32;
 
-use crate::types::AssetAmount;
+use crate::types::AcurastAssetAmount as AssetAmount;
 
 pub const SEED: u32 = 1337;
 pub const INITIAL_BALANCE: u128 = UNIT * 10;
@@ -120,9 +120,9 @@ pub fn script_random_value() -> Script {
     SCRIPT_RANDOM_VALUE_BYTES.to_vec().try_into().unwrap()
 }
 
-pub fn asset(value: u128) -> MinimumAssetImplementation {
-    MinimumAssetImplementation {
-        id: 0,
-        amount: value,
-    }
-}
+// pub fn asset(value: u128) -> MinimumAssetImplementation {
+//     MinimumAssetImplementation {
+//         id: 0,
+//         amount: value,
+//     }
+// }

@@ -58,13 +58,14 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
     fn update_allowed_sources() -> Weight {
         W::update_allowed_sources()
     }
-    fn update_job_assignments() -> Weight {
-        W::update_job_assignments()
-    }
     fn submit_attestation() -> Weight {
         W::submit_attestation()
     }
     fn update_certificate_revocation_list() -> Weight {
         W::update_certificate_revocation_list()
+    }
+
+    fn fulfill() -> Weight {
+        Weight::from_ref_time(10_000)
     }
 }

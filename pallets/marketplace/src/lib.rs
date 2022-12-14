@@ -52,25 +52,22 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
+            // Give a value that will pass when executing a register extrinsic with runtime-benchmarks
+            // flag, from the account specified in pallet_acurast::benchmarking::consumer_account
+            + BenchmarkDefault
             // JobRequirements is a mandatory field, where you are free to chose the asset type. Just extract this info when calling into()
             + Into<JobRequirements<Self>>
             // Should also be able to convert the other way around, by providing default values on the rest
             // of the fields of your type
-            + From<JobRequirements<Self>>
-            + BenchmarkDefault;
+            + From<JobRequirements<Self>>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
 
-        type AssetId: Parameter + IsType<<Self::Reward as Reward>::AssetId> + From<u32>;
-        type AssetAmount: Parameter
-            + CheckedMul
-            + From<u128>
-            + Ord
-            + IsType<<Self::Reward as Reward>::AssetAmount>;
+        // assetId: IsType<Reward::AssetId> + From<u32>
 
-        /// Logic for locking and paying tokens for job execution
-        type Reward: Parameter + Member + Reward + From<MinimumAssetImplementation>;
+        // Logic for locking and paying tokens for job execution
+        type Reward: Parameter + Member + Reward;
         type RewardManager: RewardManager<Self>;
         type WeightInfo: WeightInfo;
     }
@@ -104,8 +101,8 @@ pub mod pallet {
     pub type StoredAdIndex<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        <T as Config>::AssetId,
-        Vec<AdvertisementIndexValue<T::AccountId, T::AssetAmount>>,
+        AssetIdFor<T>,
+        Vec<AdvertisementIndexValue<T::AccountId, AssetAmountFor<T>>>,
     >;
 
     /// Job assignments as a map source's [AccountId] -> [JobId] -> SlotId
@@ -269,7 +266,7 @@ pub mod pallet {
                 Error::<T>::JobRegistrationZeroCPUMilliseconds
             );
             ensure!(extra.slots > 0, Error::<T>::JobRegistrationZeroSlots);
-            let reward_amount: T::AssetAmount = extra
+            let reward_amount: AssetAmountFor<T> = extra
                 .reward
                 .try_get_amount()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
@@ -402,7 +399,7 @@ pub mod pallet {
             let extra: JobRequirements<T> = e.into();
 
             // strips away the asset amount
-            let reward_asset: <T as Config>::AssetId = extra
+            let reward_asset: AssetIdFor<T> = extra
                 .reward
                 .try_get_asset_id()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
@@ -411,7 +408,7 @@ pub mod pallet {
             // filter candidates according to reward asset
             let ads_with_reward = <StoredAdIndex<T>>::get(reward_asset);
             if let Some(ads) = ads_with_reward {
-                let reward_amount: T::AssetAmount = extra
+                let reward_amount: AssetAmountFor<T> = extra
                     .reward
                     .try_get_amount()
                     .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?

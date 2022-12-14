@@ -33,7 +33,12 @@ pub mod pallet {
     use crate::{traits::*, utils::*, JobRegistrationFor};
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config
+    // where
+    //     <Self as frame_system::Config>::AccountId: From<[u8; 32]>,
+    {
+        // type AccountId: IsType<<Self as frame_system::Config>::AccountId> + From<[u8; 32]>
+
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member + BenchmarkDefault;
@@ -372,7 +377,6 @@ pub mod pallet {
             }
 
             ensure_not_expired::<T>(&attestation)?;
-            ensure_not_revoked::<T>(&attestation)?;
 
             <StoredAttestation<T>>::insert(&who, attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
