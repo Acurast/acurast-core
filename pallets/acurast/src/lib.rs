@@ -377,6 +377,7 @@ pub mod pallet {
             }
 
             ensure_not_expired::<T>(&attestation)?;
+            ensure_not_revoked::<T>(&attestation)?;
 
             <StoredAttestation<T>>::insert(&who, attestation.clone());
             Self::deposit_event(Event::AttestationStored(attestation, who));
