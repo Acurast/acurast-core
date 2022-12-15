@@ -96,3 +96,37 @@ where
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: Extra,
 }
+
+/// Structure representing a job registration.
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+pub struct JobRequirements<Reward>
+where
+    Reward: Parameter + Member,
+{
+    /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+    pub slots: u8,
+    /// CPU milliseconds (upper bound) required to execute script.
+    pub cpu_milliseconds: u128,
+    /// Reward offered for the job
+    pub reward: Reward,
+}
+
+/// Calls a default value that makes a register extrinsic called by "consumer" pass when
+/// built with "runtime-benchmarks" feature. Depending on your implementation, you might need a
+/// specific genesis config to achieve this.
+/// For example if your logic requires a minted asset to be specified, your genesis config should
+/// have the consumer hold enough balance of the token specified in the return struct of this fn
+/// ( as well as an existential deposit for "consumer" )
+pub trait BenchmarkDefault {
+    fn benchmark_default() -> Self;
+}
+
+impl BenchmarkDefault for () {
+    fn benchmark_default() -> Self {
+        ()
+    }
+}
+
+pub trait BenchmarkDefaultValue<T> {
+    fn default() -> T;
+}

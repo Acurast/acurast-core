@@ -512,7 +512,7 @@ fn test_submit_attestation_register_fulfill() {
 }
 
 #[test]
-fn test_submit_attestation_failure_1() {
+fn test_submit_early_attestation_failure() {
     ExtBuilder::default().build().execute_with(|| {
         let chain = invalid_attestation_chain_1();
 
@@ -554,32 +554,35 @@ fn test_submit_attestation_failure_1() {
     });
 }
 
+// current attestation has not_before timestamp set to 0, so we cannot check for early
+// #[test]
+// fn test_submit_attestation_failure_2() {
+//     // test that too early of a timestamp fails
+//     ExtBuilder::default().build().execute_with(|| {
+//         let chain = attestation_chain();
+//
+//         let _ = Timestamp::set(Origin::none(), 1657363914000);
+//         assert_err!(
+//             Acurast::submit_attestation(
+//                 Origin::signed(processor_account_id()).into(),
+//                 chain.clone()
+//             ),
+//             Error::<Test>::AttestationCertificateNotValid
+//         );
+//
+//         assert_eq!(None, Acurast::stored_attestation(processor_account_id()));
+//
+//         assert_eq!(events(), []);
+//     });
+// }
+
 #[test]
-fn test_submit_attestation_failure_2() {
+fn test_submit_late_attestation_failure() {
+    // test for too late of a timestamp fails
     ExtBuilder::default().build().execute_with(|| {
         let chain = attestation_chain();
 
-        let _ = Timestamp::set(Origin::none(), 1657363914000);
-        assert_err!(
-            Acurast::submit_attestation(
-                Origin::signed(processor_account_id()).into(),
-                chain.clone()
-            ),
-            Error::<Test>::AttestationCertificateNotValid
-        );
-
-        assert_eq!(None, Acurast::stored_attestation(processor_account_id()));
-
-        assert_eq!(events(), []);
-    });
-}
-
-#[test]
-fn test_submit_attestation_failure_3() {
-    ExtBuilder::default().build().execute_with(|| {
-        let chain = attestation_chain();
-
-        let _ = Timestamp::set(Origin::none(), 1842739199001);
+        let _ = Timestamp::set(Origin::none(), 4_294_967_295_001);
         assert_err!(
             Acurast::submit_attestation(
                 Origin::signed(processor_account_id()).into(),
@@ -659,12 +662,13 @@ fn test_update_revocation_list_submit_attestation() {
             cert_serial_number: cert_serial_number(),
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
+            // alice has permissions on the barrier
             Origin::signed(alice_account_id()).into(),
             updates.clone(),
         ));
 
         let chain = attestation_chain();
-        let _ = Timestamp::set(Origin::none(), 1657363915001);
+        let _ = Timestamp::set(Origin::none(), 2_000_000_000_000);
         assert_err!(
             Acurast::submit_attestation(
                 Origin::signed(processor_account_id()).into(),
@@ -692,7 +696,7 @@ fn test_update_revocation_list_assign_job() {
         let chain = attestation_chain();
         let registration = job_registration(None, true);
         let assignment_updates = job_assignment_update_for(&registration, Some(bob_account_id()));
-        let _ = Timestamp::set(Origin::none(), 1657363915001);
+        let _ = Timestamp::set(Origin::none(), 2_000_000_000_000);
         assert_ok!(Acurast::submit_attestation(
             Origin::signed(processor_account_id()).into(),
             chain.clone()

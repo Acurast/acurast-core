@@ -6,7 +6,7 @@ pub mod mock;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+pub mod benchmarking;
 
 mod traits;
 pub mod utils;
@@ -33,10 +33,15 @@ pub mod pallet {
     use crate::{traits::*, utils::*, JobRegistrationFor};
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config
+    // where
+    //     <Self as frame_system::Config>::AccountId: From<[u8; 32]>,
+    {
+        // type AccountId: IsType<<Self as frame_system::Config>::AccountId> + From<[u8; 32]>
+
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member;
+        type RegistrationExtra: Parameter + Member + BenchmarkDefault;
         /// The fulfillment router to route a job fulfillment to its final destination.
         type FulfillmentRouter: FulfillmentRouter<Self>;
         /// The max length of the allowed sources list for a registration.

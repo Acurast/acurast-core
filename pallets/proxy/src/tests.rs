@@ -24,9 +24,10 @@ use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chai
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
-use pallet_acurast::JobRegistration;
+use pallet_acurast::{JobRegistration, JobRegistrationFor};
 use pallet_acurast_marketplace::{
-    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
+    types::{AcurastAssetAmount, AcurastAssetId, MAX_PRICING_VARIANTS},
+    Advertisement, FeeManager, JobRequirements, PricingVariant,
 };
 
 use crate::mock::*;
@@ -178,27 +179,35 @@ pub fn alice_account_id() -> AcurastAccountId {
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn owned_asset(amount: u128) -> AcurastAsset {
-    AcurastAsset(MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(amount),
-    })
+pub fn acurast_registration() -> JobRegistrationFor<acurast_runtime::Runtime> {
+    JobRegistrationFor::<acurast_runtime::Runtime> {
+        script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        extra: JobRequirements::<acurast_runtime::Runtime> {
+            slots: 1,
+            cpu_milliseconds: 2,
+            reward: (22, 20000).into(),
+        },
+    }
 }
-pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset>> {
+
+pub fn proxy_registration() -> JobRegistration<
+    <proxy_runtime::Runtime as frame_system::Config>::AccountId,
+    <proxy_runtime::Runtime as crate::Config>::RegistrationExtra,
+> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
         allow_only_verified_sources: false,
-        extra: JobRequirements {
+        extra: crate::JobRequirements::<proxy_runtime::Runtime> {
             slots: 1,
             cpu_milliseconds: 2,
-            reward: owned_asset(20000),
+            reward: (22, 20000).into(),
         },
     }
 }
+
 pub fn advertisement(
     price_per_cpu_millisecond: u128,
     capacity: u32,
@@ -477,7 +486,7 @@ mod proxy_calls {
             use proxy_runtime::Call::AcurastProxy;
 
             let message_call = AcurastProxy(register {
-                registration: registration(),
+                registration: proxy_registration(),
             });
             let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
             let dispatch_status = message_call.dispatch(alice_origin);
@@ -688,7 +697,7 @@ mod proxy_calls {
             let payload: [u8; 32] = rand::random();
 
             let fulfillment = Fulfillment {
-                script: registration().script,
+                script: proxy_registration().script,
                 payload: payload.to_vec(),
             };
 

@@ -1,7 +1,7 @@
 use frame_support::pallet_prelude::*;
 use frame_support::traits::Everything;
 use frame_support::weights::Weight;
-use frame_support::{pallet_prelude::GenesisBuild, PalletId};
+use frame_support::{pallet_prelude::GenesisBuild, Never, PalletId};
 use hex_literal::hex;
 use sp_core::*;
 use sp_io;
@@ -12,13 +12,14 @@ use sp_runtime::{bounded_vec, BoundedVec};
 use sp_runtime::{generic, parameter_types, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::Script;
+use pallet_acurast::{BenchmarkDefault, Script};
 use pallet_acurast::{
     CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter, JobAssignmentUpdate,
     JobAssignmentUpdateBarrier, JobRegistrationFor, RevocationListUpdateBarrier,
 };
 
 use crate::stub::*;
+use crate::types::{AcurastAsset, AcurastAssetAmount as AssetAmount, AcurastAssetId as AssetId};
 use crate::*;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -44,8 +45,8 @@ impl JobAssignmentUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl AssetBarrier<MockAsset> for Barrier {
-    fn can_use_asset(_asset: &MockAsset) -> bool {
+impl AssetBarrier<AcurastAsset> for Barrier {
+    fn can_use_asset(_asset: &AcurastAsset) -> bool {
         true
     }
 }
@@ -95,13 +96,24 @@ impl ExtBuilder {
         .unwrap();
 
         pallet_balances::GenesisConfig::<Test> {
-            balances: vec![
-                (alice_account_id(), INITIAL_BALANCE),
-                (pallet_assets_account(), INITIAL_BALANCE),
-                (pallet_fees_account(), INITIAL_BALANCE),
-                (bob_account_id(), INITIAL_BALANCE),
-                (processor_account_id(), INITIAL_BALANCE),
-            ],
+            balances: {
+                #[allow(unused_mut)]
+                let mut accounts = vec![
+                    (alice_account_id(), INITIAL_BALANCE),
+                    (pallet_assets_account(), INITIAL_BALANCE),
+                    (pallet_fees_account(), INITIAL_BALANCE),
+                    (bob_account_id(), INITIAL_BALANCE),
+                    (processor_account_id(), INITIAL_BALANCE),
+                ];
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="runtime-benchmarks")] {
+                        accounts.push(
+                            (crate::benchmarking::consumer_account::<Test>(), INITIAL_BALANCE)
+                        )
+                    }
+                }
+                accounts
+            },
         }
         .assimilate_storage(&mut t)
         .unwrap();
@@ -111,10 +123,22 @@ impl ExtBuilder {
         pallet_assets::GenesisConfig::<Test> {
             assets: vec![(22, pallet_assets_account(), false, 1_000)],
             metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-            accounts: vec![
-                (22, alice_account_id(), INITIAL_BALANCE),
-                (22, bob_account_id(), INITIAL_BALANCE),
-            ],
+            accounts: {
+                #[allow(unused_mut)]
+                let mut accounts = vec![
+                    (22, alice_account_id(), INITIAL_BALANCE),
+                    (22, bob_account_id(), INITIAL_BALANCE),
+                ];
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="runtime-benchmarks")] {
+                        accounts.push(
+                            (22, crate::benchmarking::consumer_account::<Test>(), INITIAL_BALANCE)
+                        )
+                    }
+                }
+                accounts
+            },
         }
         .assimilate_storage(&mut t)
         .unwrap();
@@ -234,7 +258,7 @@ impl parachain_info::Config for Test {}
 
 impl pallet_acurast::Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtra = JobRequirements<Self>;
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
@@ -249,17 +273,15 @@ impl pallet_acurast::Config for Test {
 pub struct MockRewardManager {}
 
 impl<T: Config> RewardManager<T> for MockRewardManager {
-    type Reward = MockAsset;
-
     fn lock_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _owner: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_reward(
-        _reward: Self::Reward,
+        _reward: T::Reward,
         _target: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         Ok(())
@@ -268,10 +290,9 @@ impl<T: Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type Event = Event;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtra = JobRequirements<Self>;
     type PalletId = AcurastPalletId;
-    type AssetId = AssetId;
-    type AssetAmount = AssetAmount;
+    type Reward = AcurastAsset;
     type RewardManager = MockRewardManager;
     type WeightInfo = weights::Weights<Test>;
 }
@@ -305,7 +326,7 @@ pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
 pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> AdvertisementFor<Test> {
     let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
         bounded_vec![PricingVariant {
-            reward_asset: 0,
+            reward_asset: 22,
             price_per_cpu_millisecond,
             bonus: 0,
             maximum_slash: 0,
@@ -329,7 +350,7 @@ pub fn job_registration_with_reward(
         extra: JobRequirements {
             slots: 1,
             cpu_milliseconds,
-            reward: asset(reward_value),
+            reward: (22, reward_value).into(),
         },
     }
 }
