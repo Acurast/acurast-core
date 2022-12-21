@@ -16,7 +16,6 @@ use sp_runtime::{bounded_vec, BoundedVec};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::Script;
 use pallet_acurast::{
     CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter, JobAssignmentUpdate,
     JobAssignmentUpdateBarrier, JobRegistrationFor, RevocationListUpdateBarrier,
@@ -73,6 +72,10 @@ pub struct FeeManagerImpl;
 impl FeeManager for FeeManagerImpl {
     fn get_fee_percentage() -> Percent {
         Percent::from_percent(30)
+    }
+
+    fn get_matcher_percentage() -> Percent {
+        Percent::from_percent(10)
     }
 
     fn pallet_id() -> PalletId {
@@ -147,7 +150,8 @@ frame_support::construct_runtime!(
         Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
-        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>}
+        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>},
+        MockPallet: mock_pallet::{Pallet, Event<T>}
     }
 );
 
@@ -253,22 +257,59 @@ impl pallet_acurast::Config for Test {
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
 }
 
+impl mock_pallet::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+}
+
+#[frame_support::pallet]
+pub mod mock_pallet {
+    use frame_support::pallet_prelude::*;
+
+    use crate::stub::MockAsset;
+
+    #[pallet::config]
+    pub trait Config: frame_system::Config + crate::Config {
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    }
+
+    #[pallet::pallet]
+    pub struct Pallet<T>(_);
+
+    #[pallet::event]
+    #[pallet::generate_deposit(pub (super) fn deposit_event)]
+    pub enum Event<T: Config> {
+        Locked(MockAsset),
+        PayReward(MockAsset),
+        PayMatcherReward(MockAsset),
+    }
+}
+
 pub struct MockRewardManager {}
 
-impl<T: Config> RewardManager<T> for MockRewardManager {
+impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
     type Reward = MockAsset;
 
     fn lock_reward(
-        _reward: Self::Reward,
+        reward: Self::Reward,
         _owner: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward));
         Ok(())
     }
 
     fn pay_reward(
-        _reward: Self::Reward,
+        reward: Self::Reward,
         _target: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward));
+        Ok(())
+    }
+
+    fn pay_matcher_reward(
+        reward: Self::Reward,
+        _matcher: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(reward));
         Ok(())
     }
 }
@@ -309,34 +350,26 @@ pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
 }
 
-pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> AdvertisementFor<Test> {
+pub fn advertisement(
+    fee_per_millisecond: u128,
+    fee_per_storage_byte: u128,
+    storage_capacity: u32,
+    max_memory: u32,
+    network_request_quota: u8,
+) -> AdvertisementFor<Test> {
     let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
         bounded_vec![PricingVariant {
             reward_asset: 0,
-            price_per_cpu_millisecond,
-            bonus: 0,
-            maximum_slash: 0,
+            fee_per_millisecond,
+            fee_per_storage_byte,
+            base_fee_per_execution: 0,
+            scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
         }];
     Advertisement {
         pricing,
         allowed_consumers: None,
-        capacity,
-    }
-}
-
-pub fn job_registration_with_reward(
-    script: Script,
-    cpu_milliseconds: u128,
-    reward_value: u128,
-) -> JobRegistrationFor<Test> {
-    JobRegistrationFor::<Test> {
-        script,
-        allowed_sources: None,
-        allow_only_verified_sources: false,
-        extra: JobRequirements {
-            slots: 1,
-            cpu_milliseconds,
-            reward: asset(reward_value),
-        },
+        storage_capacity,
+        max_memory,
+        network_request_quota,
     }
 }

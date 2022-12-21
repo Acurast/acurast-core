@@ -31,6 +31,9 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
     fn advertise() -> Weight;
     fn delete_advertisement() -> Weight;
+    fn propose_matching() -> Weight;
+    fn acknowledge_match() -> Weight;
+    fn report() -> Weight;
 }
 
 /// Weights for pallet_acurast_marketplace using the Substrate node and recommended hardware.
@@ -49,6 +52,24 @@ impl<T: frame_system::Config> WeightInfo for Weights<T> {
     // Storage: AcurastMarketplace StoredAdIndex (r:1 w:1)
     // Storage: AcurastMarketplace StoredCapacity (r:0 w:1)
     fn delete_advertisement() -> Weight {
+        // Minimum execution time:  nanoseconds.
+        Weight::from_ref_time(129_864_000)
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(3))
+    }
+    fn propose_matching() -> Weight {
+        // Minimum execution time:  nanoseconds.
+        Weight::from_ref_time(129_864_000)
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(3))
+    }
+    fn acknowledge_match() -> Weight {
+        // Minimum execution time:  nanoseconds.
+        Weight::from_ref_time(129_864_000)
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(3))
+    }
+    fn report() -> Weight {
         // Minimum execution time:  nanoseconds.
         Weight::from_ref_time(129_864_000)
             .saturating_add(T::DbWeight::get().reads(2))

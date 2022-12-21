@@ -268,10 +268,8 @@ pub mod pallet {
                 &who,
                 &script,
                 JobRegistration {
-                    script: script.clone(),
                     allowed_sources,
-                    extra: registration.extra.clone(),
-                    allow_only_verified_sources: registration.allow_only_verified_sources,
+                    ..registration.clone()
                 },
             );
 

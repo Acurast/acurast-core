@@ -1,12 +1,12 @@
+use crate::Config;
 use pallet_acurast::JobRegistrationFor;
-
-use crate::{AdvertisementFor, Config};
+use sp_std::prelude::*;
 
 pub(crate) fn is_consumer_whitelisted<T: Config>(
     consumer: &T::AccountId,
-    ad: &AdvertisementFor<T>,
+    allowed_consumers: &Option<Vec<T::AccountId>>,
 ) -> bool {
-    ad.allowed_consumers
+    allowed_consumers
         .as_ref()
         .map(|allowed_consumers| {
             allowed_consumers

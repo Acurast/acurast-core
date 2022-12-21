@@ -268,6 +268,10 @@ pub mod acurast_runtime {
             sp_runtime::Percent::from_percent(30)
         }
 
+        fn get_matcher_percentage() -> sp_runtime::Percent {
+            sp_runtime::Percent::from_percent(10)
+        }
+
         fn pallet_id() -> PalletId {
             PalletId(*b"acurfees")
         }
@@ -275,7 +279,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type FulfillmentRouter = FulfillmentRouter;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
         type PalletId = AcurastPalletId;
@@ -289,7 +293,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
@@ -492,7 +496,7 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;

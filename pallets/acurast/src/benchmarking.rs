@@ -36,6 +36,16 @@ pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrati
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra,
     };
 }

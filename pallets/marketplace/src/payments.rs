@@ -38,7 +38,7 @@ impl Reward for () {
     type AssetAmount = Never;
     type Error = ();
 
-    fn with_amount(&mut self, _: Self::AssetAmount) -> Result<&Self, Self::Error> {
+    fn with_amount(&mut self, _amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
         Err(())
     }
 
@@ -62,6 +62,10 @@ pub trait RewardManager<T: Config> {
         reward: Self::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError>;
+    fn pay_matcher_reward(
+        reward: Self::Reward,
+        matcher: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
 }
 
 impl<T: Config> RewardManager<T> for () {
@@ -80,11 +84,19 @@ impl<T: Config> RewardManager<T> for () {
     ) -> Result<(), DispatchError> {
         Ok(())
     }
+
+    fn pay_matcher_reward(
+        _reward: Self::Reward,
+        _matcher: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
 }
 
 // This trait provives methods for managing the fees.
 pub trait FeeManager {
     fn get_fee_percentage() -> Percent;
+    fn get_matcher_percentage() -> Percent;
     fn pallet_id() -> PalletId;
 }
 
@@ -120,7 +132,7 @@ where
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
-            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
+            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset amount.")),
         };
 
         // transfer funds from caller to pallet account for holding until fulfill is called
@@ -146,7 +158,7 @@ where
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
-            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
+            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset amount.")),
         };
 
         // Extract fee from the processor reward
@@ -172,5 +184,20 @@ where
             target,
             reward_after_fee.into(),
         )
+    }
+
+    fn pay_matcher_reward(
+        remaining_reward: Self::Reward,
+        matcher: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        let matcher_fee_percentage = AssetSplit::get_matcher_percentage(); // TODO: fee will be indexed by version in the future
+        let amount = remaining_reward
+            .try_get_amount()
+            .map_err(|_| DispatchError::Other("Invalid asset amount."))?;
+        let mut r = remaining_reward.clone();
+        r.with_amount(matcher_fee_percentage.mul_floor(amount))
+            .map_err(|_| DispatchError::Other("Invalid amount."))?;
+
+        <Self as RewardManager<T>>::pay_reward(r, matcher)
     }
 }

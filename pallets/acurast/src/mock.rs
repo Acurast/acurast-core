@@ -1,3 +1,4 @@
+use acurast_common::Schedule;
 use frame_support::{
     dispatch::Weight, pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
     traits::Everything, PalletId,
@@ -244,6 +245,16 @@ pub fn job_registration(
         script: script(),
         allowed_sources,
         allow_only_verified_sources,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
     }
 }
@@ -267,6 +278,16 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         script: invalid_script_1(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
     }
 }
@@ -276,6 +297,16 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         script: invalid_script_2(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
     }
 }
