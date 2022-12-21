@@ -114,7 +114,7 @@ where
             let raw_origin = RawOrigin::<<Runtime as frame_system::Config>::AccountId>::Signed(
                 pallet_assets_account.clone(),
             );
-            let pallet_origin: <Runtime as frame_system::Config>::Origin = raw_origin.into();
+            let pallet_origin: <Runtime as frame_system::Config>::RuntimeOrigin = raw_origin.into();
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,

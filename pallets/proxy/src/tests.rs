@@ -240,7 +240,7 @@ mod network_tests {
     fn dmp() {
         Network::reset();
 
-        let remark = acurast_runtime::Call::System(
+        let remark = acurast_runtime::RuntimeCall::System(
             frame_system::Call::<acurast_runtime::Runtime>::remark_with_event {
                 remark: vec![1, 2, 3],
             },
@@ -258,10 +258,10 @@ mod network_tests {
         });
 
         AcurastParachain::execute_with(|| {
-            use acurast_runtime::{Event, System};
+            use acurast_runtime::{RuntimeEvent, System};
             assert!(System::events()
                 .iter()
-                .any(|r| matches!(r.event, Event::System(frame_system::Event::Remarked { .. }))));
+                .any(|r| matches!(r.event, RuntimeEvent::System(frame_system::Event::Remarked { .. }))));
         });
     }
 
@@ -269,7 +269,7 @@ mod network_tests {
     fn ump() {
         Network::reset();
 
-        let remark = relay_chain::Call::System(
+        let remark = relay_chain::RuntimeCall::System(
             frame_system::Call::<relay_chain::Runtime>::remark_with_event {
                 remark: vec![1, 2, 3],
             },
@@ -287,10 +287,10 @@ mod network_tests {
         });
 
         Relay::execute_with(|| {
-            use relay_chain::{Event, System};
+            use relay_chain::{RuntimeEvent, System};
             assert!(System::events()
                 .iter()
-                .any(|r| matches!(r.event, Event::System(frame_system::Event::Remarked { .. }))));
+                .any(|r| matches!(r.event, RuntimeEvent::System(frame_system::Event::Remarked { .. }))));
         });
     }
 
@@ -298,7 +298,7 @@ mod network_tests {
     fn xcmp() {
         Network::reset();
 
-        let remark = proxy_runtime::Call::System(
+        let remark = proxy_runtime::RuntimeCall::System(
             frame_system::Call::<proxy_runtime::Runtime>::remark_with_event {
                 remark: vec![1, 2, 3],
             },
@@ -317,10 +317,10 @@ mod network_tests {
         });
 
         CumulusParachain::execute_with(|| {
-            use proxy_runtime::{Event, System};
+            use proxy_runtime::{RuntimeEvent, System};
             assert!(System::events()
                 .iter()
-                .any(|r| matches!(r.event, Event::System(frame_system::Event::Remarked { .. }))));
+                .any(|r| matches!(r.event, RuntimeEvent::System(frame_system::Event::Remarked { .. }))));
         });
     }
 
@@ -332,7 +332,7 @@ mod network_tests {
 
         Relay::execute_with(|| {
             assert_ok!(RelayChainPalletXcm::reserve_transfer_assets(
-                relay_chain::Origin::signed(ALICE),
+                relay_chain::RuntimeOrigin::signed(ALICE),
                 Box::new(X1(Parachain(2000)).into().into()),
                 Box::new(
                     X1(AccountId32 {
@@ -474,12 +474,12 @@ mod proxy_calls {
     fn register_job_alice() {
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::register;
-            use proxy_runtime::Call::AcurastProxy;
+            use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let message_call = AcurastProxy(register {
                 registration: registration(),
             });
-            let alice_origin = proxy_runtime::Origin::signed(alice_account_id());
+            let alice_origin = proxy_runtime::RuntimeOrigin::signed(alice_account_id());
             let dispatch_status = message_call.dispatch(alice_origin);
             assert_ok!(dispatch_status);
         });
@@ -487,7 +487,7 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationStored;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
-            use acurast_runtime::{Event, Runtime, System};
+            use acurast_runtime::{RuntimeEvent, Runtime, System};
             use pallet_acurast::Script;
 
             let events = System::events();
@@ -496,7 +496,7 @@ mod proxy_calls {
             assert!(p_store.is_some());
             assert!(events
                 .iter()
-                .any(|event| matches!(event.event, Event::Acurast(JobRegistrationStored { .. }))));
+                .any(|event| matches!(event.event, RuntimeEvent::Acurast(JobRegistrationStored { .. }))));
         });
     }
 
@@ -520,13 +520,13 @@ mod proxy_calls {
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::deregister;
-            use proxy_runtime::Call::AcurastProxy;
+            use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let message_call = AcurastProxy(deregister {
                 script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
             });
 
-            let alice_origin = proxy_runtime::Origin::signed(ALICE);
+            let alice_origin = proxy_runtime::RuntimeOrigin::signed(ALICE);
             let dispatch_status = message_call.dispatch(alice_origin);
             assert_ok!(dispatch_status);
         });
@@ -534,14 +534,14 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationRemoved;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
-            use acurast_runtime::{Event, Runtime, System};
+            use acurast_runtime::{RuntimeEvent, Runtime, System};
 
             let events = System::events();
             let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
             let _p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
             assert!(events
                 .iter()
-                .any(|event| matches!(event.event, Event::Acurast(JobRegistrationRemoved { .. }))));
+                .any(|event| matches!(event.event, RuntimeEvent::Acurast(JobRegistrationRemoved { .. }))));
         });
     }
 
@@ -568,7 +568,7 @@ mod proxy_calls {
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::update_allowed_sources;
             use pallet_acurast::{AllowedSourcesUpdate, ListUpdateOperation};
-            use proxy_runtime::Call::AcurastProxy;
+            use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let update = AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
@@ -580,7 +580,7 @@ mod proxy_calls {
                 updates: vec![update],
             });
 
-            let alice_origin = proxy_runtime::Origin::signed(ALICE);
+            let alice_origin = proxy_runtime::RuntimeOrigin::signed(ALICE);
             let dispatch_status = message_call.dispatch(alice_origin);
             assert_ok!(dispatch_status);
         });
@@ -588,7 +588,7 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::AllowedSourcesUpdated;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
-            use acurast_runtime::{Event, Runtime, System};
+            use acurast_runtime::{RuntimeEvent, Runtime, System};
             use pallet_acurast::Script;
 
             let events = System::events();
@@ -603,7 +603,7 @@ mod proxy_calls {
             // event emitted
             assert!(events
                 .iter()
-                .any(|event| matches!(event.event, Event::Acurast(AllowedSourcesUpdated { .. }))));
+                .any(|event| matches!(event.event, RuntimeEvent::Acurast(AllowedSourcesUpdated { .. }))));
         });
     }
 
@@ -617,12 +617,12 @@ mod proxy_calls {
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::advertise;
-            use proxy_runtime::Call::AcurastProxy;
+            use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let message_call = AcurastProxy(advertise {
                 advertisement: advertisement(10000u128, 5u32),
             });
-            let bob_origin = proxy_runtime::Origin::signed(bob_account_id());
+            let bob_origin = proxy_runtime::RuntimeOrigin::signed(bob_account_id());
             let dispatch_status = message_call.dispatch(bob_origin);
             assert_ok!(dispatch_status);
         });
@@ -630,14 +630,14 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast_marketplace::Event::AdvertisementStored;
             use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisement;
-            use acurast_runtime::{Event, Runtime, System};
+            use acurast_runtime::{RuntimeEvent, Runtime, System};
 
             let events = System::events();
             let p_store = StoredAdvertisement::<Runtime>::get(BOB);
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
-                Event::AcurastMarketplace(AdvertisementStored { .. })
+                RuntimeEvent::AcurastMarketplace(AdvertisementStored { .. })
             )));
         });
     }
@@ -666,7 +666,7 @@ mod proxy_calls {
         // THEN check that job got matched
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast_marketplace::StoredJobAssignment;
-            use acurast_runtime::{Event, Runtime, System};
+            use acurast_runtime::{RuntimeEvent, Runtime, System};
             use pallet_acurast::Script;
             use pallet_acurast_marketplace::Event::JobRegistrationMatched;
 
@@ -676,14 +676,14 @@ mod proxy_calls {
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
-                Event::AcurastMarketplace(JobRegistrationMatched { .. })
+                RuntimeEvent::AcurastMarketplace(JobRegistrationMatched { .. })
             )));
         });
 
         CumulusParachain::execute_with(|| {
             use crate::pallet::Call::fulfill;
             use pallet_acurast::Fulfillment;
-            use proxy_runtime::Call::AcurastProxy;
+            use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let payload: [u8; 32] = rand::random();
 
@@ -697,21 +697,21 @@ mod proxy_calls {
                 requester: frame_support::sp_runtime::MultiAddress::Id(alice_account_id()),
             });
 
-            let origin = proxy_runtime::Origin::signed(bob_account_id());
+            let origin = proxy_runtime::RuntimeOrigin::signed(bob_account_id());
             let dispatch_status = message_call.dispatch(origin);
             assert_ok!(dispatch_status);
         });
 
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::Event::ReceivedFulfillment;
-            use acurast_runtime::{Event, System};
+            use acurast_runtime::{RuntimeEvent, System};
 
             let events = System::events();
 
             //event emitted
             assert!(events
                 .iter()
-                .any(|event| matches!(event.event, Event::Acurast(ReceivedFulfillment { .. }))));
+                .any(|event| matches!(event.event, RuntimeEvent::Acurast(ReceivedFulfillment { .. }))));
         });
     }
 }

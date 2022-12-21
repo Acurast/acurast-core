@@ -116,7 +116,7 @@ where
         }
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::Origin = raw_origin.into();
+        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
@@ -142,7 +142,7 @@ where
     ) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::Origin = raw_origin.into();
+        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),

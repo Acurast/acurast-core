@@ -22,7 +22,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Handler to notify the runtime when a new fulfillment is received.
         type OnFulfillment: OnFulfillment<Self>;
         /// Weight Info for extrinsics.

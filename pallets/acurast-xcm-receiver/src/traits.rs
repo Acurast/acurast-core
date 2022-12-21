@@ -1,7 +1,7 @@
 use crate::Config;
 use frame_support::{
+    dispatch::PostDispatchInfo,
     sp_runtime::{DispatchError, DispatchResultWithInfo},
-    weights::PostDispatchInfo,
 };
 use frame_system::pallet_prelude::OriginFor;
 use sp_std::prelude::*;
