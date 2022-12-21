@@ -89,7 +89,7 @@ parameter_types! {
 }
 
 impl pallet_acurast::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
 	type MaxAllowedSources = MaxAllowedSources;
@@ -197,7 +197,7 @@ fn create_eth_call(method: MethodSignatureHash, requester: H160, payload: Vec<u8
 }
 
 impl pallet_acurast::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type RegistrationExtra = AcurastRegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
 	...
@@ -276,7 +276,7 @@ parameter_types! {
 }
 
 impl pallet_acurast::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type RegistrationExtra = RegistrationExtra;
 	type FulfillmentRouter = AcurastRouter;
 	...
@@ -402,5 +402,3 @@ impl frame_system::Config for Runtime {
     ...
 }
 ```
-
-

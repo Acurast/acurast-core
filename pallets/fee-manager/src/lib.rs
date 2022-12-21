@@ -11,7 +11,7 @@ mod benchmarking;
 
 use core::ops::AddAssign;
 
-use frame_support::{traits::Get, weights::Weight};
+use frame_support::{dispatch::Weight, traits::Get};
 use sp_arithmetic::Percent;
 
 pub use self::pallet::*;
@@ -29,7 +29,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type Event: From<Event> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         #[pallet::constant]
         type DefaultFeePercentage: Get<Percent>;
     }

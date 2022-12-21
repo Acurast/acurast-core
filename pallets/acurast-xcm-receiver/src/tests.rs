@@ -8,7 +8,7 @@ fn test_fulfill() {
 
     new_test_ext().execute_with(|| {
         // Mock and xcm origin
-        let xcm_origin = Origin::from(pallet_xcm::Origin::Xcm(MultiLocation {
+        let xcm_origin = RuntimeOrigin::from(pallet_xcm::Origin::Xcm(MultiLocation {
             parents: 1,
             interior: X1(Parachain(2001)),
         }));
@@ -19,7 +19,7 @@ fn test_fulfill() {
 
     new_test_ext().execute_with(|| {
         // Mock and xcm origin
-        let xcm_origin = Origin::from(pallet_xcm::Origin::Xcm(MultiLocation {
+        let xcm_origin = RuntimeOrigin::from(pallet_xcm::Origin::Xcm(MultiLocation {
             parents: 1,
             interior: X1(Parachain(2000)),
         }));

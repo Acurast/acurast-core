@@ -18,7 +18,7 @@ fn update_fee_percentage() {
 
         // Update fee
         assert_ok!(FeeManager::update_fee_percentage(
-            Origin::root(),
+            RuntimeOrigin::root(),
             sp_arithmetic::Percent::from_percent(50)
         ));
 

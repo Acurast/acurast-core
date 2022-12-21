@@ -31,7 +31,7 @@ frame_support::construct_runtime!(
 );
 
 impl pallet_acurast_fulfillment_receiver::Config for Runtime {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type OnFulfillment = FulfillmentHandler;
     type WeightInfo = ();
 }

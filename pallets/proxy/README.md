@@ -57,16 +57,16 @@ construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
-        
+
         ...
-        
+
         AcurastProxy: acurast_proxy::{Pallet, Call, Event<T>} = 34,
-	
+
     }
 );
 ```
 <br>
-Then we have to add some parameter types to be used in the pallet config. Specifically the pallet id of the marketplace 
+Then we have to add some parameter types to be used in the pallet config. Specifically the pallet id of the marketplace
 pallet and the parachain id of acurast parachain. The parachain id is used to route correctly the xcm messages from cumulus
 to acurast. The pallet id is needed to properly encode the call that we want to execute into the xcm message.
 
@@ -85,7 +85,7 @@ The XcmRouter is defined in xcm_config, and we are also using the default one, b
 make sure that the router is able to send XCMP messages.
 ```rust
 impl acurast_proxy::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type AcurastParachainId = AcurastParachainId;
 	type AcurastPalletId = AcurastPalletId;
 	type XcmSender = XcmRouter;

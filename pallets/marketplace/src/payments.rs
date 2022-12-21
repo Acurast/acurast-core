@@ -116,7 +116,7 @@ where
         }
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::Origin = raw_origin.into();
+        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
@@ -129,7 +129,7 @@ where
         // public which we can't do at the moment due to our statemint assets 1 to 1 integration
         pallet_assets::Pallet::<T>::force_transfer(
             pallet_origin,
-            id,
+            id.into(),
             owner,
             T::Lookup::unlookup(pallet_account),
             amount,
@@ -142,7 +142,7 @@ where
     ) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::Origin = raw_origin.into();
+        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
             (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
@@ -160,7 +160,7 @@ where
         let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
         pallet_assets::Pallet::<T>::transfer(
             pallet_origin.clone(),
-            id,
+            id.into(),
             T::Lookup::unlookup(fee_pallet_account),
             fee,
         )?;

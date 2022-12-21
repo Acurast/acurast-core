@@ -1,9 +1,9 @@
 use acurast_common::{Fulfillment, Script};
 use frame_support::sp_runtime::DispatchError;
-use frame_support::{sp_runtime, traits::Everything, weights::Weight, PalletId};
+use frame_support::{parameter_types, sp_runtime, traits::Everything, weights::Weight, PalletId};
 use hex_literal::hex;
 use sp_runtime::traits::{AccountIdLookup, BlakeTwo256};
-use sp_runtime::{generic, parameter_types, AccountId32};
+use sp_runtime::{generic, AccountId32};
 
 use crate::traits::OnFulfillment;
 
@@ -40,7 +40,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type Call = Call;
+    type RuntimeCall = RuntimeCall;
     type Index = u32;
     type BlockNumber = BlockNumber;
     type Hash = sp_core::H256;
@@ -48,8 +48,8 @@ impl frame_system::Config for Test {
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    type Event = Event;
-    type Origin = Origin;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
@@ -67,7 +67,7 @@ impl frame_system::Config for Test {
 }
 
 impl crate::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type OnFulfillment = FulfillmentHandler;
     type WeightInfo = ();
 }
@@ -77,7 +77,7 @@ impl OnFulfillment<Test> for FulfillmentHandler {
     fn on_fulfillment(
         from: <Test as frame_system::Config>::AccountId,
         _fulfillment: crate::Fulfillment,
-    ) -> sp_runtime::DispatchResultWithInfo<frame_support::weights::PostDispatchInfo> {
+    ) -> sp_runtime::DispatchResultWithInfo<frame_support::dispatch::PostDispatchInfo> {
         if !AllowedFulfillAccounts::get().contains(&from) {
             return Err(DispatchError::BadOrigin.into());
         }
@@ -126,7 +126,7 @@ pub fn fulfillment_for(script: Script) -> Fulfillment {
     }
 }
 
-pub fn events() -> Vec<Event> {
+pub fn events() -> Vec<RuntimeEvent> {
     let evt = System::events()
         .into_iter()
         .map(|evt| evt.event)

@@ -295,7 +295,7 @@ pub mod p256 {
                     let verifying_key_from_signature =
                         recoverable::Signature::try_from(signature_bytes)
                             .unwrap()
-                            .recover_verify_key(message)
+                            .recover_verifying_key(message)
                             .unwrap();
 
                     verifying_key == verifying_key_from_signature
