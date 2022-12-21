@@ -9,13 +9,13 @@ edition = "2021"
 
 [dependencies]
 codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive"], default-features = false }
-scale-info = { version = "2.0.0", features = ["derive"], default-features = false }
+scale-info = { version = "2.2.0", features = ["derive"], default-features = false }
 # Substrate
-frame-support = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
-sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.29" }
+frame-support = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
+sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 # Attestation
 asn1 = { version = "0.11.0", default-features = false, features = ["derive"], optional = true }
-p256 = { git = "https://github.com/Acurast/elliptic-curves", default-features = false, branch = "p256/v0.10.1", features = ["ecdsa", "sha256"], optional = true }
+p256 = { git = "https://github.com/Acurast/elliptic-curves", default-features = false, features = ["ecdsa", "sha256"], optional = true }
 p384 = { package = "p384_vendored", path = "../p384", default-features = false, features = ["ecdsa", "arithmetic", "expose-field"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 num-bigint = { version = "0.4.3", default-features = false, optional = true }

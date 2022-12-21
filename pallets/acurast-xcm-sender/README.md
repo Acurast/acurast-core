@@ -26,7 +26,7 @@ parameter_types! {
 }
 
 impl pallet_acurast_xcm_sender::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type XcmSender = crate::xcm_config::XcmRouter;
 	type AcurastReceiverPalletId = AcurastReceiverPalletId;
 	type AcurastParachainId = AcurastParachainId;

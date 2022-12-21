@@ -1,7 +1,7 @@
 use crate as pallet_acurast_xcm_receiver;
 use frame_support::{
+    dispatch::{Pays, PostDispatchInfo},
     traits::{ConstU16, ConstU64, Everything, Nothing},
-    weights::{Pays, PostDispatchInfo},
 };
 use frame_system as system;
 use sp_core::H256;
@@ -39,18 +39,18 @@ frame_support::parameter_types! {
 }
 
 impl pallet_xcm::Config for Test {
-    type Event = Event;
-    type SendXcmOrigin = xcm_builder::EnsureXcmOrigin<Origin, ()>;
+    type RuntimeEvent = RuntimeEvent;
+    type SendXcmOrigin = xcm_builder::EnsureXcmOrigin<RuntimeOrigin, ()>;
     type XcmRouter = ();
-    type ExecuteXcmOrigin = xcm_builder::EnsureXcmOrigin<Origin, ()>;
+    type ExecuteXcmOrigin = xcm_builder::EnsureXcmOrigin<RuntimeOrigin, ()>;
     type XcmExecuteFilter = Nothing;
     type XcmExecutor = ();
     type XcmTeleportFilter = Nothing;
     type XcmReserveTransferFilter = Everything;
-    type Weigher = xcm_builder::FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+    type Weigher = xcm_builder::FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
     type LocationInverter = xcm_builder::LocationInverter<Ancestry>;
-    type Origin = Origin;
-    type Call = Call;
+    type RuntimeOrigin = RuntimeOrigin;
+    type RuntimeCall = RuntimeCall;
     const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
     type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
 }
@@ -60,8 +60,8 @@ impl system::Config for Test {
     type BlockWeights = ();
     type BlockLength = ();
     type DbWeight = ();
-    type Origin = Origin;
-    type Call = Call;
+    type RuntimeOrigin = RuntimeOrigin;
+    type RuntimeCall = RuntimeCall;
     type Index = u64;
     type BlockNumber = u64;
     type Hash = H256;
@@ -69,7 +69,7 @@ impl system::Config for Test {
     type AccountId = u64;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type BlockHashCount = ConstU64<250>;
     type Version = ();
     type PalletInfo = PalletInfo;
@@ -125,7 +125,7 @@ impl crate::traits::ParachainBarrier<Test> for ParachainBarrier {
 }
 
 impl pallet_acurast_xcm_receiver::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type Payload = Vec<u8>;
     type Parameters = Vec<u8>;
     type OnFulfillment = OnAcurastFulfillment;

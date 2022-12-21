@@ -1,11 +1,11 @@
-use frame_support::sp_runtime;
-use frame_support::traits::Everything;
-use frame_support::weights::Weight;
-use frame_support::{pallet_prelude::GenesisBuild, PalletId};
+use frame_support::{
+    dispatch::Weight, pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
+    traits::Everything, PalletId,
+};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{generic, parameter_types, AccountId32};
+use sp_runtime::{generic, AccountId32};
 
 use crate::{
     AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
@@ -127,7 +127,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type Call = Call;
+    type RuntimeCall = RuntimeCall;
     type Index = u32;
     type BlockNumber = BlockNumber;
     type Hash = sp_core::H256;
@@ -135,8 +135,8 @@ impl frame_system::Config for Test {
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    type Event = Event;
-    type Origin = Origin;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
@@ -165,7 +165,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     /// The ubiquitous event type.
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
@@ -175,10 +175,11 @@ impl pallet_balances::Config for Test {
 }
 
 impl pallet_assets::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type Balance = Balance;
     type AssetId = parachains_common::AssetId;
     type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
     type AssetDeposit = ConstU128<0>;
     type AssetAccountDeposit = ConstU128<0>;
@@ -194,7 +195,7 @@ impl pallet_assets::Config for Test {
 impl parachain_info::Config for Test {}
 
 impl crate::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = ();
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
@@ -207,7 +208,7 @@ impl crate::Config for Test {
     type JobHooks = ();
 }
 
-pub fn events() -> Vec<Event> {
+pub fn events() -> Vec<RuntimeEvent> {
     let evt = System::events()
         .into_iter()
         .map(|evt| evt.event)

@@ -16,7 +16,7 @@ fn test_match() {
     let registration = job_registration_with_reward(script(), 5, 5000);
     ExtBuilder::default().build().execute_with(|| {
         assert_ok!(AcurastMarketplace::advertise(
-            Origin::signed(processor_account_id()).into(),
+            RuntimeOrigin::signed(processor_account_id()).into(),
             ad.clone(),
         ));
         assert_eq!(
@@ -24,7 +24,7 @@ fn test_match() {
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
         assert_ok!(Acurast::register(
-            Origin::signed(alice_account_id()).into(),
+            RuntimeOrigin::signed(alice_account_id()).into(),
             registration.clone(),
         ));
         assert_eq!(
@@ -39,7 +39,7 @@ fn test_match() {
         // updating job registration is prohibited after match found
         assert_err!(
             Acurast::register(
-                Origin::signed(alice_account_id()).into(),
+                RuntimeOrigin::signed(alice_account_id()).into(),
                 registration.clone(),
             ),
             Error::<Test>::JobRegistrationUnmodifiable
@@ -50,7 +50,7 @@ fn test_match() {
             payload: hex!("00").to_vec(),
         };
         assert_ok!(Acurast::fulfill(
-            Origin::signed(processor_account_id()).into(),
+            RuntimeOrigin::signed(processor_account_id()).into(),
             fulfillment.clone(),
             MultiAddress::Id(alice_account_id()),
         ));
@@ -66,19 +66,19 @@ fn test_match() {
         assert_eq!(
             events(),
             [
-                Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
                     ad.clone(),
                     processor_account_id()
                 )),
-                Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched((
                     alice_account_id(),
                     registration.script.clone()
                 ),)),
-                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
                 )),
-                Event::Acurast(pallet_acurast::Event::ReceivedFulfillment(
+                RuntimeEvent::Acurast(pallet_acurast::Event::ReceivedFulfillment(
                     processor_account_id(),
                     fulfillment,
                     registration,
@@ -97,7 +97,7 @@ fn test_no_match_insufficient_capacity() {
     let registration2 = job_registration_with_reward(script_random_value(), 2, 2000);
     ExtBuilder::default().build().execute_with(|| {
         assert_ok!(AcurastMarketplace::advertise(
-            Origin::signed(processor_account_id()).into(),
+            RuntimeOrigin::signed(processor_account_id()).into(),
             ad.clone(),
         ));
         assert_eq!(
@@ -107,7 +107,7 @@ fn test_no_match_insufficient_capacity() {
 
         // the first job matches because 1 capacity left
         assert_ok!(Acurast::register(
-            Origin::signed(alice_account_id()).into(),
+            RuntimeOrigin::signed(alice_account_id()).into(),
             registration.clone(),
         ));
         assert_eq!(
@@ -117,28 +117,28 @@ fn test_no_match_insufficient_capacity() {
 
         // this one does not match anymore
         assert_ok!(Acurast::register(
-            Origin::signed(alice_account_id()).into(),
+            RuntimeOrigin::signed(alice_account_id()).into(),
             registration2.clone(),
         ));
 
         assert_eq!(
             events(),
             [
-                Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
                     ad.clone(),
                     processor_account_id()
                 )),
                 // first job
-                Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched((
                     alice_account_id(),
                     registration.script.clone()
                 ),)),
-                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
                     alice_account_id()
                 )),
                 // second job
-                Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration2.clone(),
                     alice_account_id()
                 )),

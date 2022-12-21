@@ -1,6 +1,6 @@
 use frame_support::{
+    dispatch::{PostDispatchInfo, Weight},
     sp_runtime::DispatchResultWithInfo,
-    weights::{PostDispatchInfo, Weight},
 };
 
 use crate::{Config, Fulfillment};

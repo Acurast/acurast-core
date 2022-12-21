@@ -65,7 +65,7 @@ impl pallet_acurast_xcm_receiver::traits::OnFulfillment<Runtime> for OnAcurastFu
 }
 
 impl pallet_acurast_xcm_receiver::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Payload = sp_runtime::bounded::bounded_vec::BoundedVec<u8, ConstU32<128>>;
 	type OnFulfillment = OnAcurastFulfillment;
 	type Barrier = ParachainBarrier;

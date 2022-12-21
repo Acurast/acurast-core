@@ -1,7 +1,11 @@
-use frame_support::pallet_prelude::*;
-use frame_support::traits::Everything;
-use frame_support::weights::Weight;
-use frame_support::{pallet_prelude::GenesisBuild, PalletId};
+use frame_support::{
+    dispatch::Weight,
+    pallet_prelude::GenesisBuild,
+    pallet_prelude::*,
+    parameter_types,
+    traits::{AsEnsureOriginWithArg, Everything},
+    PalletId,
+};
 use hex_literal::hex;
 use sp_core::*;
 use sp_io;
@@ -9,7 +13,7 @@ use sp_runtime::traits::{
     AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32, StaticLookup,
 };
 use sp_runtime::{bounded_vec, BoundedVec};
-use sp_runtime::{generic, parameter_types, Percent};
+use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
 use pallet_acurast::Script;
@@ -166,7 +170,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type Call = Call;
+    type RuntimeCall = RuntimeCall;
     type Index = u32;
     type BlockNumber = BlockNumber;
     type Hash = sp_core::H256;
@@ -174,8 +178,8 @@ impl frame_system::Config for Test {
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    type Event = Event;
-    type Origin = Origin;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
@@ -204,7 +208,7 @@ impl pallet_balances::Config for Test {
     type Balance = AssetAmount;
     type DustRemoval = ();
     /// The ubiquitous event type.
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
@@ -214,10 +218,11 @@ impl pallet_balances::Config for Test {
 }
 
 impl pallet_assets::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type Balance = AssetAmount;
     type AssetId = AssetId;
     type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
     type AssetDeposit = ConstU128<0>;
     type AssetAccountDeposit = ConstU128<0>;
@@ -233,7 +238,7 @@ impl pallet_assets::Config for Test {
 impl parachain_info::Config for Test {}
 
 impl pallet_acurast::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
@@ -267,7 +272,7 @@ impl<T: Config> RewardManager<T> for MockRewardManager {
 }
 
 impl Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type AssetId = AssetId;
@@ -276,7 +281,7 @@ impl Config for Test {
     type WeightInfo = weights::Weights<Test>;
 }
 
-pub fn events() -> Vec<Event> {
+pub fn events() -> Vec<RuntimeEvent> {
     let evt = System::events()
         .into_iter()
         .map(|evt| evt.event)

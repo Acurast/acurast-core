@@ -41,14 +41,16 @@ pub struct AssetTransactor<
 );
 
 impl<
-        Runtime: Config + pallet_assets::Config<AssetId = Assets::AssetId>,
-        Assets: fungibles::Mutate<AccountId> + fungibles::Transfer<AccountId>,
+        Runtime: Config + pallet_assets::Config,
+        Assets: fungibles::Mutate<AccountId>
+            + fungibles::Transfer<AccountId>
+            + fungibles::Create<AccountId>,
         Matcher: MatchesFungibles<Assets::AssetId, Assets::Balance>,
         AccountIdConverter: Convert<MultiLocation, AccountId>,
         AccountId: Clone, // can't get away without it since Currency is generic over it.
         CheckAsset: Contains<Assets::AssetId>,
         CheckingAccount: Get<AccountId>,
-        AssetConverter: MultiAssetConverter<Assets::AssetId, Error = XcmError>,
+        AssetConverter: MultiAssetConverter<Runtime::AssetIdParameter, Error = XcmError>,
     > TransactAsset
     for AssetTransactor<
         Runtime,
@@ -60,9 +62,6 @@ impl<
         CheckingAccount,
         AssetConverter,
     >
-where
-    Runtime::AssetId: TryFrom<u128>,
-    Runtime::Balance: TryFrom<u128>,
 {
     fn can_check_in(origin: &MultiLocation, what: &MultiAsset) -> XcmResult {
         FungiblesMutateAdapter::<
@@ -114,7 +113,7 @@ where
             let raw_origin = RawOrigin::<<Runtime as frame_system::Config>::AccountId>::Signed(
                 pallet_assets_account.clone(),
             );
-            let pallet_origin: <Runtime as frame_system::Config>::Origin = raw_origin.into();
+            let pallet_origin: <Runtime as frame_system::Config>::RuntimeOrigin = raw_origin.into();
 
             pallet_assets::Pallet::<Runtime>::create(
                 pallet_origin,
