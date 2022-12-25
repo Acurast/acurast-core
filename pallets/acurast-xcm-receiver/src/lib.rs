@@ -57,6 +57,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Dispatchable function that notifies the runtime about a fulfilment coming from acurast parachain.
+        #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().writes(1)))]
         pub fn fulfill(
             origin: OriginFor<T>,

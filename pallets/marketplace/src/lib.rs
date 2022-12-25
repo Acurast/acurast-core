@@ -160,6 +160,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Advertise resources by providing a [AdvertisementFor]. If an advertisement for the same script was previously registered, it will be overwritten.
+        #[pallet::call_index(0)]
         #[pallet::weight(< T as Config >::WeightInfo::advertise())]
         pub fn advertise(
             origin: OriginFor<T>,
@@ -209,6 +210,7 @@ pub mod pallet {
         }
 
         /// Delete advertisement.
+        #[pallet::call_index(1)]
         #[pallet::weight(< T as Config >::WeightInfo::delete_advertisement())]
         pub fn delete_advertisement(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;

@@ -48,6 +48,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Submit a fulfillment for an acurast job.
+        #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::fulfill())]
         pub fn fulfill(
             origin: OriginFor<T>,

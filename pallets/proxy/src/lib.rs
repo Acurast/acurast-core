@@ -173,6 +173,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [Registration]. If a job for the same script was previously registered, it will be overwritten.
         // TODO: Define proxy weight
+        #[pallet::call_index(0)]
         #[pallet::weight(10_000)]
         pub fn register(
             origin: OriginFor<T>,
@@ -184,6 +185,7 @@ pub mod pallet {
         }
 
         /// Deregisters a job for the given script.
+        #[pallet::call_index(1)]
         #[pallet::weight(10_000)]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResult {
             let caller = ensure_signed(origin)?;
@@ -192,6 +194,7 @@ pub mod pallet {
         }
 
         /// Updates the allowed sources list of a [Registration].
+        #[pallet::call_index(2)]
         #[pallet::weight(10_000)]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
@@ -204,6 +207,7 @@ pub mod pallet {
         }
 
         /// Fulfills a previously registered job.
+        #[pallet::call_index(3)]
         #[pallet::weight(10_000)]
         pub fn fulfill(
             origin: OriginFor<T>,
@@ -219,6 +223,7 @@ pub mod pallet {
         }
 
         /// Advertise resources by providing a [Advertisement]. If an advertisement for the same script was previously registered, it will be overwritten.
+        #[pallet::call_index(4)]
         #[pallet::weight(10_000)]
         pub fn advertise(
             origin: OriginFor<T>,

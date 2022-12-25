@@ -245,6 +245,7 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type Balance = AcurastAssetAmount;
         type AssetId = AcurastAssetId;
+        type AssetIdParameter = codec::Compact<AcurastAssetId>;
         type Currency = Balances;
         type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
         type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
@@ -257,6 +258,7 @@ pub mod acurast_runtime {
         type Freezer = ();
         type Extra = ();
         type WeightInfo = ();
+        type RemoveItemsLimit = ();
     }
 
     pub struct FeeManagerImpl;
