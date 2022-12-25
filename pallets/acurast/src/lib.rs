@@ -180,6 +180,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [JobRegistration]. If a job for the same script was previously registered, it will be overwritten.
+        #[pallet::call_index(0)]
         #[pallet::weight(< T as Config >::WeightInfo::register())]
         pub fn register(
             origin: OriginFor<T>,
@@ -212,6 +213,7 @@ pub mod pallet {
         }
 
         /// Deregisters a job for the given script.
+        #[pallet::call_index(1)]
         #[pallet::weight(< T as Config >::WeightInfo::deregister())]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
@@ -224,6 +226,7 @@ pub mod pallet {
         }
 
         /// Updates the allowed sources list of a [JobRegistration].
+        #[pallet::call_index(2)]
         #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources())]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
@@ -280,6 +283,7 @@ pub mod pallet {
         }
 
         /// Assigns jobs to [AccountId]s. Those accounts can then later call `fulfill` for those jobs.
+        #[pallet::call_index(3)]
         #[pallet::weight(< T as Config >::WeightInfo::update_job_assignments())]
         pub fn update_job_assignments(
             origin: OriginFor<T>,
@@ -308,6 +312,7 @@ pub mod pallet {
         }
 
         /// Fulfills a previously registered job.
+        #[pallet::call_index(4)]
         #[pallet::weight(< T as Config >::WeightInfo::fulfill())]
         pub fn fulfill(
             origin: OriginFor<T>,
@@ -354,6 +359,7 @@ pub mod pallet {
         /// - If the represented chain is valid, the [Attestation] details are stored. An existing attestion for signing account gets overwritten.
         ///
         /// Revocation: Each atttestation is stored with the unique IDs of the certificates on the chain proofing the attestation's validity.
+        #[pallet::call_index(5)]
         #[pallet::weight(< T as Config >::WeightInfo::submit_attestation())]
         pub fn submit_attestation(
             origin: OriginFor<T>,
@@ -380,6 +386,7 @@ pub mod pallet {
         }
 
         #[pallet::weight(< T as Config >::WeightInfo::register())]
+        #[pallet::call_index(6)]
         pub fn update_certificate_revocation_list(
             origin: OriginFor<T>,
             updates: Vec<CertificateRevocationListUpdate>,

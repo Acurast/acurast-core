@@ -221,6 +221,7 @@ impl pallet_assets::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Balance = AssetAmount;
     type AssetId = AssetId;
+    type AssetIdParameter = codec::Compact<AssetId>;
     type Currency = Balances;
     type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
@@ -233,6 +234,7 @@ impl pallet_assets::Config for Test {
     type Freezer = ();
     type Extra = ();
     type WeightInfo = ();
+    type RemoveItemsLimit = ();
 }
 
 impl parachain_info::Config for Test {}

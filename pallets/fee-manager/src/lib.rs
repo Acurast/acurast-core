@@ -14,12 +14,12 @@ use core::ops::AddAssign;
 use frame_support::{dispatch::Weight, traits::Get};
 use sp_arithmetic::Percent;
 
-pub use self::pallet::*;
+pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use frame_support::pallet_prelude::{ValueQuery, *};
+    use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -56,6 +56,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
             ensure_root(origin)?;
