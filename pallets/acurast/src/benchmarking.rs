@@ -27,7 +27,7 @@ pub const INITIAL_BALANCE: u128 = UNIT * 10;
 pub const UNIT: Balance = 1_000_000;
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
-pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
+pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
@@ -74,21 +74,21 @@ where
     let caller: T::AccountId = account("token_account", 0, SEED);
     whitelist_account!(caller);
     let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-    let pallet_origin: T::Origin = RawOrigin::Signed(pallet_account.clone()).into();
+    let pallet_origin: T::RuntimeOrigin = RawOrigin::Signed(pallet_account.clone()).into();
 
     T::Currency::make_free_balance_be(&caller, u32::MAX.into());
 
     // might fail if asset is already created in genesis config. Fail doesn't affect later mint
     let _create_token_call = Assets::<T>::create(
         pallet_origin.clone(),
-        22.into(),
+        T::AssetId::from(22).into(),
         T::Lookup::unlookup(pallet_account.clone()),
         10u32.into(),
     );
 
     let mint_token_call = Assets::<T>::mint(
         pallet_origin,
-        22.into(),
+        T::AssetId::from(22).into(),
         T::Lookup::unlookup(caller.clone()),
         INITIAL_BALANCE.into(),
     );
@@ -211,7 +211,7 @@ benchmarks! {
     submit_attestation {
         let processor_account: T::AccountId = processor_account_id::<T>();
         let attestation_chain = attestation_chain();
-        let timestamp_call = pallet_timestamp::Pallet::<T>::set(T::Origin::none(), 1657363915001u64.into());
+        let timestamp_call = pallet_timestamp::Pallet::<T>::set(T::RuntimeOrigin::none(), 1657363915001u64.into());
         assert_ok!(timestamp_call);
 
     }: _(RawOrigin::Signed(processor_account.clone()), attestation_chain.clone())
