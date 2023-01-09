@@ -256,9 +256,9 @@ pub mod pallet {
             <StoredAdvertisementRestriction<T>>::insert(
                 &who,
                 AdvertisementRestriction {
-                    max_memory: advertisement.max_memory.clone(),
-                    network_request_quota: advertisement.network_request_quota.clone(),
-                    storage_capacity: advertisement.storage_capacity.clone(),
+                    max_memory: advertisement.max_memory,
+                    network_request_quota: advertisement.network_request_quota,
+                    storage_capacity: advertisement.storage_capacity,
                     allowed_consumers: advertisement.allowed_consumers.clone(),
                 },
             );
