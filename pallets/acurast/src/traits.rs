@@ -76,7 +76,6 @@ pub trait WeightInfo {
 }
 
 pub trait JobHooks<T: Config> {
-    type Error: Into<Error<T>>;
     fn register_hook(
         who: &<T as frame_system::Config>::AccountId,
         registration: &JobRegistrationFor<T>,
@@ -99,7 +98,6 @@ pub trait JobHooks<T: Config> {
 }
 
 impl<T: Config> JobHooks<T> for () {
-    type Error = ();
     fn register_hook(
         _who: &<T as frame_system::Config>::AccountId,
         _registration: &JobRegistrationFor<T>,

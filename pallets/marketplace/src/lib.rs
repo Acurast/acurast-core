@@ -173,10 +173,14 @@ pub mod pallet {
         ///
         /// Pricing and capacity can be updated, e.g. the capacity can be set to 0 no no longer receive job matches.
         CannotDeleteAdvertisementWhileMatched,
-        /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
-        InvalidPayment,
         /// Failed to retrieve funds from pallet account to pay source. SEVERE error
         FailedToPay,
+        /// Asset is not allowed by `AssetBarrier`.
+        AssetNotAllowedByBarrier,
+        /// Invalid asset ID.
+        InvalidAssetId,
+        /// Invalid asset amount.
+        InvalidAssetAmount,
         /// Capacity not known for a source. SEVERE error
         CapacityNotFound,
         /// Matching is empty.
@@ -305,8 +309,7 @@ pub mod pallet {
             T::RewardManager::pay_matcher_reward(
                 remaining_reward,
                 T::Lookup::unlookup(who.clone()),
-            )
-            .map_err(|_| Error::<T>::FailedToPay)?;
+            )?;
 
             Ok(().into())
         }
@@ -418,8 +421,7 @@ pub mod pallet {
             T::RewardManager::pay_reward(
                 assignment.fee_per_execution.clone(),
                 T::Lookup::unlookup(who.clone()),
-            )
-            .map_err(|_| Error::<T>::FailedToPay)?;
+            )?;
 
             Self::deposit_event(Event::Reported(job_id, who, assignment.clone()));
             Ok(().into())
@@ -433,8 +435,6 @@ pub mod pallet {
     }
 
     impl<T: Config> JobHooks<T> for Pallet<T> {
-        type Error = Error<T>;
-
         /// Registers a job in the marketplace by providing a [JobRegistration].
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
@@ -507,8 +507,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::RewardConversionFailed)?;
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
-            T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))
-                .map_err(|_| Error::<T>::InvalidPayment)?;
+            T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
 
             Ok(().into())
         }
@@ -818,7 +817,7 @@ pub mod pallet {
 
         fn total_reward_amount(
             registration: &JobRegistrationFor<T>,
-        ) -> Result<T::AssetAmount, DispatchError> {
+        ) -> Result<T::AssetAmount, Error<T>> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
             let requirements: JobRequirementsFor<T> = e.into();
 
@@ -838,7 +837,7 @@ pub mod pallet {
         fn fee_per_execution(
             registration: &JobRegistrationFor<T>,
             pricing: &PricingVariantFor<T>,
-        ) -> Result<T::AssetAmount, DispatchError> {
+        ) -> Result<T::AssetAmount, Error<T>> {
             Ok(pricing
                 .fee_per_millisecond
                 .checked_mul(&registration.schedule.duration.into())

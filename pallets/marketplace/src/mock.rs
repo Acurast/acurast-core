@@ -1,7 +1,6 @@
 use frame_support::{
     dispatch::Weight,
     pallet_prelude::GenesisBuild,
-    pallet_prelude::*,
     parameter_types,
     traits::{AsEnsureOriginWithArg, Everything},
     PalletId,
@@ -12,7 +11,7 @@ use sp_io;
 use sp_runtime::traits::{
     AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32, StaticLookup,
 };
-use sp_runtime::{bounded_vec, BoundedVec};
+use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
