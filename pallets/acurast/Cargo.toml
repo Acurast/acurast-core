@@ -24,11 +24,6 @@ sp-std = { git = "https://github.com/paritytech/substrate", default-features = f
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 
-# Polkadot
-xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
-xcm-executor = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
-xcm-builder = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
-
 # benchmarks
 hex-literal = { version = "0.3", optional = true }
 parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
@@ -78,8 +73,5 @@ std = [
   "sp-runtime/std",
   "sp-std/std",
   "sp-version/std",
-  "xcm-builder/std",
-  "xcm-executor/std",
-  "xcm/std",
 ]
 try-runtime = ["frame-support/try-runtime"]

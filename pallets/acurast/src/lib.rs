@@ -11,7 +11,6 @@ mod benchmarking;
 mod traits;
 pub mod utils;
 pub mod weights;
-pub mod xcm_adapters;
 
 pub use acurast_common::*;
 pub use pallet::*;
