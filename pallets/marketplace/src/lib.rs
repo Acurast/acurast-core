@@ -24,7 +24,7 @@ pub mod weights_with_hooks;
 pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128, PalletId,
+        sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
@@ -46,9 +46,7 @@ pub mod pallet {
     use crate::RewardManager;
 
     #[pallet::config]
-    pub trait Config:
-        frame_system::Config + pallet_acurast::Config + pallet_timestamp::Config
-    {
+    pub trait Config: frame_system::Config + pallet_acurast::Config {
         type RuntimeEvent: From<Event<Self>>
             + IsType<<Self as pallet_acurast::Config>::RuntimeEvent>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -401,8 +399,7 @@ pub mod pallet {
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            let now = <pallet_timestamp::Pallet<T>>::get().saturated_into::<u64>();
-            if now >= registration.schedule.end_time {
+            if Self::now()? >= registration.schedule.end_time {
                 // TODO update reputation since we don't expect further reports for this job
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
@@ -461,9 +458,8 @@ pub mod pallet {
                 registration.schedule.duration < registration.schedule.interval,
                 Error::<T>::JobRegistrationDurationExceedsInterval
             );
-            let now = <pallet_timestamp::Pallet<T>>::get().saturated_into::<u64>();
             ensure!(
-                registration.schedule.start_time >= now,
+                registration.schedule.start_time >= Self::now()?,
                 Error::<T>::JobRegistrationStartInPast
             );
             ensure!(
@@ -520,9 +516,8 @@ pub mod pallet {
             let overdue = || -> Result<bool, DispatchError> {
                 let registration = <StoredJobRegistration<T>>::get(&who, &script)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
-                let now = <pallet_timestamp::Pallet<T>>::get().saturated_into::<u64>();
 
-                Ok(now >= registration.schedule.start_time)
+                Ok(Self::now()? >= registration.schedule.start_time)
             };
             ensure!(
                 // allow to deregister overdue jobs
@@ -575,7 +570,7 @@ pub mod pallet {
                 let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
                 let requirements: JobRequirementsFor<T> = e.into();
 
-                let now = <pallet_timestamp::Pallet<T>>::get().saturated_into::<u64>();
+                let now = Self::now()?;
                 ensure!(
                     now < registration.schedule.start_time,
                     Error::<T>::OverdueMatch
@@ -851,6 +846,13 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?
                 .checked_add(&pricing.base_fee_per_execution)
                 .ok_or(Error::<T>::CalculationOverflow)?)
+        }
+
+        fn now() -> Result<u64, DispatchError> {
+            Ok(<T as pallet_acurast::Config>::UnixTime::now()
+                .as_millis()
+                .try_into()
+                .map_err(|_| pallet_acurast::Error::<T>::FailedTimestampConversion)?)
         }
     }
 }
