@@ -5,7 +5,6 @@ use frame_support::{
     traits::{AsEnsureOriginWithArg, Everything},
     PalletId,
 };
-use hex_literal::hex;
 use sp_core::*;
 use sp_io;
 use sp_runtime::traits::{
@@ -15,10 +14,7 @@ use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::{
-    CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter, JobAssignmentUpdate,
-    JobAssignmentUpdateBarrier, JobRegistrationFor, RevocationListUpdateBarrier,
-};
+use pallet_acurast::{CertificateRevocationListUpdate, RevocationListUpdateBarrier};
 
 use crate::stub::*;
 use crate::*;
@@ -37,32 +33,9 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl JobAssignmentUpdateBarrier<Test> for Barrier {
-    fn can_update_assigned_jobs(
-        origin: &<Test as frame_system::Config>::AccountId,
-        updates: &Vec<JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
-    ) -> bool {
-        updates.iter().all(|update| &update.job_id.0 == origin)
-    }
-}
-
 impl AssetBarrier<MockAsset> for Barrier {
     fn can_use_asset(_asset: &MockAsset) -> bool {
         true
-    }
-}
-
-pub struct Router;
-
-impl FulfillmentRouter<Test> for Router {
-    fn received_fulfillment(
-        _origin: frame_system::pallet_prelude::OriginFor<Test>,
-        _from: <Test as frame_system::Config>::AccountId,
-        _fulfillment: Fulfillment,
-        _registration: JobRegistrationFor<Test>,
-        _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
-    ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-        Ok(().into())
     }
 }
 
@@ -161,7 +134,6 @@ parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
-    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: AssetAmount = EXISTENTIAL_DEPOSIT;
 }
 parameter_types! {
@@ -245,11 +217,9 @@ impl parachain_info::Config for Test {}
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
-    type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type JobHooks = Pallet<Test>;
@@ -332,13 +302,6 @@ pub fn events() -> Vec<RuntimeEvent> {
     System::reset_events();
 
     evt
-}
-
-pub fn fulfillment_for(registration: &JobRegistrationFor<Test>) -> Fulfillment {
-    Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
-    }
 }
 
 pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {

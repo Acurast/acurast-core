@@ -38,7 +38,6 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
     // Storage: Assets Asset (r:1 w:1)
     // Storage: Assets Account (r:2 w:2)
     // Storage: System Account (r:1 w:1)
-    // Storage: AcurastMarketplace StoredJobAssignment (r:0 w:1)
     // Storage: Acurast StoredJobRegistration (r:0 w:1)
     fn register() -> Weight {
         // Minimum execution time:  nanoseconds.
@@ -54,18 +53,8 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
             .saturating_add(T::DbWeight::get().reads(1))
             .saturating_add(T::DbWeight::get().writes(2))
     }
-    fn fulfill() -> Weight {
-        // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(50_437_000)
-            .saturating_add(T::DbWeight::get().reads(1))
-            .saturating_add(T::DbWeight::get().writes(2))
-    }
-
     fn update_allowed_sources() -> Weight {
         W::update_allowed_sources()
-    }
-    fn update_job_assignments() -> Weight {
-        W::update_job_assignments()
     }
     fn submit_attestation() -> Weight {
         W::submit_attestation()

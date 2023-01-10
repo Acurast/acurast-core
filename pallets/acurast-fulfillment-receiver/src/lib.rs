@@ -4,14 +4,17 @@
 mod mock;
 #[cfg(test)]
 mod tests;
-pub mod traits;
 
-pub use acurast_common::{is_valid_script, Fulfillment, Script};
+pub mod traits;
+pub mod types;
+
+pub use acurast_common::is_valid_script;
 pub use pallet::*;
+pub use types::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use acurast_common::Fulfillment;
+    use crate::Fulfillment;
     use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
     use sp_std::prelude::*;

@@ -1,4 +1,5 @@
-use acurast_common::{Fulfillment, Script};
+use crate::types::Fulfillment;
+use acurast_common::Script;
 use frame_support::sp_runtime::DispatchError;
 use frame_support::{parameter_types, sp_runtime, traits::Everything, weights::Weight, PalletId};
 use hex_literal::hex;
@@ -76,7 +77,7 @@ pub struct FulfillmentHandler;
 impl OnFulfillment<Test> for FulfillmentHandler {
     fn on_fulfillment(
         from: <Test as frame_system::Config>::AccountId,
-        _fulfillment: crate::Fulfillment,
+        _fulfillment: Fulfillment,
     ) -> sp_runtime::DispatchResultWithInfo<frame_support::dispatch::PostDispatchInfo> {
         if !AllowedFulfillAccounts::get().contains(&from) {
             return Err(DispatchError::BadOrigin.into());

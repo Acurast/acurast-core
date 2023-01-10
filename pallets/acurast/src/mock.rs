@@ -8,10 +8,7 @@ use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
 use sp_runtime::{generic, AccountId32};
 
-use crate::{
-    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
-    JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
-};
+use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber};
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -27,29 +24,6 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
         _updates: &Vec<crate::CertificateRevocationListUpdate>,
     ) -> bool {
         AllowedRevocationListUpdate::get().contains(origin)
-    }
-}
-
-impl JobAssignmentUpdateBarrier<Test> for Barrier {
-    fn can_update_assigned_jobs(
-        origin: &<Test as frame_system::Config>::AccountId,
-        updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
-    ) -> bool {
-        updates.iter().all(|update| &update.job_id.0 == origin)
-    }
-}
-
-pub struct Router;
-
-impl crate::FulfillmentRouter<Test> for Router {
-    fn received_fulfillment(
-        _origin: frame_system::pallet_prelude::OriginFor<Test>,
-        _from: <Test as frame_system::Config>::AccountId,
-        _fulfillment: crate::Fulfillment,
-        _registration: crate::JobRegistrationFor<Test>,
-        _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
-    ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-        Ok(().into())
     }
 }
 
@@ -116,7 +90,6 @@ parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
-    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
 }
 parameter_types! {
@@ -200,11 +173,9 @@ impl parachain_info::Config for Test {}
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = ();
-    type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
@@ -259,20 +230,6 @@ pub fn job_registration(
     }
 }
 
-pub fn job_assignment_update_for(
-    registration: &JobRegistration<AccountId, ()>,
-    requester: Option<AccountId>,
-) -> Vec<JobAssignmentUpdate<AccountId>> {
-    vec![JobAssignmentUpdate {
-        operation: crate::ListUpdateOperation::Add,
-        assignee: processor_account_id(),
-        job_id: (
-            requester.unwrap_or(alice_account_id()),
-            registration.script.clone(),
-        ),
-    }]
-}
-
 pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
     JobRegistration {
         script: invalid_script_1(),
@@ -308,13 +265,6 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         network_requests: 5,
         storage: 20_000u32,
         extra: (),
-    }
-}
-
-pub fn fulfillment_for(registration: &JobRegistration<AccountId, ()>) -> Fulfillment {
-    Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
     }
 }
 

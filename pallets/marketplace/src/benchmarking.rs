@@ -5,14 +5,13 @@ use frame_support::{
     traits::Currency,
 };
 use frame_system::RawOrigin;
-use hex_literal::hex;
 use sp_core::*;
 use sp_runtime::traits::ConstU32;
 use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use pallet_acurast::{Event as AcurastEvent, Fulfillment, JobRegistrationFor, Script};
+use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, Script};
 use pallet_acurast::{Pallet as Acurast, Schedule};
 
 pub use crate::stub::*;
@@ -233,25 +232,6 @@ benchmarks! {
     verify {
         assert_last_acurast_event::<T>(AcurastEvent::<T>::JobRegistrationRemoved(
             job.script, caller
-        ).into());
-    }
-
-    fulfill {
-        let (source, _) = advertise_helper::<T>(true);
-        let (requester, job) = register_helper::<T>(true);
-        let fulfillment = Fulfillment {
-            script: job.script.clone(),
-            payload: hex!("00").to_vec(),
-        };
-    }: {
-         pallet_acurast::Pallet::<T>::fulfill(RawOrigin::Signed(source.clone()).into(), fulfillment.clone(), T::Lookup::unlookup(requester.clone()))?
-    }
-    verify {
-        assert_last_acurast_event::<T>(AcurastEvent::<T>::ReceivedFulfillment(
-            source.clone(),
-            fulfillment,
-            job,
-            requester
         ).into());
     }
 

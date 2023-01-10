@@ -2,11 +2,9 @@
 
 use crate::{
     mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate,
-    CertificateRevocationListUpdate, Error, Fulfillment, ListUpdateOperation, SerialNumber,
+    CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
 use frame_support::{assert_err, assert_ok};
-use hex_literal::hex;
-use sp_runtime::MultiAddress;
 
 #[test]
 fn test_job_registration() {
@@ -256,186 +254,6 @@ fn test_update_allowed_sources_failure() {
 }
 
 #[test]
-fn test_assign_job() {
-    let registration = job_registration(None, false);
-    let updates = job_assignment_update_for(&registration, None);
-    ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
-        ));
-        assert_ok!(Acurast::update_job_assignments(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
-        ));
-
-        assert_eq!(
-            Some(vec![(alice_account_id(), registration.script.clone())]),
-            Acurast::stored_job_assignment(processor_account_id())
-        );
-
-        assert_eq!(
-            events(),
-            [
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                    registration.clone(),
-                    alice_account_id()
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobAssignmentUpdate(
-                    alice_account_id(),
-                    updates
-                )),
-            ]
-        );
-    });
-}
-
-#[test]
-fn test_assign_job_failure_1() {
-    let registration = job_registration(None, true);
-    let updates = job_assignment_update_for(&registration, None);
-    ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
-        ));
-        assert_err!(
-            Acurast::update_job_assignments(
-                RuntimeOrigin::signed(alice_account_id()).into(),
-                updates.clone()
-            ),
-            Error::<Test>::FulfillSourceNotVerified
-        );
-        assert_eq!(
-            events(),
-            [RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                registration.clone(),
-                alice_account_id()
-            )),]
-        );
-    });
-}
-
-#[test]
-fn test_assign_job_failure_2() {
-    let registration = job_registration(Some(vec![charlie_account_id()]), false);
-    let updates = job_assignment_update_for(&registration, None);
-    ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
-        ));
-        assert_err!(
-            Acurast::update_job_assignments(
-                RuntimeOrigin::signed(alice_account_id().into()),
-                updates
-            ),
-            Error::<Test>::FulfillSourceNotAllowed
-        );
-        assert_eq!(
-            events(),
-            [RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                registration.clone(),
-                alice_account_id()
-            ))]
-        );
-    });
-}
-
-#[test]
-fn test_fulfill() {
-    let registration = job_registration(None, false);
-    let fulfillment = Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
-    };
-    let updates = job_assignment_update_for(&registration, None);
-    ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
-        ));
-        assert_ok!(Acurast::update_job_assignments(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
-        ));
-        assert_ok!(Acurast::fulfill(
-            RuntimeOrigin::signed(processor_account_id()).into(),
-            fulfillment.clone(),
-            MultiAddress::Id(alice_account_id()),
-        ));
-        assert_eq!(
-            events(),
-            [
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                    registration.clone(),
-                    alice_account_id()
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobAssignmentUpdate(
-                    alice_account_id(),
-                    updates
-                )),
-                RuntimeEvent::Acurast(crate::Event::ReceivedFulfillment(
-                    processor_account_id(),
-                    fulfillment,
-                    registration,
-                    alice_account_id()
-                )),
-            ]
-        );
-    });
-}
-
-#[test]
-fn test_fulfill_failure_1() {
-    let registration = job_registration(None, false);
-    let fulfillment = Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
-    };
-    let updates = job_assignment_update_for(&registration, None);
-    ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
-        ));
-        assert_ok!(Acurast::update_job_assignments(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
-        ));
-        assert_ok!(Acurast::deregister(
-            RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.script.clone(),
-        ));
-        assert_err!(
-            Acurast::fulfill(
-                RuntimeOrigin::signed(processor_account_id()).into(),
-                fulfillment.clone(),
-                MultiAddress::Id(alice_account_id())
-            ),
-            Error::<Test>::JobRegistrationNotFound
-        );
-        assert_eq!(
-            events(),
-            [
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                    registration.clone(),
-                    alice_account_id()
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobAssignmentUpdate(
-                    alice_account_id(),
-                    updates
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationRemoved(
-                    registration.script,
-                    alice_account_id()
-                )),
-            ],
-        );
-    });
-}
-
-#[test]
 fn test_submit_attestation() {
     ExtBuilder::default().build().execute_with(|| {
         let chain = attestation_chain();
@@ -459,57 +277,6 @@ fn test_submit_attestation() {
                 attestation,
                 processor_account_id()
             ))]
-        );
-    });
-}
-
-#[test]
-fn test_submit_attestation_register_fulfill() {
-    ExtBuilder::default().build().execute_with(|| {
-        let chain = attestation_chain();
-        let registration = job_registration(None, true);
-        let fulfillment = fulfillment_for(&registration);
-        let updates = job_assignment_update_for(&registration, Some(bob_account_id()));
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915001);
-        assert_ok!(Acurast::submit_attestation(
-            RuntimeOrigin::signed(processor_account_id()).into(),
-            chain.clone()
-        ));
-        assert_ok!(Acurast::register(
-            RuntimeOrigin::signed(bob_account_id()).into(),
-            registration.clone()
-        ));
-        assert_ok!(Acurast::update_job_assignments(
-            RuntimeOrigin::signed(bob_account_id().into()),
-            updates.clone()
-        ));
-        assert_ok!(Acurast::fulfill(
-            RuntimeOrigin::signed(processor_account_id()),
-            fulfillment.clone(),
-            MultiAddress::Id(bob_account_id())
-        ));
-
-        let attestation =
-            validate_and_extract_attestation::<Test>(&processor_account_id(), &chain).unwrap();
-        assert_eq!(
-            events(),
-            [
-                RuntimeEvent::Acurast(crate::Event::AttestationStored(
-                    attestation,
-                    processor_account_id()
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
-                    registration.clone(),
-                    bob_account_id()
-                )),
-                RuntimeEvent::Acurast(crate::Event::JobAssignmentUpdate(bob_account_id(), updates)),
-                RuntimeEvent::Acurast(crate::Event::ReceivedFulfillment(
-                    processor_account_id(),
-                    fulfillment,
-                    registration,
-                    bob_account_id()
-                )),
-            ]
         );
     });
 }
@@ -694,7 +461,6 @@ fn test_update_revocation_list_assign_job() {
         }];
         let chain = attestation_chain();
         let registration = job_registration(None, true);
-        let assignment_updates = job_assignment_update_for(&registration, Some(bob_account_id()));
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915001);
         assert_ok!(Acurast::submit_attestation(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -708,13 +474,6 @@ fn test_update_revocation_list_assign_job() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             updates.clone(),
         ));
-        assert_err!(
-            Acurast::update_job_assignments(
-                RuntimeOrigin::signed(bob_account_id()),
-                assignment_updates.clone()
-            ),
-            Error::<Test>::RevokedCertificate
-        );
 
         let attestation =
             validate_and_extract_attestation::<Test>(&processor_account_id(), &chain).unwrap();

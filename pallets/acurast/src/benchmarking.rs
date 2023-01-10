@@ -128,36 +128,6 @@ where
     (caller, job)
 }
 
-fn assign_job<T: Config>(
-    submit: bool,
-    caller: T::AccountId,
-    job: JobRegistrationFor<T>,
-) -> JobAssignmentUpdate<T::AccountId>
-where
-    T: pallet_assets::Config,
-{
-    let processor_account: T::AccountId = account("processor", 0, SEED);
-
-    let job_assignment = JobAssignmentUpdate {
-        operation: ListUpdateOperation::Add,
-        assignee: processor_account.clone(),
-        job_id: (caller.clone(), job.script.clone()),
-    };
-
-    // create processor account by giving t over existential deposit
-    T::Currency::make_free_balance_be(&processor_account, u32::MAX.into());
-
-    if submit {
-        let assignment_call = Acurast::<T>::update_job_assignments(
-            RawOrigin::Signed(caller.clone()).into(),
-            vec![job_assignment.clone()],
-        );
-        assert_ok!(assignment_call);
-    }
-
-    job_assignment
-}
-
 benchmarks! {
     where_clause {  where
         T: pallet_assets::Config + pallet_timestamp::Config,
@@ -197,24 +167,6 @@ benchmarks! {
     verify {
         assert_last_event::<T>(Event::AllowedSourcesUpdated(
             caller, job, sources_update
-        ).into());
-    }
-
-    fulfill {
-        let (caller, job) = register_job::<T>(true);
-        let job_assignment = assign_job::<T>(true, caller.clone(), job.clone());
-        let fulfillment = Fulfillment {
-            script: job.script.clone(),
-            payload: hex!("00").to_vec(),
-        };
-
-    }: _(RawOrigin::Signed(job_assignment.assignee.clone()), fulfillment.clone(), T::Lookup::unlookup(caller.clone()))
-    verify {
-        assert_last_event::<T>(Event::ReceivedFulfillment(
-            job_assignment.assignee.clone(),
-            fulfillment,
-            job,
-            caller
         ).into());
     }
 

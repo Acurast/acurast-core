@@ -26,15 +26,6 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
-/// Structure representing a job fulfillment. It contains the script that generated the payload and the actual payload.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct Fulfillment {
-    /// The script that generated the payload.
-    pub script: Script,
-    /// The output of a script.
-    pub payload: Vec<u8>,
-}
-
 /// Structure used to updated the allowed sources list of a [Registration].
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct AllowedSourcesUpdate<A>
@@ -49,20 +40,6 @@ where
 
 /// A Job ID consists of an [AccountId] and a [Script].
 pub type JobId<AccountId> = (AccountId, Script);
-
-/// Structure used to updated the allowed sources list of a [Registration].
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct JobAssignmentUpdate<A>
-where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-{
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to assign the job to.
-    pub assignee: A,
-    /// the job id to be assigned.
-    pub job_id: JobId<A>,
-}
 
 /// Structure used to updated the certificate recovation list.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]

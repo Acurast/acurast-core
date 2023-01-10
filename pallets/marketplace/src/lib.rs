@@ -35,7 +35,7 @@ pub mod pallet {
 
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
-        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Schedule, Script,
+        AllowedSourcesUpdate, JobHooks, JobId, JobRegistrationFor, Schedule, Script,
         StoredJobRegistration,
     };
 
@@ -543,16 +543,6 @@ pub mod pallet {
                 Error::<T>::JobRegistrationUnmodifiable
             );
 
-            Ok(().into())
-        }
-
-        /// Fulfills a previously registered job.
-        fn fulfill_hook(
-            _who: &T::AccountId, // source
-            _fulfillment: &Fulfillment,
-            _requester: <T::Lookup as StaticLookup>::Target, // the consumer that registered the job originally
-            _registration: &JobRegistrationFor<T>,
-        ) -> Result<(), DispatchError> {
             Ok(().into())
         }
     }
