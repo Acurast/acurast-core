@@ -11,7 +11,6 @@ mod benchmarking;
 mod traits;
 pub mod utils;
 pub mod weights;
-pub mod xcm_adapters;
 
 pub use acurast_common::*;
 pub use pallet::*;
@@ -24,8 +23,8 @@ pub type JobRegistrationFor<T> =
 pub mod pallet {
     use acurast_common::*;
     use frame_support::{
-        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128Concat, PalletId,
+        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
+        Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
@@ -37,8 +36,6 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member;
-        /// The fulfillment router to route a job fulfillment to its final destination.
-        type FulfillmentRouter: FulfillmentRouter<Self>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u16>;
@@ -47,8 +44,6 @@ pub mod pallet {
         type PalletId: Get<PalletId>;
         /// Barrier for the update_certificate_revocation_list extrinsic call.
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
-        /// Barrier for update_job_assignments extrinsic call.
-        type JobAssignmentUpdateBarrier: JobAssignmentUpdateBarrier<Self>;
         /// Barrier for submit_attestation extrinsic call.
         type KeyAttestationBarrier: KeyAttestationBarrier<Self>;
         /// Timestamp
@@ -88,12 +83,6 @@ pub mod pallet {
     pub type StoredRevokedCertificate<T: Config> =
         StorageMap<_, Blake2_128Concat, SerialNumber, ()>;
 
-    /// Job assignments.
-    #[pallet::storage]
-    #[pallet::getter(fn stored_job_assignment)]
-    pub type StoredJobAssignment<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, Vec<JobId<T::AccountId>>>;
-
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -101,13 +90,6 @@ pub mod pallet {
         JobRegistrationStored(JobRegistrationFor<T>, T::AccountId),
         /// A registration was successfully removed. [registration, who]
         JobRegistrationRemoved(Script, T::AccountId),
-        /// A fulfillment has been posted. [who, fulfillment, registration, receiver]
-        ReceivedFulfillment(
-            T::AccountId,
-            Fulfillment,
-            JobRegistrationFor<T>,
-            T::AccountId,
-        ),
         /// The allowed sources have been updated. [who, old_registration, updates]
         AllowedSourcesUpdated(
             T::AccountId,
@@ -118,8 +100,6 @@ pub mod pallet {
         AttestationStored(Attestation, T::AccountId),
         /// The certificate revocation list has been updated. [who, updates]
         CertificateRecovationListUpdated(T::AccountId, Vec<CertificateRevocationListUpdate>),
-        /// The job assignemts have been updated. [who, updates]
-        JobAssignmentUpdate(T::AccountId, Vec<JobAssignmentUpdate<T::AccountId>>),
     }
 
     #[pallet::error]
@@ -168,8 +148,6 @@ pub mod pallet {
         UnsupportedAttestationPublicKeyType,
         /// The submitted attestation public key does not match the source.
         AttestationPublicKeyDoesNotMatchSource,
-        /// Job assignment update not allowed.
-        JobAssignmentUpdateNotAllowed,
         /// Calling a job hook produced an error.
         JobHookFailed,
     }
@@ -268,10 +246,8 @@ pub mod pallet {
                 &who,
                 &script,
                 JobRegistration {
-                    script: script.clone(),
                     allowed_sources,
-                    extra: registration.extra.clone(),
-                    allow_only_verified_sources: registration.allow_only_verified_sources,
+                    ..registration.clone()
                 },
             );
 
@@ -280,76 +256,6 @@ pub mod pallet {
             Self::deposit_event(Event::AllowedSourcesUpdated(who, registration, updates));
 
             Ok(().into())
-        }
-
-        /// Assigns jobs to [AccountId]s. Those accounts can then later call `fulfill` for those jobs.
-        #[pallet::call_index(3)]
-        #[pallet::weight(< T as Config >::WeightInfo::update_job_assignments())]
-        pub fn update_job_assignments(
-            origin: OriginFor<T>,
-            updates: Vec<JobAssignmentUpdate<T::AccountId>>,
-        ) -> DispatchResultWithPostInfo {
-            let who = ensure_signed(origin)?;
-            if !T::JobAssignmentUpdateBarrier::can_update_assigned_jobs(&who, &updates) {
-                return Err(Error::<T>::JobAssignmentUpdateNotAllowed)?;
-            }
-            for update in &updates {
-                let job_registration =
-                    <StoredJobRegistration<T>>::get(&update.job_id.0, &update.job_id.1)
-                        .ok_or(Error::<T>::JobRegistrationNotFound)?;
-
-                ensure_source_allowed::<T>(&update.assignee, &job_registration)?;
-
-                let mut assignments =
-                    <StoredJobAssignment<T>>::get(&update.assignee).unwrap_or_default();
-                if !assignments.contains(&update.job_id) {
-                    assignments.push(update.job_id.clone());
-                }
-                <StoredJobAssignment<T>>::set(&update.assignee, Some(assignments));
-            }
-            Self::deposit_event(Event::JobAssignmentUpdate(who, updates));
-            Ok(().into())
-        }
-
-        /// Fulfills a previously registered job.
-        #[pallet::call_index(4)]
-        #[pallet::weight(< T as Config >::WeightInfo::fulfill())]
-        pub fn fulfill(
-            origin: OriginFor<T>,
-            fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
-        ) -> DispatchResultWithPostInfo {
-            let who = ensure_signed(origin.clone())?;
-            let requester = T::Lookup::lookup(requester)?;
-
-            // find registration
-            let registration = <StoredJobRegistration<T>>::get(&requester, &fulfillment.script)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
-
-            <T as Config>::JobHooks::fulfill_hook(
-                &who,
-                &fulfillment,
-                requester.clone(),
-                &registration,
-            )?;
-
-            let info = T::FulfillmentRouter::received_fulfillment(
-                origin,
-                who.clone(),
-                fulfillment.clone(),
-                registration.clone(),
-                requester.clone(),
-            )?;
-
-            <StoredJobRegistration<T>>::remove(&requester, &fulfillment.script);
-
-            Self::deposit_event(Event::ReceivedFulfillment(
-                who,
-                fulfillment,
-                registration,
-                requester,
-            ));
-            Ok(info)
         }
 
         /// Submits an attestation given a valid certificate chain.

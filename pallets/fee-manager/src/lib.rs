@@ -25,37 +25,38 @@ pub mod pallet {
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
-    pub struct Pallet<T>(PhantomData<T>);
+    pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
-        type RuntimeEvent: From<Event> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    pub trait Config<I: 'static = ()>: frame_system::Config {
+        type RuntimeEvent: From<Event<Self, I>>
+            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         #[pallet::constant]
         type DefaultFeePercentage: Get<Percent>;
     }
 
     #[pallet::type_value]
-    pub fn DefaultFeePercentage<T: Config>() -> Percent {
+    pub fn DefaultFeePercentage<T: Config<I>, I: 'static>() -> Percent {
         T::DefaultFeePercentage::get()
     }
 
     #[pallet::storage]
     #[pallet::getter(fn fee_percentage)]
-    pub type FeePercentage<T> =
-        StorageMap<_, Blake2_128, u16, Percent, ValueQuery, DefaultFeePercentage<T>>;
+    pub type FeePercentage<T: Config<I>, I: 'static = ()> =
+        StorageMap<_, Blake2_128, u16, Percent, ValueQuery, DefaultFeePercentage<T, I>>;
 
     #[pallet::storage]
     #[pallet::getter(fn fee_version)]
-    pub type Version<T> = StorageValue<_, u16, ValueQuery>;
+    pub type Version<T: Config<I>, I: 'static = ()> = StorageValue<_, u16, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
-    pub enum Event {
+    pub enum Event<T: Config<I>, I: 'static = ()> {
         FeeUpdated { version: u16, fee: Percent },
     }
 
     #[pallet::call]
-    impl<T: Config> Pallet<T> {
+    impl<T: Config<I>, I: 'static> Pallet<T, I> {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
@@ -70,13 +71,13 @@ pub mod pallet {
     }
 }
 
-impl<T: Config> Pallet<T> {
+impl<T: Config<I>, I: 'static> Pallet<T, I> {
     pub fn set_fee_percentage(fee: Percent) -> (u16, u64) {
-        let new_version = <Version<T>>::mutate(|version| {
+        let new_version = <Version<T, I>>::mutate(|version| {
             version.add_assign(1);
             *version
         });
-        <FeePercentage<T>>::set(new_version, fee);
+        <FeePercentage<T, I>>::set(new_version, fee);
         (new_version, T::DbWeight::get().write)
     }
 }

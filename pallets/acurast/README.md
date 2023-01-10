@@ -29,19 +29,6 @@ Allows the de-registration of a job.
 
 Allows to update the list of allowed sources for a previously registered job.
 
-### updateJobAssignments
-
-Allows to assign a registered job to a processor, so that it can later call `fulfill`.
-
-### fulfill
-
-Allows to post the fulfillment of a registered job. The `fulfill` call will fail if the job was not previously assigned to the origin. The fulfillment structure consists of:
-
-- The ipfs url of the `script` executed.
-- The `payload` bytes representing the output of the `script`.
-
-In addition to the `fulfillment` structure, `fulfill` expects the `AccountId` of the `requester` of the job.
-
 ### submitAttestation
 
 Allows an Acurast Processor to submit a key attestation proving its integrity. The extrinsic parameter is a valid attestation certificate chain.
@@ -69,20 +56,6 @@ pub struct AcurastRegistrationExtra {
 	/// my extra registration parameters
 }
 
-/// My fulfillment router
-pub struct AcurastRouter;
-impl pallet_acurast::FulfillmentRouter<Runtime> for AcurastRouter {
-	fn received_fulfillment(
-		origin: frame_system::pallet_prelude::OriginFor<Runtime>,
-		from: <Runtime as frame_system::Config>::AccountId,
-		fulfillment: pallet_acurast::Fulfillment,
-		registration: pallet_acurast::JobRegistrationFor<Runtime>,
-		requester: <<Runtime as frame_system::Config>::Lookup as StaticLookup>::Target,
-	) -> DispatchResultWithPostInfo {
-		/// route the fulfillment to its final destination
-	}
-}
-
 parameter_types! {
     pub const MaxAllowedSources: u16 = 100;
 	pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
@@ -91,12 +64,10 @@ parameter_types! {
 impl pallet_acurast::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type RegistrationExtra = AcurastRegistrationExtra;
-	type FulfillmentRouter = AcurastRouter;
 	type MaxAllowedSources = MaxAllowedSources;
 	type RewardManager = (); // provide proper type to enable rewards to be payed on fulfillment
 	type PalletId = AcurastPalletId;
 	type RevocationListUpdateBarrier = ();
-	type JobAssignmentUpdateBarrier = ();
 	type KeyAttestationBarrier = ();
 	type UnixTime = pallet_timestamp::Pallet<Self>;
 	type WeightInfo = pallet_acurast::weights::WeightInfo<Self>;

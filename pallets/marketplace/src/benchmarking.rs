@@ -5,15 +5,14 @@ use frame_support::{
     traits::Currency,
 };
 use frame_system::RawOrigin;
-use hex_literal::hex;
 use sp_core::*;
 use sp_runtime::traits::ConstU32;
 use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use pallet_acurast::Pallet as Acurast;
-use pallet_acurast::{Event as AcurastEvent, Fulfillment, JobRegistrationFor, Script};
+use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, Script};
+use pallet_acurast::{Pallet as Acurast, Schedule};
 
 pub use crate::stub::*;
 use crate::Pallet as AcurastMarketplace;
@@ -31,8 +30,8 @@ pub fn assert_last_acurast_event<T: Config>(
 }
 
 pub fn advertisement<T: Config>(
-    price_per_cpu_millisecond: u128,
-    capacity: u32,
+    fee_per_millisecond: u128,
+    storage_capacity: u32,
 ) -> AdvertisementFor<T>
 where
     <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
@@ -46,21 +45,24 @@ where
     > = Default::default();
     let r = pricing.try_push(PricingVariant {
         reward_asset: 0.into(),
-        price_per_cpu_millisecond: price_per_cpu_millisecond.into(),
-        bonus: 0.into(),
-        maximum_slash: 0.into(),
+        fee_per_millisecond: fee_per_millisecond.into(),
+        fee_per_storage_byte: 5.into(),
+        base_fee_per_execution: 0.into(),
+        scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
     });
     assert!(r.is_ok(), "Expected Ok(_). Got {:#?}", r);
     Advertisement {
         pricing,
         allowed_consumers: None,
-        capacity,
+        storage_capacity,
+        max_memory: 80_000,
+        network_request_quota: 5,
     }
 }
 
 pub fn job_registration_with_reward<T: Config>(
     script: Script,
-    cpu_milliseconds: u128,
+    duration: u64,
     reward_value: u128,
 ) -> JobRegistrationFor<T>
 where
@@ -69,8 +71,8 @@ where
 {
     let r = JobRequirements {
         slots: 1,
-        cpu_milliseconds,
         reward: asset(reward_value).into(),
+        instant_match: None,
     };
     let r: <T as Config>::RegistrationExtra = r.into();
     let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
@@ -78,6 +80,16 @@ where
         script,
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration,
+            start_time: 1671800400000, // 23.12.2022 13:00
+            end_time: 1671886800000,   // 24.12.2022 13:00 (one day later)
+            interval: 180000,          // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: r,
     }
 }
@@ -220,25 +232,6 @@ benchmarks! {
     verify {
         assert_last_acurast_event::<T>(AcurastEvent::<T>::JobRegistrationRemoved(
             job.script, caller
-        ).into());
-    }
-
-    fulfill {
-        let (source, _) = advertise_helper::<T>(true);
-        let (requester, job) = register_helper::<T>(true);
-        let fulfillment = Fulfillment {
-            script: job.script.clone(),
-            payload: hex!("00").to_vec(),
-        };
-    }: {
-         pallet_acurast::Pallet::<T>::fulfill(RawOrigin::Signed(source.clone()).into(), fulfillment.clone(), T::Lookup::unlookup(requester.clone()))?
-    }
-    verify {
-        assert_last_acurast_event::<T>(AcurastEvent::<T>::ReceivedFulfillment(
-            source.clone(),
-            fulfillment,
-            job,
-            requester
         ).into());
     }
 

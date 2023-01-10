@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
+use acurast_common::Schedule;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
@@ -27,6 +28,7 @@ use acurast_runtime::Runtime as AcurastRuntime;
 use pallet_acurast::JobRegistration;
 use pallet_acurast_marketplace::{
     types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
+    SchedulingWindow,
 };
 
 use crate::mock::*;
@@ -187,35 +189,47 @@ pub fn owned_asset(amount: u128) -> AcurastAsset {
         fun: Fungible(amount),
     })
 }
-pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset>> {
+pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset, AccountId>> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: JobRequirements {
             slots: 1,
-            cpu_milliseconds: 2,
             reward: owned_asset(20000),
+            instant_match: None,
         },
     }
 }
 pub fn advertisement(
-    price_per_cpu_millisecond: u128,
-    capacity: u32,
+    fee_per_millisecond: u128,
 ) -> Advertisement<AccountId, AcurastAssetId, AcurastAssetAmount> {
     let pricing: BoundedVec<
         PricingVariant<AcurastAssetId, AcurastAssetAmount>,
         ConstU32<MAX_PRICING_VARIANTS>,
     > = bounded_vec![PricingVariant {
         reward_asset: 22,
-        price_per_cpu_millisecond,
-        bonus: 0,
-        maximum_slash: 0,
+        fee_per_millisecond,
+        fee_per_storage_byte: 0,
+        base_fee_per_execution: 0,
+        scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
     }];
     Advertisement {
         pricing,
         allowed_consumers: None,
-        capacity,
+        storage_capacity: 5,
+        max_memory: 5000,
+        network_request_quota: 8,
     }
 }
 
@@ -626,7 +640,7 @@ mod proxy_calls {
             use proxy_runtime::RuntimeCall::AcurastProxy;
 
             let message_call = AcurastProxy(advertise {
-                advertisement: advertisement(10000u128, 5u32),
+                advertisement: advertisement(10000u128),
             });
             let bob_origin = proxy_runtime::RuntimeOrigin::signed(bob_account_id());
             let dispatch_status = message_call.dispatch(bob_origin);
@@ -635,89 +649,15 @@ mod proxy_calls {
 
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast_marketplace::Event::AdvertisementStored;
-            use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisement;
+            use acurast_runtime::pallet_acurast_marketplace::StoredAdvertisementRestriction;
             use acurast_runtime::{Runtime, RuntimeEvent, System};
 
             let events = System::events();
-            let p_store = StoredAdvertisement::<Runtime>::get(BOB);
+            let p_store = StoredAdvertisementRestriction::<Runtime>::get(BOB);
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
                 RuntimeEvent::AcurastMarketplace(AdvertisementStored { .. })
-            )));
-        });
-    }
-
-    #[test]
-    fn fulfill() {
-        use frame_support::dispatch::Dispatchable;
-
-        Network::reset();
-
-        // WHEN
-        advertise_bob();
-
-        // THEN check the ad is in index
-        AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast_marketplace::StoredAdIndex;
-            use acurast_runtime::Runtime;
-
-            let p_store = StoredAdIndex::<Runtime>::get(22);
-            assert!(p_store.is_some());
-        });
-
-        // WHEN
-        register_job_alice();
-
-        // THEN check that job got matched
-        AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast_marketplace::StoredJobAssignment;
-            use acurast_runtime::{Runtime, RuntimeEvent, System};
-            use pallet_acurast::Script;
-            use pallet_acurast_marketplace::Event::JobRegistrationMatched;
-
-            let events = System::events();
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobAssignment::<Runtime>::get(bob_account_id(), (ALICE, script));
-            assert!(p_store.is_some());
-            assert!(events.iter().any(|event| matches!(
-                event.event,
-                RuntimeEvent::AcurastMarketplace(JobRegistrationMatched { .. })
-            )));
-        });
-
-        CumulusParachain::execute_with(|| {
-            use crate::pallet::Call::fulfill;
-            use pallet_acurast::Fulfillment;
-            use proxy_runtime::RuntimeCall::AcurastProxy;
-
-            let payload: [u8; 32] = rand::random();
-
-            let fulfillment = Fulfillment {
-                script: registration().script,
-                payload: payload.to_vec(),
-            };
-
-            let message_call = AcurastProxy(fulfill {
-                fulfillment,
-                requester: frame_support::sp_runtime::MultiAddress::Id(alice_account_id()),
-            });
-
-            let origin = proxy_runtime::RuntimeOrigin::signed(bob_account_id());
-            let dispatch_status = message_call.dispatch(origin);
-            assert_ok!(dispatch_status);
-        });
-
-        AcurastParachain::execute_with(|| {
-            use acurast_runtime::pallet_acurast::Event::ReceivedFulfillment;
-            use acurast_runtime::{RuntimeEvent, System};
-
-            let events = System::events();
-
-            //event emitted
-            assert!(events.iter().any(|event| matches!(
-                event.event,
-                RuntimeEvent::Acurast(ReceivedFulfillment { .. })
             )));
         });
     }

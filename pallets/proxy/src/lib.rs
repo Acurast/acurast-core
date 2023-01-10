@@ -13,9 +13,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::inherent::Vec;
-    use frame_support::{
-        dispatch::DispatchResult, pallet_prelude::*, sp_runtime::traits::StaticLookup,
-    };
+    use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use xcm::v2::prelude::*;
     use xcm::v2::Instruction::{DescendOrigin, Transact};
@@ -26,7 +24,7 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
-    use acurast_common::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
+    use acurast_common::{AllowedSourcesUpdate, JobRegistration, Script};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -64,12 +62,6 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         },
 
-        #[codec(index = 4u8)]
-        Fulfill {
-            fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
-        },
-
         #[codec(index = 0u8)]
         Advertise {
             advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,
@@ -91,7 +83,6 @@ pub mod pallet {
                 ProxyCall::Register { .. } => ExtrinsicName::Register,
                 ProxyCall::Deregister { .. } => ExtrinsicName::Deregister,
                 ProxyCall::UpdateAllowedSources { .. } => ExtrinsicName::UpdateAllowedSources,
-                ProxyCall::Fulfill { .. } => ExtrinsicName::Fulfill,
                 ProxyCall::Advertise { .. } => ExtrinsicName::Advertise,
             }
         }
@@ -203,22 +194,6 @@ pub mod pallet {
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::UpdateAllowedSources { script, updates };
-            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
-        }
-
-        /// Fulfills a previously registered job.
-        #[pallet::call_index(3)]
-        #[pallet::weight(10_000)]
-        pub fn fulfill(
-            origin: OriginFor<T>,
-            fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
-        ) -> DispatchResult {
-            let caller = ensure_signed(origin)?;
-            let proxy_call = ProxyCall::Fulfill {
-                fulfillment,
-                requester,
-            };
             acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 

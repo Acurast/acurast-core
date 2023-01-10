@@ -1,5 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use pallet::*;
+pub use payments::*;
+pub use types::*;
+
 #[cfg(test)]
 pub mod mock;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
@@ -16,23 +20,24 @@ mod utils;
 pub mod weights;
 pub mod weights_with_hooks;
 
-pub use pallet::*;
-pub use payments::*;
-pub use types::*;
-
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, Blake2_128Concat, PalletId,
+        sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128, PalletId,
     };
     use frame_system::pallet_prelude::*;
+    use itertools::Itertools;
+    use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
+    use sp_runtime::SaturatedConversion;
+    use sp_std::iter::once;
+    use sp_std::prelude::*;
+
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
-        AllowedSourcesUpdate, Fulfillment, JobHooks, JobId, JobRegistrationFor, Script,
+        AllowedSourcesUpdate, JobHooks, JobId, JobRegistrationFor, Schedule, Script,
+        StoredJobRegistration,
     };
-    use sp_runtime::traits::CheckedMul;
-    use sp_std::prelude::*;
 
     use crate::payments::{Reward, RewardFor};
     use crate::types::*;
@@ -47,13 +52,18 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
-            + Into<JobRequirements<RewardFor<Self>>>;
+            + Into<JobRequirementsFor<Self>>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
+            + CheckedAdd
+            + CheckedSub
             + CheckedMul
+            + From<u8>
+            + From<u32>
+            + From<u64>
             + From<u128>
             + Ord
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
@@ -67,51 +77,52 @@ pub mod pallet {
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
-    /// The storage for jobs' status as a map [AccountId] -> [Script] -> [JobStatus].
+    /// The storage for jobs' status as a map [`AccountId`] `(consumer)` -> [`Script`] -> [`JobStatus`].
     #[pallet::storage]
     #[pallet::getter(fn stored_job_status)]
     pub type StoredJobStatus<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, Script, JobStatus>;
+        StorageDoubleMap<_, Blake2_128, T::AccountId, Blake2_128, Script, JobStatus>;
 
-    /// The storage for advertisements. They are stored as a map [AccountId] -> [Advertisement] since only one
+    /// The storage for basic advertisements' restrictions (without pricing). They are stored as a map [`AccountId`] `(source)` -> [`AdvertisementRestriction`] since only one
     /// advertisement per client is allowed.
     #[pallet::storage]
     #[pallet::getter(fn stored_advertisement)]
-    pub type StoredAdvertisement<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, AdvertisementFor<T>>;
+    pub type StoredAdvertisementRestriction<T: Config> =
+        StorageMap<_, Blake2_128, T::AccountId, AdvertisementRestriction<T::AccountId>>;
+
+    /// The storage for advertisements' pricing variants. They are stored as a map [`AccountId`] `(source)` -> [`AssetId`] -> [`PricingVariant`] since only one
+    /// advertisement per client, and at most one pricing for each distinct `AssetID` is allowed.
+    #[pallet::storage]
+    #[pallet::getter(fn stored_advertisement_pricing)]
+    pub type StoredAdvertisementPricing<T: Config> =
+        StorageDoubleMap<_, Blake2_128, T::AccountId, Blake2_128, T::AssetId, PricingVariantFor<T>>;
 
     /// The storage for remaining capacity for each source. Can be negative if capacity is reduced beyond the number of jobs currently assigned.
     #[pallet::storage]
-    #[pallet::getter(fn stored_capacity)]
-    pub type StoredCapacity<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, i32>;
+    #[pallet::getter(fn stored_storage_capacity)]
+    pub type StoredStorageCapacity<T: Config> = StorageMap<_, Blake2_128, T::AccountId, i64>;
 
-    /// Index with sorted advertisement by reward asset as a map [AssetId] -> Vec<([AccountId], [Price])>
+    /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> `SlotId`
     #[pallet::storage]
-    #[pallet::getter(fn stored_ad_index)]
-    pub type StoredAdIndex<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        <T as Config>::AssetId,
-        Vec<AdvertisementIndexValue<T::AccountId, T::AssetAmount>>,
-    >;
-
-    /// Job assignments as a map source's [AccountId] -> [JobId] -> SlotId
-    #[pallet::storage]
-    #[pallet::getter(fn stored_job_assignment)]
-    pub type StoredJobAssignment<T: Config> = StorageDoubleMap<
+    #[pallet::getter(fn stored_matches)]
+    pub type StoredMatches<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         T::AccountId,
         Blake2_128Concat,
         JobId<T::AccountId>,
-        u8,
+        AssignmentFor<T>,
     >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// A registration was successfully matched. [JobId]
-        JobRegistrationMatched(JobId<T::AccountId>),
+        /// A registration was successfully matched. [Match]
+        JobRegistrationMatched(Match<T::AccountId>),
+        /// A registration was successfully matched. [JobId, SourceId, Assignment]
+        JobRegistrationAssigned(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
+        /// A report for an execution has arrived. [JobId, SourceId, Assignment]
+        Reported(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
         /// A advertisement was successfully stored. [advertisement, who]
         AdvertisementStored(AdvertisementFor<T>, T::AccountId),
         /// A registration was successfully removed. [who]
@@ -122,12 +133,22 @@ pub mod pallet {
     pub enum Error<T> {
         /// The job registration's reward type is not supported.
         JobRegistrationUnsupportedReward,
-        /// The job registration's reward was overflowing when calculating total amount to be paid.
-        RewardCalculationOverflow,
+        /// Generic overflow during a calculating with checked operatios.
+        CalculationOverflow,
         /// The reward could not be converted to different amount.
         RewardConversionFailed,
-        /// The job registration's must specify non-zero `cpu_milliseconds`.
-        JobRegistrationZeroCPUMilliseconds,
+        /// The job registration must specify non-zero `duration`.
+        JobRegistrationZeroDuration,
+        /// The job registration must specify a schedule that contains a maximum of [MAX_EXECUTIONS_PER_JOB] executions.
+        JobRegistrationScheduleExceedsMaximumExecutions,
+        /// The job registration must specify a schedule that contains at least one execution.
+        JobRegistrationScheduleContainsZeroExecutions,
+        /// The job registration's must specify `duration` < `interval`.
+        JobRegistrationDurationExceedsInterval,
+        /// The job registration's must specify `start` in the future.
+        JobRegistrationStartInPast,
+        /// The job registration's must specify `end` >= `start`.
+        JobRegistrationEndBeforeStart,
         /// The job registration's must specify non-zero `slots`.
         JobRegistrationZeroSlots,
         /// The job registration's must specify non-zero `reward`.
@@ -136,22 +157,62 @@ pub mod pallet {
         JobStatusNotFound,
         /// The job registration can't be modified.
         JobRegistrationUnmodifiable,
-        /// Fulfill cannot be called for a job that does not have `JobStatus::Assigned` status.
-        CannotFulfillJobWhenNotAssigned,
+        /// Acknowledge cannot be called for a job that does not have `JobStatus::Matched` status.
+        CannotAcknowledgeWhenNotMatched,
+        /// Report cannot be called for a job that was not acknowledged.
+        CannotReportWhenNotAcknowledged,
         /// Advertisement not found when attempt to delete it.
         AdvertisementNotFound,
+        /// Advertisement not found when attempt to delete it.
+        AdvertisementPricingNotFound,
         /// Fulfill was executed for a not registered job.
         EmptyPricing,
-        /// Pricing cannot be changed (for now).
-        PricingUnmodifiable,
-        /// Payment wasn't recognized as valid. Probably didn't come from statemint assets pallet
-        InvalidPayment,
+        /// Advertisement cannot be deleted while matched to at least one job.
+        ///
+        /// Pricing and capacity can be updated, e.g. the capacity can be set to 0 no no longer receive job matches.
+        CannotDeleteAdvertisementWhileMatched,
         /// Failed to retrieve funds from pallet account to pay source. SEVERE error
         FailedToPay,
-        /// StoredAdIndex holds inconsistent data. SEVERE error
-        AdIndexInconsistent,
+        /// Asset is not allowed by `AssetBarrier`.
+        AssetNotAllowedByBarrier,
+        /// Invalid asset ID.
+        InvalidAssetId,
+        /// Invalid asset amount.
+        InvalidAssetAmount,
         /// Capacity not known for a source. SEVERE error
         CapacityNotFound,
+        /// Matching is empty.
+        EmptyMatching,
+        /// Match is invalid due to the start time already passed.
+        OverdueMatch,
+        /// Match is invalid due to incorrect source count.
+        IncorrectSourceCountInMatch,
+        /// Match is invalid due to a duplicate source for distinct slots.
+        DuplicateSourceInMatch,
+        /// Match is invalid due to an unverfied source while `allow_only_verified_sources` is true.
+        UnverifiedSourceInMatch,
+        /// Multiple different reward assets are currently not supported in a single matching.
+        MultipleRewardAssetsInMatch,
+        /// Match is invalid due to a source's maximum memory exceeded.
+        SchedulingWindowExceededInMatch,
+        /// Match is invalid due to a source's maximum memory exceeded.
+        MaxMemoryExceededInMatch,
+        /// Match is invalid due to a source's maximum memory exceeded.
+        NetworkRequestQuotaExceededInMatch,
+        /// Match is invalid due to a source not having enough capacity.
+        InsufficientStorageCapacityInMatch,
+        /// Match is invalid due to a source not part of the provided whitelist.
+        SourceNotAllowedInMatch,
+        /// Match is invalid due to a consumer not part of the provided whitelist.
+        ConsumerNotAllowedInMatch,
+        /// Match is invalid due to insufficient reward regarding the current source pricing.
+        InsufficientRewardInMatch,
+        /// Match is invalid due to overlapping schedules.
+        ScheduleOverlapInMatch,
+        /// Received a report from a source that is not assigned.
+        ReportFromUnassignedSource,
+        /// More reports than expected total.
+        MoreReportsThanExpected,
     }
 
     #[pallet::hooks]
@@ -159,7 +220,11 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Advertise resources by providing a [AdvertisementFor]. If an advertisement for the same script was previously registered, it will be overwritten.
+        /// Advertise resources by providing a [AdvertisementFor].
+        ///
+        /// If the source has another active advertisement, the advertisement is updated given the updates does not
+        /// violate any system invariants. For example, if the ad is currently assigned, changes to pricing are prohibited
+        /// and only capacity updates will be tolerated.
         #[pallet::call_index(0)]
         #[pallet::weight(< T as Config >::WeightInfo::advertise())]
         pub fn advertise(
@@ -170,39 +235,34 @@ pub mod pallet {
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
 
             // update capacity to save on operations when checking available capacity
-            if let Some(old) = <StoredAdvertisement<T>>::get(&who) {
-                // TODO: relax this check and resort ads according to updated pricing
-                ensure!(
-                    old.pricing == advertisement.pricing,
-                    Error::<T>::PricingUnmodifiable
-                );
-
+            if let Some(old) = <StoredAdvertisementRestriction<T>>::get(&who) {
                 // allow capacity to become negative (in which case source remains assigned but does not receive new jobs assigned)
-                <StoredCapacity<T>>::mutate(&who, |c| {
+                <StoredStorageCapacity<T>>::mutate(&who, |c| {
+                    // new remaining capacity = new total capacity - (old total capacity - old remaining capacity) = old remaining capacity + new total capacity - old total capacity
                     *c = Some(
                         c.unwrap_or(0)
-                            .checked_add(advertisement.capacity as i32)
-                            .unwrap_or(i32::MAX)
-                            .checked_sub(old.capacity as i32)
+                            .checked_add(advertisement.storage_capacity as i64)
+                            .unwrap_or(i64::MAX)
+                            .checked_sub(old.storage_capacity as i64)
                             .unwrap_or(0),
                     )
                 });
             } else {
-                <StoredCapacity<T>>::insert(&who, advertisement.capacity as i32);
+                <StoredStorageCapacity<T>>::insert(&who, advertisement.storage_capacity as i64);
             }
 
-            <StoredAdvertisement<T>>::insert(&who, &advertisement);
-
-            // update index
+            <StoredAdvertisementRestriction<T>>::insert(
+                &who,
+                AdvertisementRestriction {
+                    max_memory: advertisement.max_memory,
+                    network_request_quota: advertisement.network_request_quota,
+                    storage_capacity: advertisement.storage_capacity,
+                    allowed_consumers: advertisement.allowed_consumers.clone(),
+                },
+            );
+            // update separate pricing index
             for pricing in &advertisement.pricing {
-                let mut ads = <StoredAdIndex<T>>::get(&pricing.reward_asset).unwrap_or_default();
-
-                let to_add = (who.clone(), pricing.price_per_cpu_millisecond.clone());
-                // partition with predicate such that lower priced ads at start of ved
-                let pos = ads.partition_point(|v| v.1 < to_add.1); // -> predicate holds for ads[i], i ∈ [0, pos)
-                ads.insert(pos, to_add);
-
-                <StoredAdIndex<T>>::set(&pricing.reward_asset, Some(ads));
+                <StoredAdvertisementPricing<T>>::insert(&who, &pricing.reward_asset, pricing);
             }
 
             Self::deposit_event(Event::AdvertisementStored(advertisement, who));
@@ -215,22 +275,152 @@ pub mod pallet {
         pub fn delete_advertisement(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let ad =
-                <StoredAdvertisement<T>>::get(&who).ok_or(Error::<T>::AdvertisementNotFound)?;
+            <StoredAdvertisementRestriction<T>>::get(&who)
+                .ok_or(Error::<T>::AdvertisementNotFound)?;
 
-            // update index
-            for pricing in &ad.pricing {
-                <StoredAdIndex<T>>::mutate(&pricing.reward_asset, |option_ads| {
-                    option_ads
-                        .as_mut()
-                        .map(|ads| ads.retain(|v| v.0 != who.clone()));
-                });
-            }
+            // prohibit updates as long as jobs assigned
+            ensure!(
+                !Self::has_matches(&who),
+                Error::<T>::CannotDeleteAdvertisementWhileMatched
+            );
 
-            <StoredAdvertisement<T>>::remove(&who);
-            <StoredCapacity<T>>::remove(&who);
+            let _ = <StoredAdvertisementPricing<T>>::clear_prefix(&who, MAX_PRICING_VARIANTS, None);
+            <StoredStorageCapacity<T>>::remove(&who);
+            <StoredAdvertisementRestriction<T>>::remove(&who);
 
             Self::deposit_event(Event::AdvertisementRemoved(who));
+            Ok(().into())
+        }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
+        pub fn propose_matching(
+            origin: OriginFor<T>,
+            matches: Vec<Match<T::AccountId>>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            let remaining_reward = Self::process_matching(&matches)?;
+
+            // pay part of accumulated remaining reward (unspent to consumer) to matcher
+            // pay only after all other steps succeeded without errors because paying reward is not revertable
+            T::RewardManager::pay_matcher_reward(
+                remaining_reward,
+                T::Lookup::unlookup(who.clone()),
+            )?;
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(3)]
+        #[pallet::weight(< T as Config >::WeightInfo::acknowledge_match())]
+        pub fn acknowledge_match(
+            origin: OriginFor<T>,
+            job_id: JobId<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            let (changed, assignment) = <StoredMatches<T>>::try_mutate(
+                &who,
+                &job_id,
+                |m| -> Result<(bool, AssignmentFor<T>), Error<T>> {
+                    // CHECK that job was matched previously to calling source
+                    let mut assignment = m
+                        .as_mut()
+                        .ok_or(Error::<T>::CannotAcknowledgeWhenNotMatched)?;
+                    let changed = !assignment.acknowledged;
+                    assignment.acknowledged = true;
+                    Ok((changed, assignment.to_owned()))
+                },
+            )?;
+
+            if changed {
+                <StoredJobStatus<T>>::try_mutate(
+                    &job_id.0,
+                    &job_id.1,
+                    |s| -> Result<(), Error<T>> {
+                        let status = s.ok_or(Error::<T>::JobStatusNotFound)?;
+                        *s = Some(match status {
+                            JobStatus::Open => Err(Error::<T>::CannotAcknowledgeWhenNotMatched)?,
+                            JobStatus::Matched => JobStatus::Assigned(1),
+                            JobStatus::Assigned(count) => JobStatus::Assigned(count + 1),
+                        });
+
+                        Ok(())
+                    },
+                )?;
+
+                Self::deposit_event(Event::JobRegistrationAssigned(
+                    job_id,
+                    who,
+                    assignment.clone(),
+                ));
+            }
+            Ok(().into())
+        }
+
+        /// Report on completion of fulfillments done on target chain for a previously registered and matched job.
+        /// Reward is payed out to source if timing of this call is within expected interval.
+        #[pallet::call_index(4)]
+        #[pallet::weight(< T as Config >::WeightInfo::report())]
+        pub fn report(
+            origin: OriginFor<T>, // source
+            job_id: JobId<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            // find assignment
+            let assignment = <StoredMatches<T>>::try_mutate(
+                &who,
+                &job_id,
+                |a| -> Result<AssignmentFor<T>, Error<T>> {
+                    // NOTE: the None case is the "good case", used when there is *no entry yet and thus no duplicate assignment so far*.
+                    if let Some(assignment) = a.as_mut() {
+                        // CHECK that job is assigned
+                        ensure!(
+                            assignment.acknowledged,
+                            Error::<T>::CannotReportWhenNotAcknowledged
+                        );
+
+                        // CHECK that we don't accept more reports than expected
+                        ensure!(
+                            assignment.sla.met < assignment.sla.total,
+                            Error::<T>::MoreReportsThanExpected
+                        );
+
+                        assignment.sla.met += 1;
+                        return Ok(assignment.to_owned());
+                    } else {
+                        return Err(Error::<T>::ReportFromUnassignedSource);
+                    }
+                },
+            )?;
+
+            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+
+            if Self::now()? >= registration.schedule.end_time {
+                // TODO update reputation since we don't expect further reports for this job
+
+                // removed completed job from all storage points (completed SLA gets still deposited in event below)
+                <StoredMatches<T>>::remove(&who, &job_id);
+                <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+
+                // increase capacity
+                <StoredStorageCapacity<T>>::mutate(&who, |c| {
+                    *c = c.unwrap_or(0).checked_add(registration.storage.into())
+                });
+
+                <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+            }
+
+            // pay only after all other steps succeeded without errors because paying reward is not revertable
+            T::RewardManager::pay_reward(
+                assignment.fee_per_execution.clone(),
+                T::Lookup::unlookup(who.clone()),
+            )?;
+
+            Self::deposit_event(Event::Reported(job_id, who, assignment.clone()));
             Ok(().into())
         }
     }
@@ -242,8 +432,6 @@ pub mod pallet {
     }
 
     impl<T: Config> JobHooks<T> for Pallet<T> {
-        type Error = Error<T>;
-
         /// Registers a job in the marketplace by providing a [JobRegistration].
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
@@ -251,50 +439,71 @@ pub mod pallet {
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
+            let requirements: JobRequirementsFor<T> = e.into();
 
             ensure!(
-                extra.cpu_milliseconds > 0,
-                Error::<T>::JobRegistrationZeroCPUMilliseconds
+                registration.schedule.duration > 0,
+                Error::<T>::JobRegistrationZeroDuration
             );
-            ensure!(extra.slots > 0, Error::<T>::JobRegistrationZeroSlots);
-            let reward_amount: T::AssetAmount = extra
+            let execution_count = registration.schedule.execution_count();
+            ensure!(
+                execution_count <= MAX_EXECUTIONS_PER_JOB,
+                Error::<T>::JobRegistrationScheduleExceedsMaximumExecutions
+            );
+            ensure!(
+                execution_count > 0,
+                Error::<T>::JobRegistrationScheduleContainsZeroExecutions
+            );
+            ensure!(
+                registration.schedule.duration < registration.schedule.interval,
+                Error::<T>::JobRegistrationDurationExceedsInterval
+            );
+            ensure!(
+                registration.schedule.start_time >= Self::now()?,
+                Error::<T>::JobRegistrationStartInPast
+            );
+            ensure!(
+                registration.schedule.start_time <= registration.schedule.end_time,
+                Error::<T>::JobRegistrationEndBeforeStart
+            );
+            ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
+            let reward_amount: T::AssetAmount = requirements
                 .reward
                 .try_get_amount()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                 .into();
             ensure!(
-                reward_amount > 0.into(),
+                reward_amount > 0u8.into(),
                 Error::<T>::JobRegistrationZeroReward
             );
 
-            ensure!(
-                Some(JobStatus::Assigned) != <StoredJobStatus<T>>::get(&who, &registration.script),
-                Error::<T>::JobRegistrationUnmodifiable
-            );
-
-            // reward is understood per slot
-            let mut total = extra.reward.clone();
-            total
-                .with_amount(
-                    reward_amount
-                        .checked_mul(&((extra.slots as u128).into()))
-                        .ok_or(Error::<T>::RewardCalculationOverflow)?
-                        .into(),
-                )
-                .map_err(|_| Error::<T>::RewardConversionFailed)?;
-
-            <StoredJobStatus<T>>::insert(&who, &registration.script, JobStatus::default());
-
-            if Self::match_job(&who, &registration)? {
-                // TODO improve event to contain list of matched sources
-                let job_id: JobId<T::AccountId> = (who.clone(), registration.script.clone());
-                Self::deposit_event(Event::JobRegistrationMatched(job_id));
+            if let Some(job_status) = <StoredJobStatus<T>>::get(&who, &registration.script) {
+                ensure!(
+                    job_status == JobStatus::Open,
+                    Error::<T>::JobRegistrationUnmodifiable
+                );
+            } else {
+                <StoredJobStatus<T>>::insert(&who, &registration.script, JobStatus::default());
             }
 
+            match requirements.instant_match {
+                Some(sources) => {
+                    Self::process_matching(once(&Match {
+                        job_id: (who.clone(), registration.script.clone()),
+                        sources,
+                    }))?;
+                }
+                None => {}
+            }
+
+            // reward is understood per slot and execution
+            let mut reward = requirements.reward.clone();
+            reward
+                .with_amount(Self::total_reward_amount(registration)?.into())
+                .map_err(|_| Error::<T>::RewardConversionFailed)?;
+
             // lock only after all other steps succeeded without errors because locking reward is not revertable
-            T::RewardManager::lock_reward(total.clone(), T::Lookup::unlookup(who.clone()))
-                .map_err(|_| Error::<T>::InvalidPayment)?;
+            T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
 
             Ok(().into())
         }
@@ -303,8 +512,16 @@ pub mod pallet {
         fn deregister_hook(who: &T::AccountId, script: &Script) -> Result<(), DispatchError> {
             let job_status =
                 <StoredJobStatus<T>>::get(&who, &script).ok_or(Error::<T>::JobStatusNotFound)?;
+            // lazily evaluated check if job is overdue
+            let overdue = || -> Result<bool, DispatchError> {
+                let registration = <StoredJobRegistration<T>>::get(&who, &script)
+                    .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+
+                Ok(Self::now()? >= registration.schedule.start_time)
+            };
             ensure!(
-                job_status == JobStatus::Open,
+                // allow to deregister overdue jobs
+                job_status == JobStatus::Open || overdue()?,
                 Error::<T>::JobRegistrationUnmodifiable
             );
 
@@ -328,156 +545,304 @@ pub mod pallet {
 
             Ok(().into())
         }
-
-        /// Fulfills a previously registered job.
-        fn fulfill_hook(
-            who: &T::AccountId, // processor
-            fulfillment: &Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Target, // the consumer that registered the job originally
-            registration: &JobRegistrationFor<T>,
-        ) -> Result<(), DispatchError> {
-            // find assignment
-            let job_id: JobId<T::AccountId> = (requester.clone(), fulfillment.script.clone());
-            <StoredJobAssignment<T>>::get(&who, &job_id)
-                .ok_or(pallet_acurast::Error::<T>::FulfillSourceNotAllowed)?;
-
-            // find job
-            let job_status = <StoredJobStatus<T>>::get(&requester, &fulfillment.script)
-                .ok_or(Error::<T>::JobStatusNotFound)?;
-
-            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
-
-            // validate
-            ensure!(
-                job_status == JobStatus::Assigned,
-                Error::<T>::CannotFulfillJobWhenNotAssigned
-            );
-
-            // removed fulfilled job from assigned jobs
-            <StoredJobAssignment<T>>::remove(&who, &job_id);
-
-            <StoredJobStatus<T>>::insert(
-                &requester,
-                &registration.script,
-                JobStatus::Fulfilled(SLAEvaluation { total: 1, met: 1 }),
-            );
-
-            // increase capacity
-            <StoredCapacity<T>>::mutate(&who, |c| *c = c.unwrap_or(0).checked_add(1));
-
-            // pay only after all other steps succeeded without errors because locking reward is not revertable
-            T::RewardManager::pay_reward(extra.reward.clone(), T::Lookup::unlookup(who.clone()))
-                .map_err(|_| Error::<T>::FailedToPay)?;
-
-            Ok(().into())
-        }
     }
 
     impl<T: Config> Pallet<T> {
-        // fn match_ad(
-        //     who: &T::AccountId,
-        //     advertisement: &AdvertisementFor<T>,
-        // ) -> Result<bool, Error<T>> {
-        //     // TODO implement
-        //     Ok(false)
-        // }
+        fn process_matching<'a>(
+            matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
+        ) -> Result<RewardFor<T>, DispatchError> {
+            // Currently we require all matches to be rewarded with the same asset
+            let mut remaining_reward: Option<(RewardFor<T>, T::AssetAmount)> = None;
 
-        fn match_job(
-            who: &T::AccountId,
-            registration: &JobRegistrationFor<T>,
-        ) -> Result<bool, Error<T>> {
-            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-            let extra: JobRequirementsFor<T> = e.into();
+            for m in matching {
+                let registration = <StoredJobRegistration<T>>::get(&m.job_id.0, &m.job_id.1)
+                    .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+                let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                let requirements: JobRequirementsFor<T> = e.into();
 
-            // strips away the asset amount
-            let reward_asset: <T as Config>::AssetId = extra
-                .reward
-                .try_get_asset_id()
-                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
-                .into();
+                let now = Self::now()?;
+                ensure!(
+                    now < registration.schedule.start_time,
+                    Error::<T>::OverdueMatch
+                );
+                let l: u8 = m.sources.len().try_into().unwrap_or(0);
+                ensure!(
+                    // NOTE: we are checking for duplicates while inserting/mutating StoredMatches below
+                    l == requirements.slots,
+                    Error::<T>::IncorrectSourceCountInMatch
+                );
 
-            // filter candidates according to reward asset
-            let ads_with_reward = <StoredAdIndex<T>>::get(reward_asset);
-            if let Some(ads) = ads_with_reward {
-                let reward_amount: T::AssetAmount = extra
+                // parse reward into asset_id and amount
+                let reward_asset: <T as Config>::AssetId = requirements
+                    .reward
+                    .try_get_asset_id()
+                    .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                    .into();
+                let reward_amount: <T as Config>::AssetAmount = requirements
                     .reward
                     .try_get_amount()
                     .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                     .into();
 
-                // either all or no candidate gets assigned after checking if all slots can be filled
-                let mut candidates = Vec::new();
-                for ad_with_reward in ads {
+                // keep track of total fee in assignments to check later if it exceeds reward
+                let mut total_fee: <T as Config>::AssetAmount = 0u8.into();
+
+                // `slot` is used for detecting duplicate source proposed for distinct slots
+                // TODO: add global (configurable) maximum of jobs assigned. This would limit the weight of `propose_matching` to a constant, since it depends on the number of active matches.
+                for (slot, source) in m.sources.iter().enumerate() {
                     // CHECK attestation
-                    if registration.allow_only_verified_sources
-                        && !ensure_source_verified::<T>(&ad_with_reward.0).is_ok()
-                    {
-                        continue;
+                    ensure!(
+                        !registration.allow_only_verified_sources
+                            || ensure_source_verified::<T>(&source).is_ok(),
+                        Error::<T>::UnverifiedSourceInMatch
+                    );
+
+                    let ad = <StoredAdvertisementRestriction<T>>::get(&source)
+                        .ok_or(Error::<T>::AdvertisementNotFound)?;
+
+                    let pricing = <StoredAdvertisementPricing<T>>::get(source, &reward_asset)
+                        .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
+
+                    // CHECK the scheduling_window allow to schedule this job
+                    match pricing.scheduling_window {
+                        SchedulingWindow::End(end) => {
+                            ensure!(
+                                end >= registration.schedule.end_time,
+                                Error::<T>::SchedulingWindowExceededInMatch
+                            );
+                        }
+                        SchedulingWindow::Delta(delta) => {
+                            ensure!(
+                                now.checked_add(delta)
+                                    .ok_or(Error::<T>::CalculationOverflow)?
+                                    >= registration.schedule.end_time,
+                                Error::<T>::SchedulingWindowExceededInMatch
+                            );
+                        }
                     }
 
-                    // CHECK price not exceeding reward
-                    let total = ad_with_reward
-                        .1
-                        .checked_mul(&((extra.cpu_milliseconds as u128).into()))
-                        .ok_or(Error::<T>::RewardCalculationOverflow)?;
-                    if total > reward_amount {
-                        break;
-                    }
+                    // CHECK memory sufficient
+                    ensure!(
+                        ad.max_memory >= registration.memory,
+                        Error::<T>::MaxMemoryExceededInMatch
+                    );
 
-                    // CHECK capacity sufficient
-                    let capacity = <StoredCapacity<T>>::get(&ad_with_reward.0)
+                    // CHECK network request quota sufficient
+                    ensure!(
+                        // duration (s) * network_request_quota >= network_requests (per second)
+                        // <=>
+                        // duration (ms) / 1000 * network_request_quota >= network_requests (per second)
+                        // <=>
+                        // duration (ms) * network_request_quota >= network_requests (per second) * 1000
+                        registration
+                            .schedule
+                            .duration
+                            .checked_mul(ad.network_request_quota.into())
+                            .unwrap_or(0u64)
+                            >= registration
+                                .network_requests
+                                .saturated_into::<u64>()
+                                .checked_mul(1000u64)
+                                .unwrap_or(u64::MAX),
+                        Error::<T>::NetworkRequestQuotaExceededInMatch
+                    );
+
+                    // CHECK remaining storage capacity sufficient
+                    let capacity = <StoredStorageCapacity<T>>::get(&source)
                         .ok_or(Error::<T>::CapacityNotFound)?;
-                    if capacity <= 0 {
-                        continue;
-                    }
+                    ensure!(capacity > 0, Error::<T>::InsufficientStorageCapacityInMatch);
 
                     // CHECK source is whitelisted
-                    if !is_source_whitelisted::<T>(&ad_with_reward.0, registration) {
-                        continue;
-                    }
-
-                    let ad = <StoredAdvertisement<T>>::get(&ad_with_reward.0)
-                        .ok_or(Error::<T>::AdIndexInconsistent)?;
+                    ensure!(
+                        is_source_whitelisted::<T>(&source, &registration),
+                        Error::<T>::SourceNotAllowedInMatch
+                    );
 
                     // CHECK consumer is whitelisted
-                    if !is_consumer_whitelisted::<T>(&who, &ad) {
-                        continue;
-                    }
+                    ensure!(
+                        is_consumer_whitelisted::<T>(&m.job_id.0, &ad.allowed_consumers),
+                        Error::<T>::ConsumerNotAllowedInMatch
+                    );
 
-                    // CANDIDATE FOUND
-                    candidates.push((ad_with_reward.0, capacity));
+                    // CHECK schedule
+                    Self::fits_schedule(&source, &registration.schedule)?;
 
-                    if candidates.len() as u8 == extra.slots {
-                        // all slots matched -> stop looking at pricier ads in sorted list
-                        break;
-                    }
+                    // calculate fee
+                    let fee_per_execution = Self::fee_per_execution(&registration, &pricing)?;
+
+                    // CHECK price not exceeding reward
+                    ensure!(
+                        fee_per_execution <= reward_amount,
+                        Error::<T>::InsufficientRewardInMatch
+                    );
+
+                    let execution_count = registration.schedule.execution_count();
+
+                    total_fee = total_fee
+                        .checked_add(
+                            &fee_per_execution
+                                .checked_mul(&execution_count.into())
+                                .ok_or(Error::<T>::CalculationOverflow)?,
+                        )
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+                    let mut fee = requirements.reward.clone();
+                    fee.with_amount(fee_per_execution.into())
+                        .map_err(|_| Error::<T>::RewardConversionFailed)?;
+
+                    // ASSIGN if not yet assigned (equals to CHECK that no duplicate source in a single mutate operation)
+                    <StoredMatches<T>>::try_mutate(
+                        &source,
+                        &m.job_id,
+                        |s| -> Result<(), Error<T>> {
+                            // NOTE: the None case is the "good case", used when there is *no entry yet and thus no duplicate assignment so far*.
+                            match s {
+                                Some(_) => Err(Error::<T>::DuplicateSourceInMatch),
+                                None => {
+                                    *s = Some(Assignment {
+                                        slot: slot as u8,
+                                        fee_per_execution: fee,
+                                        acknowledged: false,
+                                        sla: SLA {
+                                            total: execution_count,
+                                            met: 0,
+                                        },
+                                    });
+                                    Ok(())
+                                }
+                            }?;
+                            Ok(())
+                        },
+                    )?;
+                    <StoredStorageCapacity<T>>::set(
+                        &source,
+                        capacity.checked_sub(registration.storage.into()),
+                    );
                 }
 
-                if candidates.len() as u8 == extra.slots {
-                    // all slots matched
-                    for (slot, candidate) in candidates.iter().enumerate() {
-                        <StoredJobAssignment<T>>::set(
-                            &candidate.0,
-                            (&who, &registration.script),
-                            Some(slot as u8),
-                        );
+                // CHECK total fee is not exceeding reward
+                let total_reward_amount = Self::total_reward_amount(&registration)?;
+                let diff = total_reward_amount
+                    .checked_sub(&total_fee)
+                    .ok_or(Error::<T>::InsufficientRewardInMatch)?;
+                // We better check for diff positive <=> total_fee <= total_reward_amount
+                // because we cannot assume that asset amount is an unsigned integer for all future
+                ensure!(diff >= 0u32.into(), Error::<T>::InsufficientRewardInMatch);
 
-                        // We know this check_sub never goes out of bounds since we selected only candidates with capacity > 0
-                        // => the hidden code path that deletes the stored capacity therefore never happens
-                        <StoredCapacity<T>>::set(&candidate.0, candidate.1.checked_sub(1));
+                if let Some(a) = remaining_reward.as_mut() {
+                    ensure!(
+                        a.0 == requirements.reward,
+                        Error::<T>::MultipleRewardAssetsInMatch
+                    );
 
-                        <StoredJobStatus<T>>::insert(
-                            &who,
-                            &registration.script,
-                            JobStatus::Assigned,
-                        );
-                    }
-
-                    return Ok(true);
+                    a.1 =
+                        a.1.checked_add(&diff)
+                            .ok_or(Error::<T>::CalculationOverflow)?;
+                } else {
+                    remaining_reward = Some((requirements.reward, diff));
                 }
+
+                <StoredJobStatus<T>>::insert(&m.job_id.0, &registration.script, JobStatus::Matched);
+                Self::deposit_event(Event::JobRegistrationMatched(m.clone()));
             }
-            Ok(false)
+            // If we arrive here with remaining_reward None, then matching was empty
+            if let Some(reward) = remaining_reward.as_mut() {
+                reward
+                    .0
+                    .with_amount(reward.1.clone().into())
+                    .map_err(|_| Error::<T>::RewardConversionFailed)?;
+                return Ok(reward.0.to_owned());
+            } else {
+                return Err(Error::<T>::EmptyMatching.into());
+            }
+        }
+
+        /// Returns true if the source has currently at least one match (not necessarily assigned).
+        fn has_matches(source: &T::AccountId) -> bool {
+            // NOTE we use a trick to check if map contains *any* secondary key: we use `any` to short-circuit
+            // whenever we encounter the first - so at least one - element in the iterator.
+            <StoredMatches<T>>::iter_prefix_values(&source).any(|_| true)
+        }
+
+        fn fits_schedule(source: &T::AccountId, schedule: &Schedule) -> Result<(), DispatchError> {
+            for (job_id, _) in <StoredMatches<T>>::iter_prefix(&source) {
+                // TODO decide tradeoff: we could save this lookup at the cost of storing the schedule along with the match or even completly move it from StoredJobRegistration into StoredMatches
+                let other = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                    .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+
+                // check if the whole schedule periods have an overlap
+                if schedule.start_time >= other.schedule.end_time
+                    || schedule.end_time <= other.schedule.start_time
+                {
+                    // periods don't overlap
+                    continue;
+                }
+
+                let it = schedule.iter().map(|start| {
+                    let end = start.checked_add(schedule.interval)?;
+                    Some((start, end))
+                });
+                let other_it = other.schedule.iter().map(|start| {
+                    let end = start.checked_add(other.schedule.interval)?;
+                    Some((start, end))
+                });
+
+                it.merge(other_it).try_fold(0u64, |prev_end, bounds| {
+                    let (start, end) = bounds.ok_or(Error::<T>::CalculationOverflow)?;
+
+                    if prev_end > start {
+                        Err(Error::<T>::ScheduleOverlapInMatch)
+                    } else {
+                        Ok(end)
+                    }
+                })?;
+            }
+
+            Ok(().into())
+        }
+
+        fn total_reward_amount(
+            registration: &JobRegistrationFor<T>,
+        ) -> Result<T::AssetAmount, Error<T>> {
+            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+            let requirements: JobRequirementsFor<T> = e.into();
+
+            let reward_amount: T::AssetAmount = requirements
+                .reward
+                .try_get_amount()
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                .into();
+
+            Ok(reward_amount
+                .checked_mul(&((requirements.slots as u128).into()))
+                .ok_or(Error::<T>::CalculationOverflow)?
+                .checked_mul(&registration.schedule.execution_count().into())
+                .ok_or(Error::<T>::CalculationOverflow)?)
+        }
+
+        fn fee_per_execution(
+            registration: &JobRegistrationFor<T>,
+            pricing: &PricingVariantFor<T>,
+        ) -> Result<T::AssetAmount, Error<T>> {
+            Ok(pricing
+                .fee_per_millisecond
+                .checked_mul(&registration.schedule.duration.into())
+                .ok_or(Error::<T>::CalculationOverflow)?
+                .checked_add(
+                    &pricing
+                        .fee_per_storage_byte
+                        .checked_mul(&registration.storage.into())
+                        .ok_or(Error::<T>::CalculationOverflow)?,
+                )
+                .ok_or(Error::<T>::CalculationOverflow)?
+                .checked_add(&pricing.base_fee_per_execution)
+                .ok_or(Error::<T>::CalculationOverflow)?)
+        }
+
+        fn now() -> Result<u64, DispatchError> {
+            Ok(<T as pallet_acurast::Config>::UnixTime::now()
+                .as_millis()
+                .try_into()
+                .map_err(|_| pallet_acurast::Error::<T>::FailedTimestampConversion)?)
         }
     }
 }

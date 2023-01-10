@@ -8,8 +8,7 @@ use sp_std::prelude::*;
 
 use crate::{
     Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
-    JobRegistrationFor, SerialNumber, StoredAttestation, StoredRevokedCertificate,
-    ValidatingCertIds,
+    SerialNumber, StoredAttestation, StoredRevokedCertificate, ValidatingCertIds,
 };
 
 pub fn validate_and_extract_attestation<T: Config>(
@@ -54,29 +53,6 @@ pub fn validate_and_extract_attestation<T: Config>(
             .map_err(|_| Error::<T>::AttestationToBoundedTypeConversionFailed)?,
         validity: attestation_validity,
     })
-}
-
-pub(crate) fn ensure_source_allowed<T: Config>(
-    source: &T::AccountId,
-    registration: &JobRegistrationFor<T>,
-) -> Result<(), Error<T>> {
-    registration
-        .allowed_sources
-        .as_ref()
-        .map(|allowed_sources| {
-            allowed_sources
-                .iter()
-                .position(|allowed_source| allowed_source == source)
-                .map(|_| ())
-                .ok_or(Error::<T>::FulfillSourceNotAllowed)
-        })
-        .unwrap_or(Ok(()))?;
-
-    if registration.allow_only_verified_sources {
-        ensure_source_verified(source)?;
-    }
-
-    Ok(())
 }
 
 pub fn ensure_source_verified<T: Config>(source: &T::AccountId) -> Result<(), Error<T>> {

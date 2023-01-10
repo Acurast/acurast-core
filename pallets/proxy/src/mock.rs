@@ -67,7 +67,6 @@ pub mod acurast_runtime {
     use xcm_executor::XcmExecutor;
 
     pub use pallet_acurast;
-    use pallet_acurast::JobAssignmentUpdateBarrier;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
 
@@ -94,32 +93,7 @@ pub mod acurast_runtime {
         XcmPassthrough<RuntimeOrigin>,
     );
 
-    pub struct FulfillmentRouter;
-
-    impl pallet_acurast::FulfillmentRouter<Runtime> for FulfillmentRouter {
-        fn received_fulfillment(
-            _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
-            _from: <Runtime as frame_system::Config>::AccountId,
-            _fulfillment: pallet_acurast::Fulfillment,
-            _registration: pallet_acurast::JobRegistrationFor<Runtime>,
-            _requester: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Target,
-        ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-            Ok(().into())
-        }
-    }
-
     pub struct AcurastBarrier;
-
-    impl JobAssignmentUpdateBarrier<Runtime> for AcurastBarrier {
-        fn can_update_assigned_jobs(
-            origin: &<Runtime as frame_system::Config>::AccountId,
-            updates: &Vec<
-                pallet_acurast::JobAssignmentUpdate<<Runtime as frame_system::Config>::AccountId>,
-            >,
-        ) -> bool {
-            updates.iter().all(|update| &update.job_id.0 == origin)
-        }
-    }
 
     impl AssetBarrier<AcurastAsset> for AcurastBarrier {
         fn can_use_asset(_asset: &AcurastAsset) -> bool {
@@ -268,6 +242,10 @@ pub mod acurast_runtime {
             sp_runtime::Percent::from_percent(30)
         }
 
+        fn get_matcher_percentage() -> sp_runtime::Percent {
+            sp_runtime::Percent::from_percent(10)
+        }
+
         fn pallet_id() -> PalletId {
             PalletId(*b"acurfees")
         }
@@ -275,12 +253,10 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
-        type FulfillmentRouter = FulfillmentRouter;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
-        type JobAssignmentUpdateBarrier = AcurastBarrier;
         type KeyAttestationBarrier = ();
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type JobHooks = pallet_acurast_marketplace::Pallet<Runtime>;
@@ -289,7 +265,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
@@ -492,7 +468,7 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;

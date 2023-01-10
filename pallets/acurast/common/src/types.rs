@@ -26,15 +26,6 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
-/// Structure representing a job fulfillment. It contains the script that generated the payload and the actual payload.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct Fulfillment {
-    /// The script that generated the payload.
-    pub script: Script,
-    /// The output of a script.
-    pub payload: Vec<u8>,
-}
-
 /// Structure used to updated the allowed sources list of a [Registration].
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct AllowedSourcesUpdate<A>
@@ -49,20 +40,6 @@ where
 
 /// A Job ID consists of an [AccountId] and a [Script].
 pub type JobId<AccountId> = (AccountId, Script);
-
-/// Structure used to updated the allowed sources list of a [Registration].
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct JobAssignmentUpdate<A>
-where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-{
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to assign the job to.
-    pub assignee: A,
-    /// the job id to be assigned.
-    pub job_id: JobId<A>,
-}
 
 /// Structure used to updated the certificate recovation list.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
@@ -93,6 +70,82 @@ where
     pub allowed_sources: Option<Vec<AccountId>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
+    /// The schedule describing the desired (multiple) execution(s) of the script.
+    pub schedule: Schedule,
+    /// Maximum memory bytes used during a single execution of the job.
+    pub memory: u32,
+    /// Maximum network request used during a single execution of the job.
+    pub network_requests: u32,
+    /// Maximum storage bytes used during the whole period of the job's executions.
+    pub storage: u32,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: Extra,
+}
+
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+pub struct Schedule {
+    /// An upperbound for the duration of one execution of the script in milliseconds.
+    pub duration: u64,
+    /// Start time in milliseconds since Unix Epoch.
+    pub start_time: u64,
+    /// End time in milliseconds since Unix Epoch.
+    ///
+    /// Represents the latest point in time where a job execution can end, assuming the worst-case `duration`.
+    /// Means every job needs to fit into `[start_time, end_time]`,
+    pub end_time: u64,
+    /// Interval at which to repeat execution in milliseconds.
+    pub interval: u64,
+    /// Maximum delay before each execution in milliseconds.
+    pub max_start_delay: u64,
+}
+
+impl Schedule {
+    pub fn execution_count(&self) -> u64 {
+        (|| -> Option<u64> {
+            self.end_time
+                .checked_sub(self.start_time)?
+                // since the last execution must completly fit into [start_time, end_time], we must substract the duration
+                .checked_sub(self.duration)?
+                .checked_div(self.interval)?
+                .checked_add(1u64)
+        })()
+        .unwrap_or(0u64)
+    }
+
+    pub fn iter(&self) -> ScheduleIter<'_> {
+        ScheduleIter {
+            schedule: self,
+            current: None,
+        }
+    }
+}
+
+pub struct ScheduleIter<'a> {
+    schedule: &'a Schedule,
+    current: Option<u64>,
+}
+
+impl<'a> Iterator for ScheduleIter<'a> {
+    type Item = u64;
+
+    // Here, we define the sequence using `.current` and `.next`.
+    // The return type is `Option<T>`:
+    //     * When the `Iterator` is finished, `None` is returned.
+    //     * Otherwise, the next value is wrapped in `Some` and returned.
+    // We use Self::Item in the return type, so we can change
+    // the type without having to update the function signatures.
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current = match self.current {
+            None => Some(self.schedule.start_time),
+            Some(curr) => {
+                let next = curr.checked_add(self.schedule.interval)?;
+                if next + self.schedule.duration <= self.schedule.end_time {
+                    Some(next)
+                } else {
+                    None
+                }
+            }
+        };
+        self.current
+    }
 }

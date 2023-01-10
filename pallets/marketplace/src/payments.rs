@@ -1,3 +1,4 @@
+use crate::{Config, Error};
 use core::marker::PhantomData;
 use frame_support::{
     dispatch::RawOrigin,
@@ -8,8 +9,6 @@ use frame_support::{
     },
     Never, PalletId, Parameter,
 };
-
-use crate::Config;
 
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
@@ -38,7 +37,7 @@ impl Reward for () {
     type AssetAmount = Never;
     type Error = ();
 
-    fn with_amount(&mut self, _: Self::AssetAmount) -> Result<&Self, Self::Error> {
+    fn with_amount(&mut self, _amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
         Err(())
     }
 
@@ -51,7 +50,7 @@ impl Reward for () {
     }
 }
 
-pub trait RewardManager<T: Config> {
+pub trait RewardManager<T: frame_system::Config> {
     type Reward: Parameter + Member + Reward;
 
     fn lock_reward(
@@ -62,9 +61,13 @@ pub trait RewardManager<T: Config> {
         reward: Self::Reward,
         target: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError>;
+    fn pay_matcher_reward(
+        reward: Self::Reward,
+        matcher: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError>;
 }
 
-impl<T: Config> RewardManager<T> for () {
+impl<T: frame_system::Config> RewardManager<T> for () {
     type Reward = ();
 
     fn lock_reward(
@@ -80,11 +83,19 @@ impl<T: Config> RewardManager<T> for () {
     ) -> Result<(), DispatchError> {
         Ok(())
     }
+
+    fn pay_matcher_reward(
+        _reward: Self::Reward,
+        _matcher: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        Ok(())
+    }
 }
 
 // This trait provives methods for managing the fees.
 pub trait FeeManager {
     fn get_fee_percentage() -> Percent;
+    fn get_matcher_percentage() -> Percent;
     fn pallet_id() -> PalletId;
 }
 
@@ -112,15 +123,15 @@ where
         owner: <T::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
         if !Barrier::can_use_asset(&reward) {
-            return Err(DispatchError::Other("Invalid asset."));
+            Err(Error::<T>::AssetNotAllowedByBarrier)?;
         }
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
         let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
         let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
-            (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
-            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
+            (Err(_err), _) => Err(Error::<T>::InvalidAssetId)?,
+            (_, Err(_err)) => Err(Error::<T>::InvalidAssetAmount)?,
         };
 
         // transfer funds from caller to pallet account for holding until fulfill is called
@@ -145,8 +156,8 @@ where
         let pallet_origin: T::RuntimeOrigin = raw_origin.into();
         let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
             (Ok(id), Ok(amount)) => (id, amount),
-            (Err(_err), _) => return Err(DispatchError::Other("Invalid asset id.")),
-            (_, Err(_err)) => return Err(DispatchError::Other("Invalid asset balance.")),
+            (Err(_err), _) => Err(Error::<T>::InvalidAssetId)?,
+            (_, Err(_err)) => Err(Error::<T>::InvalidAssetAmount)?,
         };
 
         // Extract fee from the processor reward
@@ -172,5 +183,20 @@ where
             target,
             reward_after_fee.into(),
         )
+    }
+
+    fn pay_matcher_reward(
+        remaining_reward: Self::Reward,
+        matcher: <T::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        let matcher_fee_percentage = AssetSplit::get_matcher_percentage(); // TODO: fee will be indexed by version in the future
+        let amount = remaining_reward
+            .try_get_amount()
+            .map_err(|_| Error::<T>::InvalidAssetAmount)?;
+        let mut r = remaining_reward.clone();
+        r.with_amount(matcher_fee_percentage.mul_floor(amount))
+            .map_err(|_| Error::<T>::InvalidAssetAmount)?;
+
+        <Self as RewardManager<T>>::pay_reward(r, matcher)
     }
 }

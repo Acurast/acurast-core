@@ -1,26 +1,20 @@
 use frame_support::{
     dispatch::Weight,
     pallet_prelude::GenesisBuild,
-    pallet_prelude::*,
     parameter_types,
     traits::{AsEnsureOriginWithArg, Everything},
     PalletId,
 };
-use hex_literal::hex;
 use sp_core::*;
 use sp_io;
 use sp_runtime::traits::{
     AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32, StaticLookup,
 };
-use sp_runtime::{bounded_vec, BoundedVec};
+use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::Script;
-use pallet_acurast::{
-    CertificateRevocationListUpdate, Fulfillment, FulfillmentRouter, JobAssignmentUpdate,
-    JobAssignmentUpdateBarrier, JobRegistrationFor, RevocationListUpdateBarrier,
-};
+use pallet_acurast::{CertificateRevocationListUpdate, RevocationListUpdateBarrier};
 
 use crate::stub::*;
 use crate::*;
@@ -39,32 +33,9 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
     }
 }
 
-impl JobAssignmentUpdateBarrier<Test> for Barrier {
-    fn can_update_assigned_jobs(
-        origin: &<Test as frame_system::Config>::AccountId,
-        updates: &Vec<JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
-    ) -> bool {
-        updates.iter().all(|update| &update.job_id.0 == origin)
-    }
-}
-
 impl AssetBarrier<MockAsset> for Barrier {
     fn can_use_asset(_asset: &MockAsset) -> bool {
         true
-    }
-}
-
-pub struct Router;
-
-impl FulfillmentRouter<Test> for Router {
-    fn received_fulfillment(
-        _origin: frame_system::pallet_prelude::OriginFor<Test>,
-        _from: <Test as frame_system::Config>::AccountId,
-        _fulfillment: Fulfillment,
-        _registration: JobRegistrationFor<Test>,
-        _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
-    ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-        Ok(().into())
     }
 }
 
@@ -73,6 +44,10 @@ pub struct FeeManagerImpl;
 impl FeeManager for FeeManagerImpl {
     fn get_fee_percentage() -> Percent {
         Percent::from_percent(30)
+    }
+
+    fn get_matcher_percentage() -> Percent {
+        Percent::from_percent(10)
     }
 
     fn pallet_id() -> PalletId {
@@ -147,7 +122,8 @@ frame_support::construct_runtime!(
         Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
-        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>}
+        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>},
+        MockPallet: mock_pallet::{Pallet, Event<T>}
     }
 );
 
@@ -158,7 +134,6 @@ parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
-    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: AssetAmount = EXISTENTIAL_DEPOSIT;
 }
 parameter_types! {
@@ -242,33 +217,68 @@ impl parachain_info::Config for Test {}
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
-    type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type JobHooks = Pallet<Test>;
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
 }
 
+impl mock_pallet::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+}
+
+#[frame_support::pallet]
+pub mod mock_pallet {
+    use frame_support::pallet_prelude::*;
+
+    use crate::stub::MockAsset;
+
+    #[pallet::config]
+    pub trait Config: frame_system::Config + crate::Config {
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    }
+
+    #[pallet::pallet]
+    pub struct Pallet<T>(_);
+
+    #[pallet::event]
+    #[pallet::generate_deposit(pub (super) fn deposit_event)]
+    pub enum Event<T: Config> {
+        Locked(MockAsset),
+        PayReward(MockAsset),
+        PayMatcherReward(MockAsset),
+    }
+}
+
 pub struct MockRewardManager {}
 
-impl<T: Config> RewardManager<T> for MockRewardManager {
+impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
     type Reward = MockAsset;
 
     fn lock_reward(
-        _reward: Self::Reward,
+        reward: Self::Reward,
         _owner: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward));
         Ok(())
     }
 
     fn pay_reward(
-        _reward: Self::Reward,
+        reward: Self::Reward,
         _target: <<T>::Lookup as StaticLookup>::Source,
     ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward));
+        Ok(())
+    }
+
+    fn pay_matcher_reward(
+        reward: Self::Reward,
+        _matcher: <<T>::Lookup as StaticLookup>::Source,
+    ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(reward));
         Ok(())
     }
 }
@@ -294,13 +304,6 @@ pub fn events() -> Vec<RuntimeEvent> {
     evt
 }
 
-pub fn fulfillment_for(registration: &JobRegistrationFor<Test>) -> Fulfillment {
-    Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
-    }
-}
-
 pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
     <Test as Config>::PalletId::get().into_account_truncating()
 }
@@ -309,34 +312,26 @@ pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
 }
 
-pub fn advertisement(price_per_cpu_millisecond: u128, capacity: u32) -> AdvertisementFor<Test> {
+pub fn advertisement(
+    fee_per_millisecond: u128,
+    fee_per_storage_byte: u128,
+    storage_capacity: u32,
+    max_memory: u32,
+    network_request_quota: u8,
+) -> AdvertisementFor<Test> {
     let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
         bounded_vec![PricingVariant {
             reward_asset: 0,
-            price_per_cpu_millisecond,
-            bonus: 0,
-            maximum_slash: 0,
+            fee_per_millisecond,
+            fee_per_storage_byte,
+            base_fee_per_execution: 0,
+            scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
         }];
     Advertisement {
         pricing,
         allowed_consumers: None,
-        capacity,
-    }
-}
-
-pub fn job_registration_with_reward(
-    script: Script,
-    cpu_milliseconds: u128,
-    reward_value: u128,
-) -> JobRegistrationFor<Test> {
-    JobRegistrationFor::<Test> {
-        script,
-        allowed_sources: None,
-        allow_only_verified_sources: false,
-        extra: JobRequirements {
-            slots: 1,
-            cpu_milliseconds,
-            reward: asset(reward_value),
-        },
+        storage_capacity,
+        max_memory,
+        network_request_quota,
     }
 }
