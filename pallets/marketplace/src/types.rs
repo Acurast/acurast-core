@@ -86,6 +86,8 @@ pub type PricingVariantFor<T> = PricingVariant<<T as Config>::AssetId, <T as Con
 pub struct Assignment<Reward> {
     /// The 0-based slot index assigned to the source.
     pub slot: u8,
+    /// The start delay for the first execution and all the following executions.
+    pub start_delay: u64,
     /// The fee owed to source for each execution.
     pub fee_per_execution: Reward,
     /// If this assignment was acknowledged.
@@ -138,12 +140,23 @@ where
     pub reward: Reward,
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
-    pub instant_match: Option<Vec<AccountId>>,
+    pub instant_match: Option<Vec<PlannedExecution<AccountId>>>,
 }
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Match<AccountId> {
+    /// The job to match.
     pub job_id: JobId<AccountId>,
-    pub sources: Vec<AccountId>,
+    /// The sources to match each of the job's slots with.
+    pub sources: Vec<PlannedExecution<AccountId>>,
+}
+
+/// The details for a single planned slot execution with the delay.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+pub struct PlannedExecution<AccountId> {
+    /// The source.
+    pub source: AccountId,
+    /// The start delay for the first execution and all the following executions.
+    pub start_delay: u64,
 }

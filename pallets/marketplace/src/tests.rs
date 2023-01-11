@@ -6,8 +6,8 @@ use pallet_acurast::JobRegistrationFor;
 use pallet_acurast::Schedule;
 
 use crate::stub::*;
-use crate::JobRequirements;
 use crate::{mock::*, AdvertisementRestriction, Assignment, Error, JobStatus, Match, SLA};
+use crate::{JobRequirements, PlannedExecution};
 
 #[test]
 fn test_match() {
@@ -38,7 +38,10 @@ fn test_match() {
     let job_id = (alice_account_id(), registration.script.clone());
     let m = Match {
         job_id: job_id.clone(),
-        sources: vec![processor_account_id()],
+        sources: vec![PlannedExecution {
+            source: processor_account_id(),
+            start_delay: 0,
+        }],
     };
 
     ExtBuilder::default().build().execute_with(|| {
@@ -117,6 +120,7 @@ fn test_match() {
         assert_eq!(
             Some(Assignment {
                 slot: 0,
+                start_delay: 0,
                 fee_per_execution: MockAsset {
                     id: 0,
                     amount: 5_020_000
@@ -189,6 +193,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -206,6 +211,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -223,6 +229,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -317,7 +324,10 @@ fn test_no_match_schedule_overlap() {
         // the first job matches because capacity left
         let m = Match {
             job_id: job_id1.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
@@ -327,7 +337,10 @@ fn test_no_match_schedule_overlap() {
         // this one does not match anymore
         let m = Match {
             job_id: job_id1.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_err!(
             AcurastMarketplace::propose_matching(
@@ -422,7 +435,10 @@ fn test_more_reports_than_expected() {
 
         let m = Match {
             job_id: job_id.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
@@ -478,6 +494,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -495,6 +512,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -512,6 +530,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000

@@ -589,19 +589,22 @@ pub mod pallet {
 
                 // `slot` is used for detecting duplicate source proposed for distinct slots
                 // TODO: add global (configurable) maximum of jobs assigned. This would limit the weight of `propose_matching` to a constant, since it depends on the number of active matches.
-                for (slot, source) in m.sources.iter().enumerate() {
+                for (slot, planned_execution) in m.sources.iter().enumerate() {
                     // CHECK attestation
                     ensure!(
                         !registration.allow_only_verified_sources
-                            || ensure_source_verified::<T>(&source).is_ok(),
+                            || ensure_source_verified::<T>(&planned_execution.source).is_ok(),
                         Error::<T>::UnverifiedSourceInMatch
                     );
 
-                    let ad = <StoredAdvertisementRestriction<T>>::get(&source)
+                    let ad = <StoredAdvertisementRestriction<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::AdvertisementNotFound)?;
 
-                    let pricing = <StoredAdvertisementPricing<T>>::get(source, &reward_asset)
-                        .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
+                    let pricing = <StoredAdvertisementPricing<T>>::get(
+                        &planned_execution.source,
+                        &reward_asset,
+                    )
+                    .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
 
                     // CHECK the scheduling_window allow to schedule this job
                     match pricing.scheduling_window {
@@ -648,13 +651,13 @@ pub mod pallet {
                     );
 
                     // CHECK remaining storage capacity sufficient
-                    let capacity = <StoredStorageCapacity<T>>::get(&source)
+                    let capacity = <StoredStorageCapacity<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::CapacityNotFound)?;
                     ensure!(capacity > 0, Error::<T>::InsufficientStorageCapacityInMatch);
 
                     // CHECK source is whitelisted
                     ensure!(
-                        is_source_whitelisted::<T>(&source, &registration),
+                        is_source_whitelisted::<T>(&planned_execution.source, &registration),
                         Error::<T>::SourceNotAllowedInMatch
                     );
 
@@ -665,7 +668,11 @@ pub mod pallet {
                     );
 
                     // CHECK schedule
-                    Self::fits_schedule(&source, &registration.schedule)?;
+                    Self::fits_schedule(
+                        &planned_execution.source,
+                        &registration.schedule,
+                        planned_execution.start_delay,
+                    )?;
 
                     // calculate fee
                     let fee_per_execution = Self::fee_per_execution(&registration, &pricing)?;
@@ -691,7 +698,7 @@ pub mod pallet {
 
                     // ASSIGN if not yet assigned (equals to CHECK that no duplicate source in a single mutate operation)
                     <StoredMatches<T>>::try_mutate(
-                        &source,
+                        &planned_execution.source,
                         &m.job_id,
                         |s| -> Result<(), Error<T>> {
                             // NOTE: the None case is the "good case", used when there is *no entry yet and thus no duplicate assignment so far*.
@@ -700,6 +707,7 @@ pub mod pallet {
                                 None => {
                                     *s = Some(Assignment {
                                         slot: slot as u8,
+                                        start_delay: planned_execution.start_delay,
                                         fee_per_execution: fee,
                                         acknowledged: false,
                                         sla: SLA {
@@ -714,7 +722,7 @@ pub mod pallet {
                         },
                     )?;
                     <StoredStorageCapacity<T>>::set(
-                        &source,
+                        &planned_execution.source,
                         capacity.checked_sub(registration.storage.into()),
                     );
                 }
@@ -763,8 +771,12 @@ pub mod pallet {
             <StoredMatches<T>>::iter_prefix_values(&source).any(|_| true)
         }
 
-        fn fits_schedule(source: &T::AccountId, schedule: &Schedule) -> Result<(), DispatchError> {
-            for (job_id, _) in <StoredMatches<T>>::iter_prefix(&source) {
+        fn fits_schedule(
+            source: &T::AccountId,
+            schedule: &Schedule,
+            start_delay: u64,
+        ) -> Result<(), DispatchError> {
+            for (job_id, assignment) in <StoredMatches<T>>::iter_prefix(&source) {
                 // TODO decide tradeoff: we could save this lookup at the cost of storing the schedule along with the match or even completly move it from StoredJobRegistration into StoredMatches
                 let other = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
@@ -777,11 +789,11 @@ pub mod pallet {
                     continue;
                 }
 
-                let it = schedule.iter().map(|start| {
+                let it = schedule.iter(start_delay).map(|start| {
                     let end = start.checked_add(schedule.interval)?;
                     Some((start, end))
                 });
-                let other_it = other.schedule.iter().map(|start| {
+                let other_it = other.schedule.iter(assignment.start_delay).map(|start| {
                     let end = start.checked_add(other.schedule.interval)?;
                     Some((start, end))
                 });

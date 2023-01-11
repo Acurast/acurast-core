@@ -82,6 +82,18 @@ where
     pub extra: Extra,
 }
 
+/// The desired schedule with some planning flexibility offered through `max_start_delay`.
+///
+/// ## Which planned schedules are valid?
+///
+/// Given `max_start_delay = 8`, `duration = 3`, `interval = 20`:
+///
+/// * planned delay is constant within the executions *of one slot*
+///   ```ignore
+///   SLOT 1: □□□□□□■■■□__________□□□□□□■■■□__________□□□□□□■■■□
+///   SLOT 2: ■■■□□□□□□□__________■■■□□□□□□□__________■■■□□□□□□□
+///   SLOT 3: □□■■■□□□□□__________□□■■■□□□□□__________□□■■■□□□□□
+///   ```
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.
@@ -112,9 +124,10 @@ impl Schedule {
         .unwrap_or(0u64)
     }
 
-    pub fn iter(&self) -> ScheduleIter<'_> {
+    pub fn iter(&self, start_delay: u64) -> ScheduleIter<'_> {
         ScheduleIter {
             schedule: self,
+            start_delay,
             current: None,
         }
     }
@@ -122,6 +135,7 @@ impl Schedule {
 
 pub struct ScheduleIter<'a> {
     schedule: &'a Schedule,
+    start_delay: u64,
     current: Option<u64>,
 }
 
@@ -136,7 +150,7 @@ impl<'a> Iterator for ScheduleIter<'a> {
     // the type without having to update the function signatures.
     fn next(&mut self) -> Option<Self::Item> {
         self.current = match self.current {
-            None => Some(self.schedule.start_time),
+            None => Some(self.schedule.start_time.checked_add(self.start_delay)?),
             Some(curr) => {
                 let next = curr.checked_add(self.schedule.interval)?;
                 if next + self.schedule.duration <= self.schedule.end_time {
