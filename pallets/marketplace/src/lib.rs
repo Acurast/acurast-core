@@ -610,7 +610,11 @@ pub mod pallet {
                     match pricing.scheduling_window {
                         SchedulingWindow::End(end) => {
                             ensure!(
-                                end >= registration.schedule.end_time,
+                                end >= registration
+                                    .schedule
+                                    .end_time
+                                    .checked_add(planned_execution.start_delay)
+                                    .ok_or(Error::<T>::CalculationOverflow)?,
                                 Error::<T>::SchedulingWindowExceededInMatch
                             );
                         }
@@ -618,7 +622,11 @@ pub mod pallet {
                             ensure!(
                                 now.checked_add(delta)
                                     .ok_or(Error::<T>::CalculationOverflow)?
-                                    >= registration.schedule.end_time,
+                                    >= registration
+                                        .schedule
+                                        .end_time
+                                        .checked_add(planned_execution.start_delay)
+                                        .ok_or(Error::<T>::CalculationOverflow)?,
                                 Error::<T>::SchedulingWindowExceededInMatch
                             );
                         }
@@ -789,14 +797,21 @@ pub mod pallet {
                     continue;
                 }
 
-                let it = schedule.iter(start_delay).map(|start| {
-                    let end = start.checked_add(schedule.interval)?;
-                    Some((start, end))
-                });
-                let other_it = other.schedule.iter(assignment.start_delay).map(|start| {
-                    let end = start.checked_add(other.schedule.interval)?;
-                    Some((start, end))
-                });
+                let it = schedule
+                    .iter(start_delay)
+                    .ok_or(Error::<T>::CalculationOverflow)?
+                    .map(|start| {
+                        let end = start.checked_add(schedule.interval)?;
+                        Some((start, end))
+                    });
+                let other_it = other
+                    .schedule
+                    .iter(assignment.start_delay)
+                    .ok_or(Error::<T>::CalculationOverflow)?
+                    .map(|start| {
+                        let end = start.checked_add(other.schedule.interval)?;
+                        Some((start, end))
+                    });
 
                 it.merge(other_it).try_fold(0u64, |prev_end, bounds| {
                     let (start, end) = bounds.ok_or(Error::<T>::CalculationOverflow)?;

@@ -102,8 +102,9 @@ pub struct Schedule {
     pub start_time: u64,
     /// End time in milliseconds since Unix Epoch.
     ///
-    /// Represents the latest point in time where a job execution can end, assuming the worst-case `duration`.
-    /// Means every job needs to fit into `[start_time, end_time]`,
+    /// Represents the end time (exclusive) in milliseconds since Unix Epoch
+    /// of the period in which a job execution can start, independent of `duration` and `start_delay`.
+    /// Hence all executions fit into `[start_time, end_time + duration + start_delay]`.
     pub end_time: u64,
     /// Interval at which to repeat execution in milliseconds.
     pub interval: u64,
@@ -112,34 +113,41 @@ pub struct Schedule {
 }
 
 impl Schedule {
+    /// The number of executions in the [`Schedule`] which corresponds to the length of [`Schedule::iter()`].
     pub fn execution_count(&self) -> u64 {
         (|| -> Option<u64> {
             self.end_time
                 .checked_sub(self.start_time)?
-                // since the last execution must completly fit into [start_time, end_time], we must substract the duration
-                .checked_sub(self.duration)?
+                .checked_sub(1u64)?
                 .checked_div(self.interval)?
                 .checked_add(1u64)
         })()
         .unwrap_or(0u64)
     }
 
-    pub fn iter(&self, start_delay: u64) -> ScheduleIter<'_> {
-        ScheduleIter {
-            schedule: self,
-            start_delay,
+    /// Iterates over the start times of all the [`Schedule`]'s executions.
+    ///
+    /// All executions fit into `[start_time, end_time + duration + start_delay]`.
+    /// Note that the last execution starts before `end_time` but may reach over it.
+    /// This is so that *the number of executions does not depend on `start_delay`*.
+    pub fn iter(&self, start_delay: u64) -> Option<ScheduleIter> {
+        Some(ScheduleIter {
+            delayed_start_time: self.start_time.checked_add(start_delay)?,
+            delayed_end_time: self.end_time.checked_add(start_delay)?,
+            interval: self.interval,
             current: None,
-        }
+        })
     }
 }
 
-pub struct ScheduleIter<'a> {
-    schedule: &'a Schedule,
-    start_delay: u64,
+pub struct ScheduleIter {
+    delayed_start_time: u64,
+    delayed_end_time: u64,
+    interval: u64,
     current: Option<u64>,
 }
 
-impl<'a> Iterator for ScheduleIter<'a> {
+impl<'a> Iterator for ScheduleIter {
     type Item = u64;
 
     // Here, we define the sequence using `.current` and `.next`.
@@ -150,10 +158,16 @@ impl<'a> Iterator for ScheduleIter<'a> {
     // the type without having to update the function signatures.
     fn next(&mut self) -> Option<Self::Item> {
         self.current = match self.current {
-            None => Some(self.schedule.start_time.checked_add(self.start_delay)?),
+            None => {
+                if self.delayed_start_time < self.delayed_end_time {
+                    Some(self.delayed_start_time)
+                } else {
+                    None
+                }
+            }
             Some(curr) => {
-                let next = curr.checked_add(self.schedule.interval)?;
-                if next + self.schedule.duration <= self.schedule.end_time {
+                let next = curr.checked_add(self.interval)?;
+                if next < self.delayed_end_time {
                     Some(next)
                 } else {
                     None
