@@ -138,6 +138,60 @@ impl Schedule {
             current: None,
         })
     }
+
+    /// Normalizes a schedule to zero `start_delay` and `end_time` being exact end of last exeuction.
+    ///
+    /// Example:
+    /// ___□□■■_□□■■_□□■■__ -> _____■■___■■___■■
+    pub fn normalize(&self, start_delay: u64) -> Option<Schedule> {
+        let actual_start = self.start_time.checked_add(start_delay)?;
+        let count = self.execution_count();
+        let actual_end = if count > 0 {
+            actual_start
+                .checked_add((count - 1).checked_mul(self.interval)?)?
+                .checked_add(self.duration)?
+        } else {
+            actual_start
+        };
+        Some(Schedule {
+            duration: self.duration,
+            start_time: actual_start,
+            end_time: actual_end,
+            interval: self.interval,
+            max_start_delay: 0,
+        })
+    }
+
+    pub fn overlaps(&self, start_delay: u64, range: &(u64, u64)) -> Option<bool> {
+        let normalized = self.normalize(start_delay)?;
+        let (a, b) = *range;
+        if a == b
+            || normalized.start_time == normalized.end_time
+            || b <= normalized.start_time
+            || a >= normalized.end_time
+        {
+            return Some(false);
+        }
+
+        // if range starts before we can pretend it only starts at normalized `start_time`
+        let relative_a = a
+            .checked_sub(normalized.start_time)
+            .or(Some(normalized.start_time))?;
+
+        if let Some(relative_b) = b.checked_sub(normalized.start_time) {
+            let _b = relative_b % normalized.interval;
+            let (a, b) = (
+                relative_a % normalized.interval,
+                if _b == 0 { normalized.interval } else { _b },
+            );
+            // b > a from here
+
+            let l = b.checked_sub(a)?;
+            Some(a < normalized.duration || l >= normalized.interval)
+        } else {
+            Some(false)
+        }
+    }
 }
 
 pub struct ScheduleIter {
