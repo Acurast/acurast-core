@@ -112,6 +112,41 @@ pub struct Schedule {
     pub max_start_delay: u64,
 }
 
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct NormalizedSchedule(pub Schedule);
+
+impl NormalizedSchedule {
+    pub fn overlaps(&self, a: u64, b: u64) -> Option<bool> {
+        if a == b
+            || self.0.start_time == self.0.end_time
+            || b <= self.0.start_time
+            || a >= self.0.end_time
+        {
+            return Some(false);
+        }
+
+        // if range starts before we can pretend it only starts at self.0 `start_time`
+        let relative_a = a
+            .checked_sub(self.0.start_time)
+            .or(Some(self.0.start_time))?;
+
+        if let Some(relative_b) = b.checked_sub(self.0.start_time) {
+            let _b = relative_b % self.0.interval;
+            let (a, b) = (
+                relative_a % self.0.interval,
+                if _b == 0 { self.0.interval } else { _b },
+            );
+            // b > a from here
+
+            let l = b.checked_sub(a)?;
+            Some(a < self.0.duration || l >= self.0.interval)
+        } else {
+            Some(false)
+        }
+    }
+}
+
 impl Schedule {
     /// The number of executions in the [`Schedule`] which corresponds to the length of [`Schedule::iter()`].
     pub fn execution_count(&self) -> u64 {
@@ -143,7 +178,7 @@ impl Schedule {
     ///
     /// Example:
     /// ___□□■■_□□■■_□□■■__ -> _____■■___■■___■■
-    pub fn normalize(&self, start_delay: u64) -> Option<Schedule> {
+    pub fn normalize(&self, start_delay: u64) -> Option<NormalizedSchedule> {
         let actual_start = self.start_time.checked_add(start_delay)?;
         let count = self.execution_count();
         let actual_end = if count > 0 {
@@ -153,44 +188,11 @@ impl Schedule {
         } else {
             actual_start
         };
-        Some(Schedule {
-            duration: self.duration,
+        Some(NormalizedSchedule(Schedule {
             start_time: actual_start,
             end_time: actual_end,
-            interval: self.interval,
-            max_start_delay: 0,
-        })
-    }
-
-    pub fn overlaps(&self, start_delay: u64, range: &(u64, u64)) -> Option<bool> {
-        let normalized = self.normalize(start_delay)?;
-        let (a, b) = *range;
-        if a == b
-            || normalized.start_time == normalized.end_time
-            || b <= normalized.start_time
-            || a >= normalized.end_time
-        {
-            return Some(false);
-        }
-
-        // if range starts before we can pretend it only starts at normalized `start_time`
-        let relative_a = a
-            .checked_sub(normalized.start_time)
-            .or(Some(normalized.start_time))?;
-
-        if let Some(relative_b) = b.checked_sub(normalized.start_time) {
-            let _b = relative_b % normalized.interval;
-            let (a, b) = (
-                relative_a % normalized.interval,
-                if _b == 0 { normalized.interval } else { _b },
-            );
-            // b > a from here
-
-            let l = b.checked_sub(a)?;
-            Some(a < normalized.duration || l >= normalized.interval)
-        } else {
-            Some(false)
-        }
+            ..self.clone()
+        }))
     }
 }
 
