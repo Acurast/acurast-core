@@ -120,7 +120,8 @@ fn test_match() {
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
         assert_eq!(
             Some(Assignment {
@@ -146,12 +147,13 @@ fn test_match() {
         );
 
         // pretend time moved on
-        later(registration.schedule.normalize(0).unwrap().0.end_time);
+        later(registration.schedule.normalize(0).unwrap().0.end_time - 2000);
         assert_eq!(3, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            true,
         ));
         assert_eq!(
             None,
@@ -457,14 +459,16 @@ fn test_more_reports_than_expected() {
         later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
 
         // pretend time moved on
         later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
 
         // third report is illegal!
@@ -472,7 +476,8 @@ fn test_more_reports_than_expected() {
         assert_err!(
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
-                job_id.clone()
+                job_id.clone(),
+                true
             ),
             Error::<Test>::MoreReportsThanExpected
         );

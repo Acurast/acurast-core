@@ -377,6 +377,7 @@ pub mod pallet {
         pub fn report(
             origin: OriginFor<T>, // source
             job_id: JobId<T::AccountId>,
+            last: bool,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -426,24 +427,7 @@ pub mod pallet {
                 Error::<T>::ReportOutsideSchedule
             );
 
-            // TODO we can't actually be sure that now is not outdated and only therefore we miss that this is indeed
-            // the last execution of the schedule -> should we add a cooprative flag to report, indicating that this is the last?
-            // Alternatively we could check assignment.sla.met == assignment.sla.total, but that would fail if some reports got missing (due to network errors).
-            // Best solution: add a counter to report extrinsic that declares which execution it refers to.
-            //
-            // Timing check was
-            // ```
-            // let last_execution_start = registration
-            //     .schedule
-            //     .end_time
-            //     .checked_sub(normalized_schedule.0.duration)
-            //     .ok_or(Error::<T>::CalculationOverflow)?;
-            // if now
-            //     >= last_execution_start
-            //         .checked_sub(T::ReportTolerance::get())
-            //         .ok_or(Error::<T>::CalculationOverflow)?
-            // ```
-            if assignment.sla.met == assignment.sla.total {
+            if last {
                 // TODO update reputation since we don't expect further reports for this job
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
