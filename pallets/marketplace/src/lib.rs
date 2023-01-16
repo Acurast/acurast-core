@@ -411,18 +411,15 @@ pub mod pallet {
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            let normalized_schedule = registration
-                .schedule
-                .normalize(assignment.start_delay)
-                .ok_or(Error::<T>::CalculationOverflow)?;
             let now = Self::now()?;
             let now_max = now
                 .checked_add(T::ReportTolerance::get())
                 .ok_or(Error::<T>::CalculationOverflow)?;
 
             ensure!(
-                normalized_schedule
-                    .overlaps(now, now_max)
+                registration
+                    .schedule
+                    .overlaps(assignment.start_delay, now, now_max)
                     .ok_or(Error::<T>::CalculationOverflow)?,
                 Error::<T>::ReportOutsideSchedule
             );

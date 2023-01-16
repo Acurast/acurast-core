@@ -280,9 +280,8 @@ tests! {
 
 fn test_schedule_overlaps(schedule: Schedule, start_delay: u64, ranges: Vec<((u64, u64), bool)>) {
     for (range, exp) in ranges.iter() {
-        let normalized_schedule = &schedule.normalize(start_delay).unwrap();
         assert_eq!(
-            &normalized_schedule.overlaps(range.0, range.1).unwrap(),
+            &schedule.overlaps(start_delay, range.0, range.1).unwrap(),
             exp,
             "{:?}.overlaps(start_delay: {}, range, ({}, {})) != {}",
             schedule,

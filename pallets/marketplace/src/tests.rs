@@ -147,7 +147,7 @@ fn test_match() {
         );
 
         // pretend time moved on
-        later(registration.schedule.normalize(0).unwrap().0.end_time - 2000);
+        later(registration.schedule.range(0).unwrap().1 - 2000);
         assert_eq!(3, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
@@ -472,7 +472,7 @@ fn test_more_reports_than_expected() {
         ));
 
         // third report is illegal!
-        later(registration.schedule.normalize(0).unwrap().0.end_time + 1000);
+        later(registration.schedule.range(0).unwrap().1 + 1000);
         assert_err!(
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
