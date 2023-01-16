@@ -56,6 +56,13 @@ pub mod pallet {
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
+        /// The the time tolerance in milliseconds. Represents the delta by how much we expect `now` timestamp being stale,
+        /// hence `now <= currentmillis <= now + ReportTolerance`.
+        ///
+        /// Should be at least the worst case block time. Otherwise valid reports that are included near the end of a block
+        /// would be considered outide of the agreed schedule despite being within schedule.
+        #[pallet::constant]
+        type ReportTolerance: Get<u64>;
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
             + CheckedAdd
@@ -213,6 +220,8 @@ pub mod pallet {
         ReportFromUnassignedSource,
         /// More reports than expected total.
         MoreReportsThanExpected,
+        /// Report received outside of schedule.
+        ReportOutsideSchedule,
     }
 
     #[pallet::hooks]
@@ -360,7 +369,9 @@ pub mod pallet {
         }
 
         /// Report on completion of fulfillments done on target chain for a previously registered and matched job.
-        /// Reward is payed out to source if timing of this call is within expected interval.
+        /// Reward is payed out to source if timing of this call is within expected interval. More precisely,
+        /// the report is accepted if `[now, now + tolerance]` overlaps with an execution of the schedule agreed on.
+        /// `tolerance` is a pallet config value.
         #[pallet::call_index(4)]
         #[pallet::weight(< T as Config >::WeightInfo::report())]
         pub fn report(
@@ -399,7 +410,40 @@ pub mod pallet {
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            if Self::now()? >= registration.schedule.end_time {
+            let normalized_schedule = registration
+                .schedule
+                .normalize(assignment.start_delay)
+                .ok_or(Error::<T>::CalculationOverflow)?;
+            let now = Self::now()?;
+            let now_max = now
+                .checked_add(T::ReportTolerance::get())
+                .ok_or(Error::<T>::CalculationOverflow)?;
+
+            ensure!(
+                normalized_schedule
+                    .overlaps(now, now_max)
+                    .ok_or(Error::<T>::CalculationOverflow)?,
+                Error::<T>::ReportOutsideSchedule
+            );
+
+            // TODO we can't actually be sure that now is not outdated and only therefore we miss that this is indeed
+            // the last execution of the schedule -> should we add a cooprative flag to report, indicating that this is the last?
+            // Alternatively we could check assignment.sla.met == assignment.sla.total, but that would fail if some reports got missing (due to network errors).
+            // Best solution: add a counter to report extrinsic that declares which execution it refers to.
+            //
+            // Timing check was
+            // ```
+            // let last_execution_start = registration
+            //     .schedule
+            //     .end_time
+            //     .checked_sub(normalized_schedule.0.duration)
+            //     .ok_or(Error::<T>::CalculationOverflow)?;
+            // if now
+            //     >= last_execution_start
+            //         .checked_sub(T::ReportTolerance::get())
+            //         .ok_or(Error::<T>::CalculationOverflow)?
+            // ```
+            if assignment.sla.met == assignment.sla.total {
                 // TODO update reputation since we don't expect further reports for this job
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)

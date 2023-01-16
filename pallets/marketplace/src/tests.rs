@@ -113,6 +113,11 @@ fn test_match() {
             AcurastMarketplace::stored_job_status(alice_account_id(), script())
         );
 
+        // pretend time moved on
+        assert_eq!(1, System::block_number());
+        later(registration.schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
+        assert_eq!(2, System::block_number());
+
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone()
@@ -141,14 +146,8 @@ fn test_match() {
         );
 
         // pretend time moved on
-        assert_eq!(1, System::block_number());
-        later(registration.schedule.end_time); // we cannot set time twice in same block
-        assert_eq!(2, System::block_number());
-
-        // assert_ok!(Timestamp::set(
-        //     RuntimeOrigin::none(),
-        //     registration.schedule.end_time
-        // ));
+        later(registration.schedule.normalize(0).unwrap().0.end_time);
+        assert_eq!(3, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -451,16 +450,25 @@ fn test_more_reports_than_expected() {
         ));
 
         // report twice with success
+        // -------------------------
+
+        // pretend time moved on
+        let mut iter = registration.schedule.iter(0).unwrap();
+        later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone()
         ));
+
+        // pretend time moved on
+        later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone()
         ));
 
         // third report is illegal!
+        later(registration.schedule.normalize(0).unwrap().0.end_time + 1000);
         assert_err!(
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
