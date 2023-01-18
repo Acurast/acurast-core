@@ -82,6 +82,18 @@ where
     pub extra: Extra,
 }
 
+/// The desired schedule with some planning flexibility offered through `max_start_delay`.
+///
+/// ## Which planned schedules are valid?
+///
+/// Given `max_start_delay = 8`, `duration = 3`, `interval = 20`:
+///
+/// * planned delay is constant within the executions *of one slot*
+///   ```ignore
+///   SLOT 1: □□□□□□■■■□__________□□□□□□■■■□__________□□□□□□■■■□
+///   SLOT 2: ■■■□□□□□□□__________■■■□□□□□□□__________■■■□□□□□□□
+///   SLOT 3: □□■■■□□□□□__________□□■■■□□□□□__________□□■■■□□□□□
+///   ```
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.
@@ -90,8 +102,9 @@ pub struct Schedule {
     pub start_time: u64,
     /// End time in milliseconds since Unix Epoch.
     ///
-    /// Represents the latest point in time where a job execution can end, assuming the worst-case `duration`.
-    /// Means every job needs to fit into `[start_time, end_time]`,
+    /// Represents the end time (exclusive) in milliseconds since Unix Epoch
+    /// of the period in which a job execution can start, independent of `duration` and `start_delay`.
+    /// Hence all executions fit into `[start_time, end_time + duration + start_delay]`.
     pub end_time: u64,
     /// Interval at which to repeat execution in milliseconds.
     pub interval: u64,
@@ -100,32 +113,82 @@ pub struct Schedule {
 }
 
 impl Schedule {
+    /// The number of executions in the [`Schedule`] which corresponds to the length of [`Schedule::iter()`].
     pub fn execution_count(&self) -> u64 {
         (|| -> Option<u64> {
             self.end_time
                 .checked_sub(self.start_time)?
-                // since the last execution must completly fit into [start_time, end_time], we must substract the duration
-                .checked_sub(self.duration)?
+                .checked_sub(1u64)?
                 .checked_div(self.interval)?
                 .checked_add(1u64)
         })()
         .unwrap_or(0u64)
     }
 
-    pub fn iter(&self) -> ScheduleIter<'_> {
-        ScheduleIter {
-            schedule: self,
+    /// Iterates over the start times of all the [`Schedule`]'s executions.
+    ///
+    /// All executions fit into `[start_time, end_time + duration + start_delay]`.
+    /// Note that the last execution starts before `end_time` but may reach over it.
+    /// This is so that *the number of executions does not depend on `start_delay`*.
+    pub fn iter(&self, start_delay: u64) -> Option<ScheduleIter> {
+        Some(ScheduleIter {
+            delayed_start_time: self.start_time.checked_add(start_delay)?,
+            delayed_end_time: self.end_time.checked_add(start_delay)?,
+            interval: self.interval,
             current: None,
+        })
+    }
+
+    /// Range of a schedule from first execution's start to end of last execution, respecting `start_delay`.
+    ///
+    /// Example:
+    /// ___□□■■_□□■■_□□■■__.range(2) -> (3, 17)
+    pub fn range(&self, start_delay: u64) -> Option<(u64, u64)> {
+        let actual_start = self.start_time.checked_add(start_delay)?;
+        let count = self.execution_count();
+        let actual_end = if count > 0 {
+            actual_start
+                .checked_add((count - 1).checked_mul(self.interval)?)?
+                .checked_add(self.duration)?
+        } else {
+            actual_start
+        };
+        Some((actual_start, actual_end))
+    }
+
+    pub fn overlaps(&self, start_delay: u64, a: u64, b: u64) -> Option<bool> {
+        let (start, end) = self.range(start_delay)?;
+        if a == b || start == end || b <= start || a >= end {
+            return Some(false);
+        }
+
+        // if query interval `[a, b]` starts before, we can pretend it only starts at `start`
+        let relative_a = a.checked_sub(start).or(Some(start))?;
+
+        if let Some(relative_b) = b.checked_sub(start) {
+            let _b = relative_b % self.interval;
+            let (a, b) = (
+                relative_a % self.interval,
+                if _b == 0 { self.interval } else { _b },
+            );
+            // b > a from here
+
+            let l = b.checked_sub(a)?;
+            Some(a < self.duration || l >= self.interval)
+        } else {
+            Some(false)
         }
     }
 }
 
-pub struct ScheduleIter<'a> {
-    schedule: &'a Schedule,
+pub struct ScheduleIter {
+    delayed_start_time: u64,
+    delayed_end_time: u64,
+    interval: u64,
     current: Option<u64>,
 }
 
-impl<'a> Iterator for ScheduleIter<'a> {
+impl<'a> Iterator for ScheduleIter {
     type Item = u64;
 
     // Here, we define the sequence using `.current` and `.next`.
@@ -136,10 +199,16 @@ impl<'a> Iterator for ScheduleIter<'a> {
     // the type without having to update the function signatures.
     fn next(&mut self) -> Option<Self::Item> {
         self.current = match self.current {
-            None => Some(self.schedule.start_time),
+            None => {
+                if self.delayed_start_time < self.delayed_end_time {
+                    Some(self.delayed_start_time)
+                } else {
+                    None
+                }
+            }
             Some(curr) => {
-                let next = curr.checked_add(self.schedule.interval)?;
-                if next + self.schedule.duration <= self.schedule.end_time {
+                let next = curr.checked_add(self.interval)?;
+                if next < self.delayed_end_time {
                     Some(next)
                 } else {
                     None

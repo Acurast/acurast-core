@@ -56,6 +56,13 @@ pub mod pallet {
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
+        /// The the time tolerance in milliseconds. Represents the delta by how much we expect `now` timestamp being stale,
+        /// hence `now <= currentmillis <= now + ReportTolerance`.
+        ///
+        /// Should be at least the worst case block time. Otherwise valid reports that are included near the end of a block
+        /// would be considered outide of the agreed schedule despite being within schedule.
+        #[pallet::constant]
+        type ReportTolerance: Get<u64>;
         type AssetId: Parameter + IsType<<RewardFor<Self> as Reward>::AssetId>;
         type AssetAmount: Parameter
             + CheckedAdd
@@ -213,6 +220,8 @@ pub mod pallet {
         ReportFromUnassignedSource,
         /// More reports than expected total.
         MoreReportsThanExpected,
+        /// Report received outside of schedule.
+        ReportOutsideSchedule,
     }
 
     #[pallet::hooks]
@@ -360,12 +369,15 @@ pub mod pallet {
         }
 
         /// Report on completion of fulfillments done on target chain for a previously registered and matched job.
-        /// Reward is payed out to source if timing of this call is within expected interval.
+        /// Reward is payed out to source if timing of this call is within expected interval. More precisely,
+        /// the report is accepted if `[now, now + tolerance]` overlaps with an execution of the schedule agreed on.
+        /// `tolerance` is a pallet config value.
         #[pallet::call_index(4)]
         #[pallet::weight(< T as Config >::WeightInfo::report())]
         pub fn report(
             origin: OriginFor<T>, // source
             job_id: JobId<T::AccountId>,
+            last: bool,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -399,7 +411,20 @@ pub mod pallet {
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            if Self::now()? >= registration.schedule.end_time {
+            let now = Self::now()?;
+            let now_max = now
+                .checked_add(T::ReportTolerance::get())
+                .ok_or(Error::<T>::CalculationOverflow)?;
+
+            ensure!(
+                registration
+                    .schedule
+                    .overlaps(assignment.start_delay, now, now_max)
+                    .ok_or(Error::<T>::CalculationOverflow)?,
+                Error::<T>::ReportOutsideSchedule
+            );
+
+            if last {
                 // TODO update reputation since we don't expect further reports for this job
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
@@ -589,25 +614,32 @@ pub mod pallet {
 
                 // `slot` is used for detecting duplicate source proposed for distinct slots
                 // TODO: add global (configurable) maximum of jobs assigned. This would limit the weight of `propose_matching` to a constant, since it depends on the number of active matches.
-                for (slot, source) in m.sources.iter().enumerate() {
+                for (slot, planned_execution) in m.sources.iter().enumerate() {
                     // CHECK attestation
                     ensure!(
                         !registration.allow_only_verified_sources
-                            || ensure_source_verified::<T>(&source).is_ok(),
+                            || ensure_source_verified::<T>(&planned_execution.source).is_ok(),
                         Error::<T>::UnverifiedSourceInMatch
                     );
 
-                    let ad = <StoredAdvertisementRestriction<T>>::get(&source)
+                    let ad = <StoredAdvertisementRestriction<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::AdvertisementNotFound)?;
 
-                    let pricing = <StoredAdvertisementPricing<T>>::get(source, &reward_asset)
-                        .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
+                    let pricing = <StoredAdvertisementPricing<T>>::get(
+                        &planned_execution.source,
+                        &reward_asset,
+                    )
+                    .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
 
                     // CHECK the scheduling_window allow to schedule this job
                     match pricing.scheduling_window {
                         SchedulingWindow::End(end) => {
                             ensure!(
-                                end >= registration.schedule.end_time,
+                                end >= registration
+                                    .schedule
+                                    .end_time
+                                    .checked_add(planned_execution.start_delay)
+                                    .ok_or(Error::<T>::CalculationOverflow)?,
                                 Error::<T>::SchedulingWindowExceededInMatch
                             );
                         }
@@ -615,7 +647,11 @@ pub mod pallet {
                             ensure!(
                                 now.checked_add(delta)
                                     .ok_or(Error::<T>::CalculationOverflow)?
-                                    >= registration.schedule.end_time,
+                                    >= registration
+                                        .schedule
+                                        .end_time
+                                        .checked_add(planned_execution.start_delay)
+                                        .ok_or(Error::<T>::CalculationOverflow)?,
                                 Error::<T>::SchedulingWindowExceededInMatch
                             );
                         }
@@ -648,13 +684,13 @@ pub mod pallet {
                     );
 
                     // CHECK remaining storage capacity sufficient
-                    let capacity = <StoredStorageCapacity<T>>::get(&source)
+                    let capacity = <StoredStorageCapacity<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::CapacityNotFound)?;
                     ensure!(capacity > 0, Error::<T>::InsufficientStorageCapacityInMatch);
 
                     // CHECK source is whitelisted
                     ensure!(
-                        is_source_whitelisted::<T>(&source, &registration),
+                        is_source_whitelisted::<T>(&planned_execution.source, &registration),
                         Error::<T>::SourceNotAllowedInMatch
                     );
 
@@ -665,7 +701,11 @@ pub mod pallet {
                     );
 
                     // CHECK schedule
-                    Self::fits_schedule(&source, &registration.schedule)?;
+                    Self::fits_schedule(
+                        &planned_execution.source,
+                        &registration.schedule,
+                        planned_execution.start_delay,
+                    )?;
 
                     // calculate fee
                     let fee_per_execution = Self::fee_per_execution(&registration, &pricing)?;
@@ -691,7 +731,7 @@ pub mod pallet {
 
                     // ASSIGN if not yet assigned (equals to CHECK that no duplicate source in a single mutate operation)
                     <StoredMatches<T>>::try_mutate(
-                        &source,
+                        &planned_execution.source,
                         &m.job_id,
                         |s| -> Result<(), Error<T>> {
                             // NOTE: the None case is the "good case", used when there is *no entry yet and thus no duplicate assignment so far*.
@@ -700,6 +740,7 @@ pub mod pallet {
                                 None => {
                                     *s = Some(Assignment {
                                         slot: slot as u8,
+                                        start_delay: planned_execution.start_delay,
                                         fee_per_execution: fee,
                                         acknowledged: false,
                                         sla: SLA {
@@ -714,7 +755,7 @@ pub mod pallet {
                         },
                     )?;
                     <StoredStorageCapacity<T>>::set(
-                        &source,
+                        &planned_execution.source,
                         capacity.checked_sub(registration.storage.into()),
                     );
                 }
@@ -763,8 +804,12 @@ pub mod pallet {
             <StoredMatches<T>>::iter_prefix_values(&source).any(|_| true)
         }
 
-        fn fits_schedule(source: &T::AccountId, schedule: &Schedule) -> Result<(), DispatchError> {
-            for (job_id, _) in <StoredMatches<T>>::iter_prefix(&source) {
+        fn fits_schedule(
+            source: &T::AccountId,
+            schedule: &Schedule,
+            start_delay: u64,
+        ) -> Result<(), DispatchError> {
+            for (job_id, assignment) in <StoredMatches<T>>::iter_prefix(&source) {
                 // TODO decide tradeoff: we could save this lookup at the cost of storing the schedule along with the match or even completly move it from StoredJobRegistration into StoredMatches
                 let other = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
@@ -777,14 +822,21 @@ pub mod pallet {
                     continue;
                 }
 
-                let it = schedule.iter().map(|start| {
-                    let end = start.checked_add(schedule.interval)?;
-                    Some((start, end))
-                });
-                let other_it = other.schedule.iter().map(|start| {
-                    let end = start.checked_add(other.schedule.interval)?;
-                    Some((start, end))
-                });
+                let it = schedule
+                    .iter(start_delay)
+                    .ok_or(Error::<T>::CalculationOverflow)?
+                    .map(|start| {
+                        let end = start.checked_add(schedule.interval)?;
+                        Some((start, end))
+                    });
+                let other_it = other
+                    .schedule
+                    .iter(assignment.start_delay)
+                    .ok_or(Error::<T>::CalculationOverflow)?
+                    .map(|start| {
+                        let end = start.checked_add(other.schedule.interval)?;
+                        Some((start, end))
+                    });
 
                 it.merge(other_it).try_fold(0u64, |prev_end, bounds| {
                     let (start, end) = bounds.ok_or(Error::<T>::CalculationOverflow)?;

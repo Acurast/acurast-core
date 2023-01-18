@@ -6,8 +6,8 @@ use pallet_acurast::JobRegistrationFor;
 use pallet_acurast::Schedule;
 
 use crate::stub::*;
-use crate::JobRequirements;
 use crate::{mock::*, AdvertisementRestriction, Assignment, Error, JobStatus, Match, SLA};
+use crate::{JobRequirements, PlannedExecution};
 
 #[test]
 fn test_match() {
@@ -38,7 +38,10 @@ fn test_match() {
     let job_id = (alice_account_id(), registration.script.clone());
     let m = Match {
         job_id: job_id.clone(),
-        sources: vec![processor_account_id()],
+        sources: vec![PlannedExecution {
+            source: processor_account_id(),
+            start_delay: 0,
+        }],
     };
 
     ExtBuilder::default().build().execute_with(|| {
@@ -110,13 +113,20 @@ fn test_match() {
             AcurastMarketplace::stored_job_status(alice_account_id(), script())
         );
 
+        // pretend time moved on
+        assert_eq!(1, System::block_number());
+        later(registration.schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
+        assert_eq!(2, System::block_number());
+
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
         assert_eq!(
             Some(Assignment {
                 slot: 0,
+                start_delay: 0,
                 fee_per_execution: MockAsset {
                     id: 0,
                     amount: 5_020_000
@@ -137,18 +147,13 @@ fn test_match() {
         );
 
         // pretend time moved on
-        assert_eq!(1, System::block_number());
-        later(registration.schedule.end_time); // we cannot set time twice in same block
-        assert_eq!(2, System::block_number());
-
-        // assert_ok!(Timestamp::set(
-        //     RuntimeOrigin::none(),
-        //     registration.schedule.end_time
-        // ));
+        later(registration.schedule.range(0).unwrap().1 - 2000);
+        assert_eq!(3, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            true,
         ));
         assert_eq!(
             None,
@@ -189,6 +194,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -206,6 +212,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -223,6 +230,7 @@ fn test_match() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -317,7 +325,10 @@ fn test_no_match_schedule_overlap() {
         // the first job matches because capacity left
         let m = Match {
             job_id: job_id1.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
@@ -327,7 +338,10 @@ fn test_no_match_schedule_overlap() {
         // this one does not match anymore
         let m = Match {
             job_id: job_id1.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_err!(
             AcurastMarketplace::propose_matching(
@@ -422,7 +436,10 @@ fn test_more_reports_than_expected() {
 
         let m = Match {
             job_id: job_id.clone(),
-            sources: vec![processor_account_id()],
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
@@ -435,20 +452,32 @@ fn test_more_reports_than_expected() {
         ));
 
         // report twice with success
+        // -------------------------
+
+        // pretend time moved on
+        let mut iter = registration.schedule.iter(0).unwrap();
+        later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
+
+        // pretend time moved on
+        later(iter.next().unwrap() + 1000);
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id.clone(),
+            false
         ));
 
         // third report is illegal!
+        later(registration.schedule.range(0).unwrap().1 + 1000);
         assert_err!(
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
-                job_id.clone()
+                job_id.clone(),
+                true
             ),
             Error::<Test>::MoreReportsThanExpected
         );
@@ -478,6 +507,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -495,6 +525,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000
@@ -512,6 +543,7 @@ fn test_more_reports_than_expected() {
                     processor_account_id(),
                     Assignment {
                         slot: 0,
+                        start_delay: 0,
                         fee_per_execution: MockAsset {
                             id: 0,
                             amount: 5_020_000

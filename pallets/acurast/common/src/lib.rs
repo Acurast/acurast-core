@@ -4,6 +4,8 @@
 mod attestation;
 #[cfg(feature = "attestation")]
 pub use attestation::*;
+#[cfg(test)]
+mod tests;
 
 mod types;
 pub use types::*;

@@ -46,6 +46,16 @@ impl Reward for AcurastAsset {
     }
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+pub struct AcurastBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_assets::BenchmarkHelper<codec::Compact<AcurastAssetId>> for AcurastBenchmarkHelper {
+    fn create_asset_id_parameter(id: u32) -> codec::Compact<AcurastAssetId> {
+        codec::Compact(id)
+    }
+}
+
 pub mod acurast_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
@@ -128,6 +138,7 @@ pub mod acurast_runtime {
         pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
         pub const IsRelay: bool = false;
         pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
+        pub const ReportTolerance: u64 = 12000;
     }
     parameter_types! {
         pub const BlockHashCount: u64 = 250;
@@ -233,6 +244,9 @@ pub mod acurast_runtime {
         type Extra = ();
         type WeightInfo = ();
         type RemoveItemsLimit = ();
+
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = AcurastBenchmarkHelper;
     }
 
     pub struct FeeManagerImpl;
@@ -267,6 +281,7 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
+        type ReportTolerance = ReportTolerance;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
