@@ -428,6 +428,7 @@ pub mod pallet {
 
             if last {
                 // TODO update reputation since we don't expect further reports for this job
+                // (only for attested devices! because non-attested devices)
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
                 <StoredMatches<T>>::remove(&who, &job_id);

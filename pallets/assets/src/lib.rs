@@ -14,13 +14,10 @@ use frame_support::{dispatch::Weight, traits::Get};
 use sp_runtime::traits::StaticLookup;
 
 pub use pallet::*;
+use sp_std::prelude::*;
 pub use weights::WeightInfo;
 
 type AccountIdLookupOf<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
-
-pub trait AssetBarrier<AccountId> {
-    fn can_create_asset(who: AccountId) -> bool;
-}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -39,7 +36,6 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as pallet_assets::Config<I>>::RuntimeEvent>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        type Barrier: AssetBarrier<Self::AccountId>;
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
     }
@@ -64,6 +60,8 @@ pub mod pallet {
         AssetAlreadyIndexed,
         IdAlreadyUsed,
         CreationNotAllowed,
+        AssetNotIndexed,
+        InvalidAssetIndex,
     }
 
     #[pallet::call]
@@ -71,22 +69,20 @@ pub mod pallet {
     where
         T: pallet_assets::Config<I>,
     {
-        /// Creates and indexes a bijective mapping `id <-> native_id` and proxies to [`pallet_assets::Pallet::create()`].
+        /// Creates and indexes a bijective mapping `id <-> native_id` and proxies to [`pallet_assets::Pallet::force_create()`].
         ///
         /// This extrinsic is idempotent when used with the same `id` and `asset` (does not receate the asset in `pallet_asset`.
         /// Trying to index an already indexed asset or using the same id to index a different asset results in an error.
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config<I>>::WeightInfo::create())]
-        pub fn create(
+        pub fn force_create(
             origin: OriginFor<T>,
             id: <T as pallet_assets::Config<I>>::AssetIdParameter,
             asset: MultiLocation,
-            admin: AccountIdLookupOf<T>,
-            min_balance: <T as pallet_assets::Config<I>>::Balance,
+            owner: AccountIdLookupOf<T>,
+            is_sufficient: bool,
+            min_balance: T::Balance,
         ) -> DispatchResult {
-            let origin_ = ensure_signed(origin.clone())?;
-            ensure!(T::Barrier::can_create_asset(origin_), Error::<T, I>::CreationNotAllowed);
-
             {
                 let id: <T as pallet_assets::Config<I>>::AssetId = id.into();
 
@@ -104,7 +100,13 @@ pub mod pallet {
                 }
             }
 
-            <pallet_assets::Pallet<T, I>>::create(origin, id, admin, min_balance)?;
+            <pallet_assets::Pallet<T, I>>::force_create(
+                origin,
+                id,
+                owner,
+                is_sufficient,
+                min_balance,
+            )?;
 
             Ok(())
         }
@@ -114,13 +116,38 @@ pub mod pallet {
         #[pallet::weight(<T as Config<I>>::WeightInfo::set_metadata(name.len() as u32, symbol.len() as u32))]
         pub fn set_metadata(
             origin: OriginFor<T>,
-            id: T::AssetIdParameter,
+            id: MultiLocation,
             name: Vec<u8>,
             symbol: Vec<u8>,
             decimals: u8,
         ) -> DispatchResult {
-            <pallet_assets::Pallet<T, I>>::set_metadata(origin, id, name, symbol, decimals)?;
-            Ok(())
+            let id = <ReverseAssetIndex<T, I>>::get(&id).ok_or(Error::<T, I>::AssetNotIndexed)?;
+            <pallet_assets::Pallet<T, I>>::set_metadata(origin, id.into(), name, symbol, decimals)
+        }
+
+        #[pallet::call_index(8)]
+        #[pallet::weight(<T as Config<I>>::WeightInfo::transfer())]
+        pub fn transfer(
+            origin: OriginFor<T>,
+            id: MultiLocation,
+            target: AccountIdLookupOf<T>,
+            #[pallet::compact] amount: T::Balance,
+        ) -> DispatchResult {
+            let id = <ReverseAssetIndex<T, I>>::get(&id).ok_or(Error::<T, I>::AssetNotIndexed)?;
+            <pallet_assets::Pallet<T, I>>::transfer(origin, id.into(), target, amount)
+        }
+
+        #[pallet::call_index(10)]
+        #[pallet::weight(<T as Config<I>>::WeightInfo::force_transfer())]
+        pub fn force_transfer(
+            origin: OriginFor<T>,
+            id: MultiLocation,
+            source: AccountIdLookupOf<T>,
+            dest: AccountIdLookupOf<T>,
+            #[pallet::compact] amount: T::Balance,
+        ) -> DispatchResult {
+            let id = <ReverseAssetIndex<T, I>>::get(&id).ok_or(Error::<T, I>::AssetNotIndexed)?;
+            <pallet_assets::Pallet<T, I>>::force_transfer(origin, id.into(), source, dest, amount)
         }
     }
 }

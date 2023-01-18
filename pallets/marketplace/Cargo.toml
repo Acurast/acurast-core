@@ -43,6 +43,7 @@ pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-fe
 parachains-common = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.36", optional = true, default-features = false }
 
 pallet-acurast = { path = "../acurast", default-features = false}
+pallet-acurast-assets = { path = "../assets" }
 
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
@@ -64,7 +65,8 @@ runtime-benchmarks = [
 	"pallet-balances",
 	"sp-core",
 	"parachains-common",
-	"pallet-acurast/runtime-benchmarks"
+	"pallet-acurast/runtime-benchmarks",
+	"pallet-acurast-assets/runtime-benchmarks",
 ]
 
 std = [
@@ -87,6 +89,7 @@ std = [
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
-	"pallet-acurast/std"
+	"pallet-acurast/std",
+	"pallet-acurast-assets/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
