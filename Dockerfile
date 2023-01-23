@@ -1,4 +1,4 @@
-FROM rust:1.62
+FROM rust:1.66
 RUN apt update && apt install --assume-yes git clang curl libssl-dev llvm libudev-dev make protobuf-compiler
 RUN rustup update nightly && rustup target add wasm32-unknown-unknown --toolchain nightly
 
@@ -7,4 +7,4 @@ COPY . .
 
 RUN cargo build --release
 
-CMD [ "help" ]
+ENTRYPOINT [ "cargo" ]
