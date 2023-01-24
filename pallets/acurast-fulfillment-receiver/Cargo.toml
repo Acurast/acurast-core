@@ -1,6 +1,7 @@
 [package]
 name = "pallet-acurast-fulfillment-receiver"
 version = "0.0.1"
+license = "MIT"
 homepage = "https://docs.acurast.com/"
 repository = "https://github.com/Acurast/acurast-core"
 edition = "2021"

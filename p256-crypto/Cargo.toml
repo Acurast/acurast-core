@@ -1,5 +1,6 @@
 [package]
 name = "acurast-p256-crypto"
+license = "MIT"
 version = "0.0.1"
 edition = "2021"
 
