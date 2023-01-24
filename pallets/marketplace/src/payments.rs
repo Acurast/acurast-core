@@ -9,7 +9,7 @@ use frame_support::{
     },
     Never, PalletId, Parameter,
 };
-use xcm::prelude::MultiLocation;
+use xcm::prelude::AssetId;
 
 /// Asset barrier that allows to customize which asset can be used as reward.
 pub trait AssetBarrier<Asset> {
@@ -115,7 +115,7 @@ where
     T: pallet_acurast_assets::Config,
     Asset: Parameter
         + Member
-        + Reward<AssetId = MultiLocation, AssetAmount = <T as pallet_assets::Config>::Balance>,
+        + Reward<AssetId = AssetId, AssetAmount = <T as pallet_assets::Config>::Balance>,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
 {
