@@ -181,6 +181,7 @@ impl Schedule {
     }
 }
 
+/// Implements the [Iterator] trait so that scheduled jobs in a [Schedule] can be iterated.
 pub struct ScheduleIter {
     delayed_start_time: u64,
     delayed_end_time: u64,

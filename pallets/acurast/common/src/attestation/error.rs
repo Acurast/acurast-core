@@ -8,23 +8,41 @@ use scale_info::TypeInfo;
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
 
 pub enum ValidationError {
+    /// Error occured while parsing the key description
     ParseKeyDescription,
+    /// The certificate chain is too short
     ChainTooShort,
+    /// The certificate chain is too long
     ChainTooLong,
+    /// Generic decode error
     DecodeError,
+    /// Generic parse error
     ParseError,
+    /// The root certificate is not trusted
     UntrustedRoot,
+    /// Missing extension field in certificate
     ExtensionMissing,
+    /// Error occured when parsing the extension field
     ParseExtension,
+    /// Attestation version is not supported
     UnsupportedAttestationVersion,
+    /// Error occured while parsing the P256 public key
     ParseP256PublicKey,
+    /// Error occured while parsing the P384 public key
     ParseP384PublicKey,
+    /// ECDSA Algorithm missing
     MissingECDSAAlgorithmTyp,
+    /// Public key missing
     MissingPublicKey,
+    /// Signature has an invalid encoding
     InvalidSignatureEncoding,
+    /// Signature is invalid
     InvalidSignature,
+    /// Signature Algorithm is not supported
     UnsupportedSignatureAlgorithm,
+    /// Public Key Algorithm is not supported
     UnsupportedPublicKeyAlgorithm,
+    /// Issuer is invalid
     InvalidIssuer,
     /// Specified signature algorithms do not match.
     ///

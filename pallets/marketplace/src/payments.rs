@@ -10,6 +10,7 @@ use frame_support::{
     Never, PalletId, Parameter,
 };
 
+/// Asset barrier that allows to customize which asset can be used as reward.
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
 }
@@ -22,13 +23,17 @@ impl<Asset> AssetBarrier<Asset> for () {
 
 pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
+/// Trait representing the reward for the execution of a job.
 pub trait Reward {
     type AssetId;
     type AssetAmount;
     type Error;
 
+    /// Creates new reward with given amount.
     fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error>;
+    /// Returns the reward asset id.
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error>;
+    /// Returns the reward amount.
     fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error>;
 }
 
@@ -50,6 +55,7 @@ impl Reward for () {
     }
 }
 
+/// Trait used to manage lock up and payments of rewards.
 pub trait RewardManager<T: frame_system::Config> {
     type Reward: Parameter + Member + Reward;
 

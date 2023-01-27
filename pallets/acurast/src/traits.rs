@@ -7,6 +7,7 @@ use crate::{
     Script,
 };
 
+/// Allows to customize who can perform an update to the certificate revocation list.
 pub trait RevocationListUpdateBarrier<T: Config> {
     fn can_update_revocation_list(
         origin: &T::AccountId,
@@ -23,6 +24,7 @@ impl<T: Config> RevocationListUpdateBarrier<T> for () {
     }
 }
 
+/// Allows to customize the kind of key attestations that are accepted.
 pub trait KeyAttestationBarrier<T: Config> {
     fn accept_attestation_for_origin(origin: &T::AccountId, attestation: &Attestation) -> bool;
 }
@@ -41,6 +43,7 @@ pub trait WeightInfo {
     fn update_certificate_revocation_list() -> Weight;
 }
 
+/// Allows to hook additional logic for various job related extrinsics.
 pub trait JobHooks<T: Config> {
     fn register_hook(
         who: &<T as frame_system::Config>::AccountId,

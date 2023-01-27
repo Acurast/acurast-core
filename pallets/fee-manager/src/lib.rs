@@ -57,6 +57,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
+        /// Updates the fee percentage. Can only be called by a privileged/root account.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
@@ -72,6 +73,7 @@ pub mod pallet {
 }
 
 impl<T: Config<I>, I: 'static> Pallet<T, I> {
+    /// Sets the fee percentage in storage.
     pub fn set_fee_percentage(fee: Percent) -> (u16, u64) {
         let new_version = <Version<T, I>>::mutate(|version| {
             version.add_assign(1);
