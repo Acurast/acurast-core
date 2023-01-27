@@ -33,7 +33,7 @@ fn parse_cert_payload(serialized: &[u8]) -> Result<&[u8], ParseError> {
 
 pub type CertificateId = (Vec<u8>, Vec<u8>);
 
-/// Createds a unique id for a certificate.
+/// Creates a unique id for a certificate.
 pub fn unique_id(
     issuer: &Name,
     serial_number: &asn1::BigUint,
