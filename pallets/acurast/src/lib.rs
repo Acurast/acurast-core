@@ -291,7 +291,10 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(< T as Config >::WeightInfo::register())]
+        /// Updates the certificate recovation list by adding or removing a revocked certificate serial number. Attestations signed
+        /// by a revocked certificate will not be considered valid anymore. The `RevocationListUpdateBarrier` configured in [Config] can be used to
+        /// customize who can execute this action.
+        #[pallet::weight(<T as Config>::WeightInfo::register())]
         #[pallet::call_index(6)]
         pub fn update_certificate_revocation_list(
             origin: OriginFor<T>,

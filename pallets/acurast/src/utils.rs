@@ -11,6 +11,7 @@ use crate::{
     SerialNumber, StoredAttestation, StoredRevokedCertificate, ValidatingCertIds,
 };
 
+/// Validates and returns an [Attestation] from the provided chain.
 pub fn validate_and_extract_attestation<T: Config>(
     source: &T::AccountId,
     attestation_chain: &AttestationChain,
@@ -55,6 +56,7 @@ pub fn validate_and_extract_attestation<T: Config>(
     })
 }
 
+/// Ensures that the provided account id has a valid (not expired and not revoked) key attestation.
 pub fn ensure_source_verified<T: Config>(source: &T::AccountId) -> Result<(), Error<T>> {
     let attestation =
         <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotVerified)?;
@@ -63,6 +65,7 @@ pub fn ensure_source_verified<T: Config>(source: &T::AccountId) -> Result<(), Er
     Ok(())
 }
 
+/// Ensures the attestation is not expired.
 pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
     let now: u64 = T::UnixTime::now()
         .as_millis()
@@ -90,6 +93,7 @@ pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result
     Ok(())
 }
 
+/// Ensures the attestation is not signed by a revoked certificate.
 pub(crate) fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
     let ids = &attestation.cert_ids;
     for id in ids {
@@ -100,6 +104,7 @@ pub(crate) fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result
     Ok(())
 }
 
+/// Ensures the provided public key correponds to the provided account id.
 fn ensure_valid_public_key_for_source<T: Config>(
     source: &T::AccountId,
     public_key: &PublicKey,

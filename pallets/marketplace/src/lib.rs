@@ -301,6 +301,7 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Proposes processors to match with a job. The match fails if it conflicts with the processor's schedule.
         #[pallet::call_index(2)]
         #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
         pub fn propose_matching(
@@ -321,6 +322,7 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Acknowledges a matched job. It fails if the origin is not the account that was matched for the job.
         #[pallet::call_index(3)]
         #[pallet::weight(< T as Config >::WeightInfo::acknowledge_match())]
         pub fn acknowledge_match(
@@ -573,6 +575,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// Checks if a Processor - Job match is possible and returns the job reward.
         fn process_matching<'a>(
             matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
         ) -> Result<RewardFor<T>, DispatchError> {
@@ -804,6 +807,7 @@ pub mod pallet {
             <StoredMatches<T>>::iter_prefix_values(&source).any(|_| true)
         }
 
+        /// Checks of a new job schedule fits with the existing schedule for a processor.
         fn fits_schedule(
             source: &T::AccountId,
             schedule: &Schedule,
@@ -852,6 +856,7 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Calculates the total reward amount.
         fn total_reward_amount(
             registration: &JobRegistrationFor<T>,
         ) -> Result<T::AssetAmount, Error<T>> {
@@ -871,6 +876,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?)
         }
 
+        /// Calculates the fee per job execution.
         fn fee_per_execution(
             registration: &JobRegistrationFor<T>,
             pricing: &PricingVariantFor<T>,
@@ -890,6 +896,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?)
         }
 
+        /// Returns the current timestamp.
         fn now() -> Result<u64, DispatchError> {
             Ok(<T as pallet_acurast::Config>::UnixTime::now()
                 .as_millis()
