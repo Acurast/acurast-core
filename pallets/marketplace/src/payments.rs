@@ -10,7 +10,7 @@ use frame_support::{
     Never, PalletId, Parameter,
 };
 
-/// Asset barrier that allows to customize the what asset can be used as reward.
+/// Asset barrier that allows to customize which asset can be used as reward.
 pub trait AssetBarrier<Asset> {
     fn can_use_asset(asset: &Asset) -> bool;
 }
