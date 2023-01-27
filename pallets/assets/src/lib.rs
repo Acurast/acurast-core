@@ -10,6 +10,8 @@
 // mod benchmarking;
 pub mod weights;
 
+pub mod traits;
+
 use sp_runtime::traits::StaticLookup;
 
 pub use pallet::*;
@@ -21,6 +23,7 @@ type AccountIdLookupOf<T> = <<T as frame_system::Config>::Lookup as StaticLookup
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::traits::AssetValidator;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use xcm::latest::MultiLocation;
@@ -50,9 +53,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
         fn default() -> Self {
-            Self{
-                assets: vec![],
-            }
+            Self { assets: vec![] }
         }
     }
 
@@ -60,9 +61,22 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
         fn build(&self) {
             for &(internal_asset_id, general_index) in &self.assets {
-                let asset_id = AssetId::Concrete(MultiLocation::new(1, X3(Parachain(1000), PalletInstance(50), GeneralIndex(general_index as u128))));
-                assert!(!<AssetIndex<T, I>>::contains_key(internal_asset_id), "Asset internal id already in use");
-                assert!(!<ReverseAssetIndex<T, I>>::contains_key(asset_id), "Asset id already in use");
+                let asset_id = AssetId::Concrete(MultiLocation::new(
+                    1,
+                    X3(
+                        Parachain(1000),
+                        PalletInstance(50),
+                        GeneralIndex(general_index as u128),
+                    ),
+                ));
+                assert!(
+                    !<AssetIndex<T, I>>::contains_key(internal_asset_id),
+                    "Asset internal id already in use"
+                );
+                assert!(
+                    !<ReverseAssetIndex<T, I>>::contains_key(asset_id),
+                    "Asset id already in use"
+                );
             }
         }
     }
@@ -100,16 +114,18 @@ pub mod pallet {
         #[pallet::weight(<T as Config<I>>::WeightInfo::create())]
         pub fn create(
             origin: OriginFor<T>,
-            id: T::AssetIdParameter,
+            id: <T as pallet_assets::Config<I>>::AssetIdParameter,
+            asset: AssetId,
             admin: AccountIdLookupOf<T>,
             min_balance: T::Balance,
         ) -> DispatchResult {
-            <pallet_assets::Pallet<T, I>>::create(
-                origin,
-                id,
-                admin,
-                min_balance,
-            )
+            let new = Self::update_index(id, asset)?;
+
+            if new {
+                <pallet_assets::Pallet<T, I>>::create(origin, id, admin, min_balance)
+            } else {
+                Ok(())
+            }
         }
 
         /// Creates and indexes a bijective mapping `id <-> internal_id` and proxies to [`pallet_assets::Pallet::force_create()`].
@@ -126,32 +142,19 @@ pub mod pallet {
             is_sufficient: bool,
             min_balance: T::Balance,
         ) -> DispatchResult {
-            {
-                let id: <T as pallet_assets::Config<I>>::AssetId = id.into();
+            let new = Self::update_index(id, asset)?;
 
-                if let Some(value) = <AssetIndex<T, I>>::get(&id) {
-                    ensure!(value == asset, Error::<T, I>::IdAlreadyUsed);
-                    return Ok(());
-                } else {
-                    <AssetIndex<T, I>>::insert(&id, &asset);
-                    if let Some(value) = <ReverseAssetIndex<T, I>>::get(&asset) {
-                        ensure!(value == id, Error::<T, I>::AssetAlreadyIndexed);
-                        return Ok(());
-                    } else {
-                        <ReverseAssetIndex<T, I>>::insert(&asset, &id);
-                    }
-                }
+            if new {
+                <pallet_assets::Pallet<T, I>>::force_create(
+                    origin,
+                    id,
+                    owner,
+                    is_sufficient,
+                    min_balance,
+                )
+            } else {
+                Ok(())
             }
-
-            <pallet_assets::Pallet<T, I>>::force_create(
-                origin,
-                id,
-                owner,
-                is_sufficient,
-                min_balance,
-            )?;
-
-            Ok(())
         }
 
         /// Proxies to [`pallet_assets::Pallet::set_metadata()`].
@@ -191,6 +194,39 @@ pub mod pallet {
         ) -> DispatchResult {
             let id = <ReverseAssetIndex<T, I>>::get(&id).ok_or(Error::<T, I>::AssetNotIndexed)?;
             <pallet_assets::Pallet<T, I>>::force_transfer(origin, id.into(), source, dest, amount)
+        }
+    }
+
+    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> Pallet<T, I> {
+        fn update_index(
+            id: <T as pallet_assets::Config<I>>::AssetIdParameter,
+            asset: AssetId,
+        ) -> Result<bool, DispatchError> {
+            let id: <T as pallet_assets::Config<I>>::AssetId = id.into();
+
+            if let Some(value) = <AssetIndex<T, I>>::get(&id) {
+                ensure!(value == asset, Error::<T, I>::IdAlreadyUsed);
+                return Ok(false);
+            } else {
+                <AssetIndex<T, I>>::insert(&id, &asset);
+                if let Some(value) = <ReverseAssetIndex<T, I>>::get(&asset) {
+                    ensure!(value == id, Error::<T, I>::AssetAlreadyIndexed);
+                    return Ok(false);
+                } else {
+                    <ReverseAssetIndex<T, I>>::insert(&asset, &id);
+                }
+            }
+
+            Ok(true)
+        }
+    }
+
+    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> AssetValidator<AssetId> for Pallet<T, I> {
+        type Error = Error<T, I>;
+
+        fn validate(asset: &AssetId) -> Result<(), Self::Error> {
+            Self::reverse_asset_index(asset).ok_or(Error::<T, I>::AssetNotIndexed)?;
+            Ok(())
         }
     }
 }
