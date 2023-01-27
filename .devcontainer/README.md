@@ -38,7 +38,7 @@ RUN apk add curl
 
 To rebuild the image, either:
 
-- With VSCode through the command palette, select `Remote-Containers: Rebuild and reopen in container`
+- With VSCode through the command palette, select `Dev Containers: Open Folder in Container...`
 - With a terminal, go to this directory and `docker-compose build`
 
 ### Customize VS code settings
