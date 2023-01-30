@@ -15,6 +15,7 @@ pub mod traits;
 use sp_runtime::traits::StaticLookup;
 
 pub use pallet::*;
+use sp_std::borrow::Borrow;
 use sp_std::prelude::*;
 pub use weights::WeightInfo;
 
@@ -27,7 +28,8 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use xcm::latest::MultiLocation;
-    use xcm::prelude::{AssetId, GeneralIndex, PalletInstance, Parachain, X3};
+    use xcm::prelude::{Abstract, AssetId, Concrete, GeneralIndex, PalletInstance, Parachain, X3};
+    use xcm_executor::traits::Convert;
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
@@ -229,6 +231,20 @@ pub mod pallet {
         fn validate(asset: &AssetId) -> Result<(), Self::Error> {
             Self::reverse_asset_index(asset).ok_or(Error::<T, I>::AssetNotIndexed)?;
             Ok(())
+        }
+    }
+
+    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> Convert<MultiLocation, T::AssetId>
+        for Pallet<T, I>
+    {
+        fn convert_ref(id: impl Borrow<MultiLocation>) -> Result<T::AssetId, ()> {
+            Ok(Self::reverse_asset_index(Concrete(id.borrow().clone())).ok_or(())?)
+        }
+        fn reverse_ref(id: impl Borrow<T::AssetId>) -> Result<MultiLocation, ()> {
+            match Self::asset_index(id.borrow()).ok_or(())? {
+                Concrete(location) => Ok(location),
+                Abstract(_) => Err(()),
+            }
         }
     }
 }
