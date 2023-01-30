@@ -9,4 +9,6 @@ pub trait ManagerToken<T: Config> {
 
 pub trait WeightInfo {
     fn create_manager() -> Weight;
+    fn update_processor_pairings() -> Weight;
+    fn recover_funds() -> Weight;
 }

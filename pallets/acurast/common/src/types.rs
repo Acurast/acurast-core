@@ -26,29 +26,8 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
-/// Structure used to updated the allowed sources list of a [Registration].
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct AllowedSourcesUpdate<A>
-where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-{
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to add or remove.
-    pub account_id: A,
-}
-
 /// A Job ID consists of an [AccountId] and a [Script].
 pub type JobId<AccountId> = (AccountId, Script);
-
-/// Structure used to updated the certificate recovation list.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct CertificateRevocationListUpdate {
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to add or remove.
-    pub cert_serial_number: SerialNumber,
-}
 
 /// The allowed sources update operation.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
@@ -56,6 +35,22 @@ pub enum ListUpdateOperation {
     Add,
     Remove,
 }
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct ListUpdate<T>
+where
+    T: Encode + Decode + TypeInfo + MaxEncodedLen + Clone + PartialEq,
+{
+    /// The update operation.
+    pub operation: ListUpdateOperation,
+    pub item: T,
+}
+
+/// Structure used to updated the allowed sources list of a [Registration].
+pub type AllowedSourcesUpdate<AccountId> = ListUpdate<AccountId>;
+
+/// Structure used to updated the certificate recovation list.
+pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]

@@ -5,10 +5,12 @@ use frame_support::{
     BoundedVec,
 };
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+use acurast_common::ListUpdate;
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct ProcessorPairing<AccountId, Proof>
 where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay,
     Proof: Parameter + Member + Verify,
 {
     pub processor: AccountId,
@@ -27,3 +29,5 @@ where
             .verify(self.data.as_ref(), &self.processor.clone().into())
     }
 }
+
+pub type ProcessorPairingUpdate<AccountId, Proof> = ListUpdate<ProcessorPairing<AccountId, Proof>>;
