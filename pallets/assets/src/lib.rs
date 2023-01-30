@@ -70,13 +70,15 @@ pub mod pallet {
                     ),
                 ));
                 assert!(
-                    !<AssetIndex<T, I>>::contains_key(internal_asset_id),
+                    !<AssetIndex<T, I>>::contains_key(&internal_asset_id),
                     "Asset internal id already in use"
                 );
+                <AssetIndex<T, I>>::insert(&internal_asset_id, &asset_id);
                 assert!(
-                    !<ReverseAssetIndex<T, I>>::contains_key(asset_id),
+                    !<ReverseAssetIndex<T, I>>::contains_key(&asset_id),
                     "Asset id already in use"
                 );
+                <ReverseAssetIndex<T, I>>::insert(&asset_id, &internal_asset_id);
             }
         }
     }
