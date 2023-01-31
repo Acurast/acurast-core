@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 
 use frame_support::traits::OriginTrait;
+use pallet_acurast_marketplace::Reward;
 use scale_info::TypeInfo;
 use sp_core::*;
+use sp_std::prelude::*;
 use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-use pallet_acurast_marketplace::Reward;
-
-pub type AcurastAssetId = u32;
+pub type AcurastAssetId = AssetId;
+pub type InternalAssetId = u32;
 pub type AcurastAssetAmount = u128;
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
@@ -29,18 +30,12 @@ impl Reward for AcurastAsset {
     }
 
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        match &self.0.id {
-            Concrete(location) => match location.last() {
-                Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
-                _ => Err(()),
-            },
-            Abstract(_) => Err(()),
-        }
+        Ok(self.0.id.clone())
     }
 
     fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        match &self.0.fun {
-            Fungible(amount) => Ok(*amount),
+        match self.0.fun {
+            Fungible(amount) => Ok(amount),
             _ => Err(()),
         }
     }
@@ -66,6 +61,7 @@ pub mod acurast_runtime {
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
     use sp_core::*;
+    use sp_runtime::DispatchError;
     use sp_std::prelude::*;
     use xcm::latest::prelude::*;
     use xcm_builder::{
@@ -77,10 +73,11 @@ pub mod acurast_runtime {
     use xcm_executor::XcmExecutor;
 
     pub use pallet_acurast;
+    use pallet_acurast_assets::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
 
-    use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
+    use super::{AcurastAsset, AcurastAssetAmount, AcurastAssetId, InternalAssetId};
 
     pub type AccountId = AccountId32;
     pub type LocalOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>;
@@ -111,6 +108,15 @@ pub mod acurast_runtime {
         }
     }
 
+    pub struct PassAllAssets {}
+    impl<AssetId> AssetValidator<AssetId> for PassAllAssets {
+        type Error = DispatchError;
+
+        fn validate(_: &AssetId) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
     pub const MILLISECS_PER_BLOCK: u64 = 12000;
     pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
     pub const UNIT: AcurastAssetAmount = 1_000_000;
@@ -125,7 +131,8 @@ pub mod acurast_runtime {
             System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
             Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-            Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
+            Assets: pallet_assets::{Pallet, Storage, Event<T>, Config<T>}, // hide calls since they get proxied by `pallet_acurast_assets`
+            AcurastAssets: pallet_acurast_assets::{Pallet, Storage, Event<T>, Config<T>, Call},
             ParachainInfo: parachain_info::{Pallet, Storage, Config},
             MsgQueue: super::mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
@@ -229,8 +236,8 @@ pub mod acurast_runtime {
     impl pallet_assets::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type Balance = AcurastAssetAmount;
-        type AssetId = AcurastAssetId;
-        type AssetIdParameter = codec::Compact<AcurastAssetId>;
+        type AssetId = InternalAssetId;
+        type AssetIdParameter = codec::Compact<InternalAssetId>;
         type Currency = Balances;
         type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
         type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
@@ -247,6 +254,11 @@ pub mod acurast_runtime {
 
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper = AcurastBenchmarkHelper;
+    }
+
+    impl pallet_acurast_assets::Config for Runtime {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     pub struct FeeManagerImpl;
@@ -285,6 +297,7 @@ pub mod acurast_runtime {
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
+        type AssetValidator = PassAllAssets;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
 
@@ -788,7 +801,14 @@ pub mod mock_msg_queue {
                     if let Ok(xcm) =
                         VersionedXcm::<T::RuntimeCall>::decode(&mut remaining_fragments)
                     {
-                        let _ = Self::handle_xcmp_message(sender, sent_at, xcm, max_weight);
+                        let _ = Self::handle_xcmp_message(sender, sent_at, xcm, max_weight)
+                            .map_err(|e| {
+                                debug_assert!(
+                                    false,
+                                    "Handling XCMP message returned error {:?}",
+                                    e
+                                );
+                            });
                     } else {
                         debug_assert!(false, "Invalid incoming XCMP message data");
                     }
