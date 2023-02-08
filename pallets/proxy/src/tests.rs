@@ -114,7 +114,7 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
 
     // make asset 22 a valid asset via Genesis
     pallet_acurast_assets::GenesisConfig::<Runtime> {
-        assets: vec![(22, 22)],
+        assets: vec![(22, 1000, 50, 22)],
     }
     .assimilate_storage(&mut t)
     .unwrap();

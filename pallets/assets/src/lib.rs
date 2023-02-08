@@ -49,7 +49,7 @@ pub mod pallet {
     pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
         /// Genesis assets: `internal asset ID -> asset ID` (Statemint's general index)
         // TODO generalize asset ID to any XCM AssetID once structs derive deserialize (merged with XCM-3)
-        pub assets: Vec<(<T as pallet_assets::Config<I>>::AssetId, u32)>,
+        pub assets: Vec<(<T as pallet_assets::Config<I>>::AssetId, u32, u8, u128)>,
     }
 
     #[cfg(feature = "std")]
@@ -62,13 +62,13 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
         fn build(&self) {
-            for &(internal_asset_id, general_index) in &self.assets {
+            for &(internal_asset_id, parachain, pallet_instance, general_index) in &self.assets {
                 let asset_id = AssetId::Concrete(MultiLocation::new(
                     1,
                     X3(
-                        Parachain(1000),
-                        PalletInstance(50),
-                        GeneralIndex(general_index as u128),
+                        Parachain(parachain),
+                        PalletInstance(pallet_instance),
+                        GeneralIndex(general_index),
                     ),
                 ));
                 assert!(
