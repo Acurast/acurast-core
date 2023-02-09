@@ -57,5 +57,6 @@ runtime-benchmarks = [
 	"parachains-common",
 	"pallet-assets",
 	"pallet-uniques",
+	"hex-literal",
 ]
 try-runtime = ["frame-support/try-runtime"]

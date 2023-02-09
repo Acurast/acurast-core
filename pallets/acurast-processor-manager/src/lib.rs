@@ -6,6 +6,8 @@ mod types;
 
 #[cfg(test)]
 pub mod mock;
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod stub;
 #[cfg(test)]
 mod tests;
 
@@ -29,7 +31,7 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{CheckedAdd, IdentifyAccount, StaticLookup, Verify},
-        traits::{Currency, Get},
+        traits::Get,
         Blake2_128,
     };
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
@@ -45,7 +47,6 @@ pub mod pallet {
         type Proof: Parameter + Member + Verify + MaxEncodedLen;
         type ManagerId: Member + Parameter + MaxEncodedLen + Copy + CheckedAdd + From<u128>;
         type ManagerIdProvider: ManagerIdProvider<Self>;
-        type Currency: Currency<Self::AccountId>;
         type ProcessorAssetRecovery: ProcessorAssetRecovery<Self>;
         type MaxPairingUpdates: Get<u32>;
         /// Weight Info for extrinsics.

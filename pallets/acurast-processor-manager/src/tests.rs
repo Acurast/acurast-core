@@ -1,22 +1,13 @@
 #![cfg(test)]
 
-use crate::{mock::*, Error, Event, ProcessorPairingFor, ProcessorPairingUpdateFor};
+use crate::{mock::*, stub::*, Error, Event, ProcessorPairingFor, ProcessorPairingUpdateFor};
 use acurast_common::ListUpdateOperation;
-use frame_support::{
-    assert_err, assert_ok,
-    sp_runtime::MultiSignature,
-    traits::{fungible::Inspect, nonfungibles::Create},
-};
+use frame_support::{assert_err, assert_ok, sp_runtime::MultiSignature, traits::fungible::Inspect};
 use sp_core::Pair;
 
 #[test]
 fn test_update_processor_pairings_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -84,11 +75,6 @@ fn test_update_processor_pairings_succeed_1() {
 #[test]
 fn test_update_processor_pairings_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -151,11 +137,6 @@ fn test_update_processor_pairings_succeed_2() {
 #[test]
 fn test_update_processor_pairings_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -178,11 +159,6 @@ fn test_update_processor_pairings_failure_1() {
 #[test]
 fn test_update_processor_pairings_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -215,11 +191,6 @@ fn test_update_processor_pairings_failure_2() {
 #[test]
 fn test_update_processor_pairings_failure_3() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -256,11 +227,6 @@ fn test_update_processor_pairings_failure_3() {
 #[test]
 fn test_update_processor_pairings_failure_4() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -325,11 +291,6 @@ fn test_update_processor_pairings_failure_4() {
 #[test]
 fn test_recover_funds_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -382,11 +343,6 @@ fn test_recover_funds_succeed_1() {
 #[test]
 fn test_recover_funds_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -424,11 +380,6 @@ fn test_recover_funds_succeed_2() {
 #[test]
 fn test_recover_funds_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();
@@ -460,11 +411,6 @@ fn test_recover_funds_failure_1() {
 #[test]
 fn test_recover_funds_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(Uniques::create_collection(
-            &0,
-            &alice_account_id(),
-            &alice_account_id()
-        ));
         let (processor_pair, processor_account) = generate_account();
         let message = vec![0u8];
         let signature: MultiSignature = processor_pair.sign(&message).into();

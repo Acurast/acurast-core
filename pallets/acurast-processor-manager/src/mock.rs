@@ -1,39 +1,22 @@
 use frame_support::{
-    dispatch::Weight,
     pallet_prelude::GenesisBuild,
-    parameter_types,
     sp_runtime::{
         generic,
-        traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32},
-        AccountId32, MultiSignature,
+        traits::{AccountIdLookup, BlakeTwo256, ConstU128, ConstU32},
+        MultiSignature,
     },
     traits::{
         fungible::{Inspect, Mutate},
         fungibles::{InspectEnumerable, Transfer},
-        nonfungibles::InspectEnumerable as NFTInspectEnumerable,
+        nonfungibles::{Create, InspectEnumerable as NFTInspectEnumerable},
         AsEnsureOriginWithArg, Everything,
     },
-    PalletId,
 };
 use frame_system::{EnsureRoot, EnsureRootWithSuccess};
-use hex_literal::hex;
-use sp_core::{sr25519, Pair};
 use sp_std::prelude::*;
 
+use crate::stub::*;
 use crate::*;
-
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-type Block = frame_system::mocking::MockBlock<Test>;
-type AssetId = u128;
-type Balance = u128;
-type AccountId = AccountId32;
-type BlockNumber = u32;
-
-const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
-const UNIT: Balance = 1_000_000;
-const MILLIUNIT: Balance = UNIT / 1_000;
-// const MICROUNIT: Balance = UNIT / 1_000_000;
-const INITIAL_BALANCE: u128 = UNIT * 100;
 
 pub struct ExtBuilder;
 
@@ -81,9 +64,9 @@ impl Default for ExtBuilder {
 
 frame_support::construct_runtime!(
     pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
+        Block = Block<Test>,
+        NodeBlock = Block<Test>,
+        UncheckedExtrinsic = UncheckedExtrinsic<Test>,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
@@ -92,22 +75,6 @@ frame_support::construct_runtime!(
         AcurastProcessorManager: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
-
-parameter_types! {
-    pub const BlockHashCount: BlockNumber = 2400;
-    pub const RootAccountId: AccountId = alice_account_id();
-}
-parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
-    pub const MinimumPeriod: u64 = 2000;
-    pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
-}
-parameter_types! {
-    pub const MaxReserves: u32 = 50;
-    pub const MaxLocks: u32 = 50;
-    pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
-    pub const ReportTolerance: u64 = 12000;
-}
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
@@ -195,7 +162,6 @@ impl Config for Test {
     type Proof = MultiSignature;
     type ManagerId = AssetId;
     type ManagerIdProvider = AcurastManagerIdProvider;
-    type Currency = Balances;
     type ProcessorAssetRecovery = AcurastProcessorAssetRecovery;
     type MaxPairingUpdates = ConstU32<5>;
     type WeightInfo = ();
@@ -207,6 +173,9 @@ impl ManagerIdProvider<Test> for AcurastManagerIdProvider {
         id: <Test as Config>::ManagerId,
         owner: &<Test as frame_system::Config>::AccountId,
     ) -> frame_support::pallet_prelude::DispatchResult {
+        if Uniques::collection_owner(0).is_none() {
+            Uniques::create_collection(&0, &alice_account_id(), &alice_account_id())?;
+        }
         Uniques::do_mint(0, id, owner.clone(), |_| Ok(()))
     }
 
@@ -266,39 +235,4 @@ pub fn events() -> Vec<RuntimeEvent> {
     System::reset_events();
 
     evt
-}
-
-pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
-    AcurastPalletId::get().into_account_truncating()
-}
-
-pub fn processor_account_id() -> AccountId {
-    hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
-}
-
-pub const fn alice_account_id() -> AccountId {
-    AccountId32::new([0u8; 32])
-}
-
-pub const fn bob_account_id() -> AccountId {
-    AccountId32::new([1u8; 32])
-}
-
-pub const fn charlie_account_id() -> AccountId {
-    AccountId32::new([2u8; 32])
-}
-
-pub const fn dave_account_id() -> AccountId {
-    AccountId32::new([3u8; 32])
-}
-
-pub const fn eve_account_id() -> AccountId {
-    AccountId32::new([4u8; 32])
-}
-
-pub fn generate_account() -> (sr25519::Pair, AccountId) {
-    let (pair, _) = sr25519::Pair::generate();
-    let account_id: AccountId = pair.public().into();
-
-    (pair, account_id)
 }
