@@ -290,6 +290,7 @@ impl Config for Test {
     type AssetId = AssetId;
     type AssetAmount = AssetAmount;
     type RewardManager = MockRewardManager;
+    type AssetValidator = PassAllAssets;
     type WeightInfo = weights::Weights<Test>;
 }
 

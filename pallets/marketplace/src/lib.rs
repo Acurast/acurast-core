@@ -38,6 +38,7 @@ pub mod pallet {
         AllowedSourcesUpdate, JobHooks, JobId, JobRegistrationFor, Schedule, Script,
         StoredJobRegistration,
     };
+    use pallet_acurast_assets::traits::AssetValidator;
 
     use crate::payments::{Reward, RewardFor};
     use crate::types::*;
@@ -76,6 +77,7 @@ pub mod pallet {
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
+        type AssetValidator: AssetValidator<Self::AssetId>;
         type WeightInfo: WeightInfo;
     }
 
@@ -271,6 +273,7 @@ pub mod pallet {
             );
             // update separate pricing index
             for pricing in &advertisement.pricing {
+                T::AssetValidator::validate(&pricing.reward_asset).map_err(|e| e.into())?;
                 <StoredAdvertisementPricing<T>>::insert(&who, &pricing.reward_asset, pricing);
             }
 
@@ -428,6 +431,7 @@ pub mod pallet {
 
             if last {
                 // TODO update reputation since we don't expect further reports for this job
+                // (only for attested devices! because non-attested devices)
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
                 <StoredMatches<T>>::remove(&who, &job_id);
@@ -606,6 +610,8 @@ pub mod pallet {
                     .try_get_asset_id()
                     .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                     .into();
+                T::AssetValidator::validate(&reward_asset).map_err(|e| e.into())?;
+
                 let reward_amount: <T as Config>::AssetAmount = requirements
                     .reward
                     .try_get_amount()

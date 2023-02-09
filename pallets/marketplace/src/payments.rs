@@ -9,6 +9,7 @@ use frame_support::{
     },
     Never, PalletId, Parameter,
 };
+use xcm::prelude::AssetId;
 
 /// Asset barrier that allows to customize which asset can be used as reward.
 pub trait AssetBarrier<Asset> {
@@ -111,14 +112,10 @@ pub struct AssetRewardManager<Asset, Barrier, AssetSplit>(
 impl<T: Config, Asset, Barrier, AssetSplit> RewardManager<T>
     for AssetRewardManager<Asset, Barrier, AssetSplit>
 where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: TryInto<u32>,
+    T: pallet_acurast_assets::Config,
     Asset: Parameter
         + Member
-        + Reward<
-            AssetId = <T as pallet_assets::Config>::AssetId,
-            AssetAmount = <T as pallet_assets::Config>::Balance,
-        >,
+        + Reward<AssetId = AssetId, AssetAmount = <T as pallet_assets::Config>::Balance>,
     Barrier: AssetBarrier<Asset>,
     AssetSplit: FeeManager,
 {
@@ -144,7 +141,7 @@ where
         // this is a privileged operation, hence the force_transfer call.
         // we could do an approve_transfer first, but this would require the assets pallet being
         // public which we can't do at the moment due to our statemint assets 1 to 1 integration
-        pallet_assets::Pallet::<T>::force_transfer(
+        pallet_acurast_assets::Pallet::<T>::force_transfer(
             pallet_origin,
             id.into(),
             owner,
@@ -175,15 +172,15 @@ where
 
         // Transfer fees to Acurast fees manager account
         let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
-        pallet_assets::Pallet::<T>::transfer(
+        pallet_acurast_assets::Pallet::<T>::transfer(
             pallet_origin.clone(),
-            id.into(),
+            id.clone().into(),
             T::Lookup::unlookup(fee_pallet_account),
             fee,
         )?;
 
         // Transfer reward to the processor
-        pallet_assets::Pallet::<T>::transfer(
+        pallet_acurast_assets::Pallet::<T>::transfer(
             pallet_origin,
             id.into(),
             target,

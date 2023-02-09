@@ -54,7 +54,7 @@ decl_test_parachain! {
 }
 
 decl_test_parachain! {
-    pub struct CumulusParachain {
+    pub struct ProxyParachain {
         Runtime = proxy_runtime::Runtime,
         XcmpMessageHandler = proxy_runtime::MsgQueue,
         DmpMessageHandler = proxy_runtime::MsgQueue,
@@ -75,7 +75,7 @@ decl_test_network! {
         relay_chain = Relay,
         parachains = vec![
             (2000, AcurastParachain),
-            (2001, CumulusParachain),
+            (2001, ProxyParachain),
         ],
     }
 }
@@ -108,6 +108,13 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
             (22, alice_account_id(), INITIAL_BALANCE),
             (22, bob_account_id(), INITIAL_BALANCE),
         ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    // make asset 22 a valid asset via Genesis
+    pallet_acurast_assets::GenesisConfig::<Runtime> {
+        assets: vec![(22, 1000, 50, 22)],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -211,6 +218,16 @@ pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset
         },
     }
 }
+pub fn asset(id: u32) -> AssetId {
+    AssetId::Concrete(MultiLocation::new(
+        1,
+        X3(
+            Parachain(1000),
+            PalletInstance(50),
+            GeneralIndex(id as u128),
+        ),
+    ))
+}
 pub fn advertisement(
     fee_per_millisecond: u128,
 ) -> Advertisement<AccountId, AcurastAssetId, AcurastAssetAmount> {
@@ -218,7 +235,7 @@ pub fn advertisement(
         PricingVariant<AcurastAssetId, AcurastAssetAmount>,
         ConstU32<MAX_PRICING_VARIANTS>,
     > = bounded_vec![PricingVariant {
-        reward_asset: 22,
+        reward_asset: asset(22),
         fee_per_millisecond,
         fee_per_storage_byte: 0,
         base_fee_per_execution: 0,
@@ -332,7 +349,7 @@ mod network_tests {
             ));
         });
 
-        CumulusParachain::execute_with(|| {
+        ProxyParachain::execute_with(|| {
             use proxy_runtime::{RuntimeEvent, System};
             assert!(System::events().iter().any(|r| matches!(
                 r.event,
@@ -489,7 +506,7 @@ mod proxy_calls {
     }
 
     fn register_job_alice() {
-        CumulusParachain::execute_with(|| {
+        ProxyParachain::execute_with(|| {
             use crate::pallet::Call::register;
             use proxy_runtime::RuntimeCall::AcurastProxy;
 
@@ -536,7 +553,7 @@ mod proxy_calls {
         use frame_support::dispatch::Dispatchable;
         use pallet_acurast::Script;
 
-        CumulusParachain::execute_with(|| {
+        ProxyParachain::execute_with(|| {
             use crate::pallet::Call::deregister;
             use proxy_runtime::RuntimeCall::AcurastProxy;
 
@@ -584,7 +601,7 @@ mod proxy_calls {
         let rand_array: [u8; 32] = rand::random();
         let source = frame_support::sp_runtime::AccountId32::new(rand_array);
 
-        CumulusParachain::execute_with(|| {
+        ProxyParachain::execute_with(|| {
             use crate::pallet::Call::update_allowed_sources;
             use pallet_acurast::{AllowedSourcesUpdate, ListUpdateOperation};
             use proxy_runtime::RuntimeCall::AcurastProxy;
@@ -635,7 +652,7 @@ mod proxy_calls {
     fn advertise_bob() {
         Network::reset();
 
-        CumulusParachain::execute_with(|| {
+        ProxyParachain::execute_with(|| {
             use crate::pallet::Call::advertise;
             use proxy_runtime::RuntimeCall::AcurastProxy;
 
