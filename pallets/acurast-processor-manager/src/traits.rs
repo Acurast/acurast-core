@@ -2,13 +2,35 @@ use frame_support::{dispatch::Weight, pallet_prelude::DispatchResult, sp_runtime
 
 use crate::Config;
 
-pub trait ManagerToken<T: Config> {
-    fn create_token(id: T::ManagerId, owner: &T::AccountId) -> DispatchResult;
-    fn manager_id_for_owner(owner: &T::AccountId) -> Result<T::ManagerId, DispatchError>;
+pub trait ManagerIdProvider<T: Config> {
+    fn create_manager_id(id: T::ManagerId, owner: &T::AccountId) -> DispatchResult;
+    fn manager_id_for(owner: &T::AccountId) -> Result<T::ManagerId, DispatchError>;
+    fn owner_for(manager_id: T::ManagerId) -> Result<T::AccountId, DispatchError>;
+}
+
+pub trait ProcessorAssetRecovery<T: Config> {
+    fn recover_assets(
+        processor: &T::AccountId,
+        destination_account: &T::AccountId,
+    ) -> DispatchResult;
 }
 
 pub trait WeightInfo {
     fn create_manager() -> Weight;
     fn update_processor_pairings() -> Weight;
     fn recover_funds() -> Weight;
+}
+
+impl WeightInfo for () {
+    fn create_manager() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
+
+    fn update_processor_pairings() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
+
+    fn recover_funds() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
 }

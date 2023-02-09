@@ -1,7 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub mod traits;
-pub mod types;
+mod functions;
+mod traits;
+mod types;
 
 #[cfg(test)]
 pub mod mock;
@@ -11,6 +12,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+pub use functions::*;
 pub use pallet::*;
 pub use traits::*;
 pub use types::*;
@@ -27,7 +29,7 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{CheckedAdd, IdentifyAccount, StaticLookup, Verify},
-        traits::{Currency, ExistenceRequirement},
+        traits::{Currency, Get},
         Blake2_128,
     };
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
@@ -42,8 +44,10 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         type Proof: Parameter + Member + Verify + MaxEncodedLen;
         type ManagerId: Member + Parameter + MaxEncodedLen + Copy + CheckedAdd + From<u128>;
-        type ManagerToken: ManagerToken<Self>;
+        type ManagerIdProvider: ManagerIdProvider<Self>;
         type Currency: Currency<Self::AccountId>;
+        type ProcessorAssetRecovery: ProcessorAssetRecovery<Self>;
+        type MaxPairingUpdates: Get<u32>;
         /// Weight Info for extrinsics.
         type WeightInfo: WeightInfo;
     }
@@ -55,7 +59,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn managed_processors)]
     pub(super) type ManagedProcessors<T: Config> =
-        StorageDoubleMap<_, Blake2_128, T::ManagerId, Blake2_128Concat, T::AccountId, ()>;
+        StorageDoubleMap<_, Blake2_128Concat, T::ManagerId, Blake2_128Concat, T::AccountId, ()>;
 
     #[pallet::storage]
     #[pallet::getter(fn manager_id_for_processor)]
@@ -71,6 +75,7 @@ pub mod pallet {
     pub enum Event<T: Config> {
         ManagerCreated(T::AccountId, T::ManagerId),
         ProcessorPairingsUpdated(T::AccountId, Vec<ProcessorPairingUpdateFor<T>>),
+        ProcessorFundsRecovered(T::AccountId, T::AccountId),
     }
 
     // Errors inform users that something went wrong.
@@ -81,6 +86,7 @@ pub mod pallet {
         ProcessorPairedWithAnotherManager,
         InvalidPairingProof,
         ProcessorHasNoManager,
+        TooManyPairingUpdates,
     }
 
     #[pallet::call]
@@ -96,45 +102,27 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let manager_id = T::ManagerToken::manager_id_for_owner(&who)
-                .or_else::<DispatchError, _>(|_| {
-                    let id = <LastManagerId<T>>::get()
-                        .unwrap_or(0u128.into())
-                        .checked_add(&1u128.into())
-                        .ok_or(Error::<T>::FailedToCreateManagerId)?;
+            if pairing_updates.len() > T::MaxPairingUpdates::get() as usize {
+                return Err(Error::<T>::TooManyPairingUpdates)?;
+            }
 
-                    T::ManagerToken::create_token(id, &who)?;
-                    <LastManagerId<T>>::set(Some(id));
-
-                    Self::deposit_event(Event::<T>::ManagerCreated(who.clone(), id));
-
-                    Ok(id)
-                })?;
+            let (manager_id, created) = Self::do_get_or_create_manager_id(&who)?;
+            if created {
+                Self::deposit_event(Event::<T>::ManagerCreated(who.clone(), manager_id));
+            }
 
             for update in &pairing_updates {
-                if !update.item.validate() {
-                    return Err(Error::<T>::InvalidPairingProof)?;
-                }
                 match update.operation {
                     ListUpdateOperation::Add => {
-                        if let Some(id) = Self::manager_id_for_processor(&update.item.processor) {
-                            if id == manager_id {
-                                return Err(Error::<T>::ProcessorAlreadyPaired)?;
-                            }
-                            return Err(Error::<T>::ProcessorPairedWithAnotherManager)?;
+                        if !update.item.validate() {
+                            return Err(Error::<T>::InvalidPairingProof)?;
                         }
-                        <ManagedProcessors<T>>::insert(manager_id, &update.item.processor, ());
-                        <ProcessorToManagerIdIndex<T>>::insert(&update.item.processor, manager_id);
+                        Self::do_add_processor_manager_pairing(&update.item.processor, manager_id)?
                     }
-                    ListUpdateOperation::Remove => {
-                        if let Some(id) = Self::manager_id_for_processor(&update.item.processor) {
-                            if id != manager_id {
-                                return Err(Error::<T>::ProcessorPairedWithAnotherManager)?;
-                            }
-                            <ManagedProcessors<T>>::remove(manager_id, &update.item.processor);
-                            <ProcessorToManagerIdIndex<T>>::remove(&update.item.processor);
-                        }
-                    }
+                    ListUpdateOperation::Remove => Self::do_remove_processor_manager_pairing(
+                        &update.item.processor,
+                        manager_id,
+                    )?,
                 }
             }
 
@@ -151,7 +139,7 @@ pub mod pallet {
             destination: <T::Lookup as StaticLookup>::Source,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let manager_id = T::ManagerToken::manager_id_for_owner(&who)?;
+            let manager_id = T::ManagerIdProvider::manager_id_for(&who)?;
             let processor_account_id = <T::Lookup as StaticLookup>::lookup(processor)?;
             let destination_account_id = <T::Lookup as StaticLookup>::lookup(destination)?;
             let processor_manager_id = Self::manager_id_for_processor(&processor_account_id)
@@ -161,16 +149,15 @@ pub mod pallet {
                 return Err(Error::<T>::ProcessorPairedWithAnotherManager)?;
             }
 
-            let free_balance = T::Currency::free_balance(&processor_account_id);
-
-            T::Currency::transfer(
+            T::ProcessorAssetRecovery::recover_assets(
                 &processor_account_id,
                 &destination_account_id,
-                free_balance,
-                ExistenceRequirement::AllowDeath,
             )?;
 
-            // TODO: implement transfer of assets too
+            Self::deposit_event(Event::<T>::ProcessorFundsRecovered(
+                processor_account_id,
+                destination_account_id,
+            ));
 
             Ok(().into())
         }
