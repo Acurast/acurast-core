@@ -73,7 +73,6 @@ pub mod pallet {
         Register,
         Deregister,
         UpdateAllowedSources,
-        Fulfill,
         Advertise,
     }
 
