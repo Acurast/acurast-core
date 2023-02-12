@@ -9,6 +9,12 @@ use crate::Config;
 pub const MAX_PRICING_VARIANTS: u32 = 100;
 pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
 
+pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
+pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
+
+pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
+pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
+
 pub type JobRegistrationForMarketplace<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
@@ -159,4 +165,12 @@ pub struct PlannedExecution<AccountId> {
     pub source: AccountId,
     /// The start delay for the first execution and all the following executions.
     pub start_delay: u64,
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub enum ExecutionResult {
+    /// Success with operation hash.
+    Success(ExecutionOperationHash),
+    /// Failure with message.
+    Failure(ExecutionFailureMessage),
 }
