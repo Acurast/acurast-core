@@ -9,6 +9,9 @@ use crate::Config;
 pub const MAX_PRICING_VARIANTS: u32 = 100;
 pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
 
+pub const REPORT_FAILURE_MAX_LENGTH: u32 = 3000;
+pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<REPORT_FAILURE_MAX_LENGTH>>;
+
 pub type JobRegistrationForMarketplace<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
