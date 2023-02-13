@@ -136,6 +136,10 @@ pub mod pallet {
         AdvertisementStored(AdvertisementFor<T>, T::AccountId),
         /// A registration was successfully removed. [who]
         AdvertisementRemoved(T::AccountId),
+        /// An execution is reported to be successful.
+        ExecutionSuccess(JobId<T::AccountId>, ExecutionOperationHash),
+        /// An execution is reported to have failed.
+        ExecutionFailure(JobId<T::AccountId>, ExecutionFailureMessage),
     }
 
     #[pallet::error]
@@ -383,6 +387,7 @@ pub mod pallet {
             origin: OriginFor<T>, // source
             job_id: JobId<T::AccountId>,
             last: bool,
+            execution_result: ExecutionResult,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -450,6 +455,15 @@ pub mod pallet {
                 assignment.fee_per_execution.clone(),
                 T::Lookup::unlookup(who.clone()),
             )?;
+
+            match execution_result {
+                ExecutionResult::Success(operation_hash) => {
+                    Self::deposit_event(Event::ExecutionSuccess(job_id.clone(), operation_hash))
+                }
+                ExecutionResult::Failure(message) => {
+                    Self::deposit_event(Event::ExecutionFailure(job_id.clone(), message))
+                }
+            }
 
             Self::deposit_event(Event::Reported(job_id, who, assignment.clone()));
             Ok(().into())

@@ -6,7 +6,9 @@ use pallet_acurast::JobRegistrationFor;
 use pallet_acurast::Schedule;
 
 use crate::stub::*;
-use crate::{mock::*, AdvertisementRestriction, Assignment, Error, JobStatus, Match, SLA};
+use crate::{
+    mock::*, AdvertisementRestriction, Assignment, Error, ExecutionResult, JobStatus, Match, SLA,
+};
 use crate::{JobRequirements, PlannedExecution};
 
 #[test]
@@ -121,7 +123,8 @@ fn test_match() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false
+            false,
+            ExecutionResult::Success(operation_hash())
         ));
         assert_eq!(
             Some(Assignment {
@@ -154,6 +157,7 @@ fn test_match() {
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
             true,
+            ExecutionResult::Success(operation_hash())
         ));
         assert_eq!(
             None,
@@ -207,6 +211,10 @@ fn test_match() {
                     id: 0,
                     amount: 5_020_000
                 })),
+                RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
+                    job_id.clone(),
+                    operation_hash()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
                     job_id.clone(),
                     processor_account_id(),
@@ -225,6 +233,10 @@ fn test_match() {
                     id: 0,
                     amount: 5_020_000
                 })),
+                RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
+                    job_id.clone(),
+                    operation_hash()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
                     job_id.clone(),
                     processor_account_id(),
@@ -460,7 +472,8 @@ fn test_more_reports_than_expected() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false
+            false,
+            ExecutionResult::Success(operation_hash())
         ));
 
         // pretend time moved on
@@ -468,7 +481,8 @@ fn test_more_reports_than_expected() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false
+            false,
+            ExecutionResult::Success(operation_hash())
         ));
 
         // third report is illegal!
@@ -477,7 +491,8 @@ fn test_more_reports_than_expected() {
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
                 job_id.clone(),
-                true
+                true,
+                ExecutionResult::Success(operation_hash())
             ),
             Error::<Test>::MoreReportsThanExpected
         );
@@ -520,6 +535,10 @@ fn test_more_reports_than_expected() {
                     id: 0,
                     amount: 5_020_000
                 })),
+                RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
+                    job_id.clone(),
+                    operation_hash()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
                     job_id.clone(),
                     processor_account_id(),
@@ -538,6 +557,10 @@ fn test_more_reports_than_expected() {
                     id: 0,
                     amount: 5_020_000
                 })),
+                RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
+                    job_id.clone(),
+                    operation_hash()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
                     job_id.clone(),
                     processor_account_id(),

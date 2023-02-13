@@ -41,16 +41,6 @@ impl Reward for AcurastAsset {
     }
 }
 
-#[cfg(feature = "runtime-benchmarks")]
-pub struct AcurastBenchmarkHelper;
-
-#[cfg(feature = "runtime-benchmarks")]
-impl pallet_assets::BenchmarkHelper<codec::Compact<AcurastAssetId>> for AcurastBenchmarkHelper {
-    fn create_asset_id_parameter(id: u32) -> codec::Compact<AcurastAssetId> {
-        codec::Compact(id)
-    }
-}
-
 pub mod acurast_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
@@ -251,9 +241,6 @@ pub mod acurast_runtime {
         type Extra = ();
         type WeightInfo = ();
         type RemoveItemsLimit = ();
-
-        #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper = AcurastBenchmarkHelper;
     }
 
     impl pallet_acurast_assets::Config for Runtime {
