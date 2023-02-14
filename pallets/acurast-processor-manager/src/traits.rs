@@ -18,6 +18,7 @@ pub trait ProcessorAssetRecovery<T: Config> {
 pub trait WeightInfo {
     fn create_manager() -> Weight;
     fn update_processor_pairings() -> Weight;
+    fn pair_with_manager() -> Weight;
     fn recover_funds() -> Weight;
 }
 
@@ -27,6 +28,10 @@ impl WeightInfo for () {
     }
 
     fn update_processor_pairings() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
+
+    fn pair_with_manager() -> Weight {
         Weight::from_ref_time(10_000)
     }
 

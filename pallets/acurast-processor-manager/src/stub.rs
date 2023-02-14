@@ -1,15 +1,17 @@
 #![allow(dead_code)]
 
+use codec::Encode;
 use frame_support::{
     parameter_types,
-    sp_runtime::{traits::AccountIdConversion, AccountId32},
+    sp_runtime::{traits::AccountIdConversion, AccountId32, MultiSignature},
     weights::Weight,
     PalletId,
 };
 use hex_literal::hex;
 use sp_core::{sr25519, Pair};
-
+#[cfg(feature = "std")]
 pub type UncheckedExtrinsic<T> = frame_system::mocking::MockUncheckedExtrinsic<T>;
+#[cfg(feature = "std")]
 pub type Block<T> = frame_system::mocking::MockBlock<T>;
 pub type AssetId = u128;
 pub type Balance = u128;
@@ -73,3 +75,25 @@ pub fn generate_account() -> (sr25519::Pair, AccountId) {
 
     (pair, account_id)
 }
+
+pub fn generate_signature(
+    signer: &sr25519::Pair,
+    account: &AccountId,
+    timestamp: u128,
+    counter: u64,
+) -> MultiSignature {
+    let message = [account.encode(), timestamp.encode(), counter.encode()].concat();
+    signer.sign(&message).into()
+}
+
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+
+//     #[test]
+//     fn sign() {
+//         let pair = sr25519::Pair::from_string("//Bob", None).unwrap();
+//         let signature = pair.sign(&[0]);
+//         println!("{:?}", signature)
+//     }
+// }

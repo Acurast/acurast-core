@@ -2,20 +2,20 @@
 
 use crate::{mock::*, stub::*, Error, Event, ProcessorPairingFor, ProcessorPairingUpdateFor};
 use acurast_common::ListUpdateOperation;
-use frame_support::{assert_err, assert_ok, sp_runtime::MultiSignature, traits::fungible::Inspect};
-use sp_core::Pair;
+use frame_support::{assert_err, assert_ok, traits::fungible::Inspect};
 
 #[test]
 fn test_update_processor_pairings_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.try_into().unwrap(),
+                timestamp,
                 signature,
             ),
         }];
@@ -75,14 +75,15 @@ fn test_update_processor_pairings_succeed_1() {
 #[test]
 fn test_update_processor_pairings_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.try_into().unwrap(),
+                timestamp,
                 signature,
             ),
         }];
@@ -93,14 +94,13 @@ fn test_update_processor_pairings_succeed_2() {
         assert_ok!(call);
         _ = events();
 
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let signature = generate_signature(&signer, &bob_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.try_into().unwrap(),
+                timestamp,
                 signature,
             ),
         }];
@@ -137,14 +137,15 @@ fn test_update_processor_pairings_succeed_2() {
 #[test]
 fn test_update_processor_pairings_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                vec![1u8].try_into().unwrap(),
+                1657363915003u128,
                 signature,
             ),
         }];
@@ -159,24 +160,26 @@ fn test_update_processor_pairings_failure_1() {
 #[test]
 fn test_update_processor_pairings_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature_1 = generate_signature(&signer, &alice_account_id(), timestamp, 1);
+        let signature_2 = generate_signature(&signer, &alice_account_id(), timestamp, 2);
         let updates = vec![
             ProcessorPairingUpdateFor::<Test> {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
-                    signature.clone(),
+                    timestamp,
+                    signature_1,
                 ),
             },
             ProcessorPairingUpdateFor::<Test> {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.try_into().unwrap(),
-                    signature,
+                    timestamp,
+                    signature_2,
                 ),
             },
         ];
@@ -191,15 +194,17 @@ fn test_update_processor_pairings_failure_2() {
 #[test]
 fn test_update_processor_pairings_failure_3() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature_1 = generate_signature(&signer, &alice_account_id(), timestamp, 1);
+        let signature_2 = generate_signature(&signer, &bob_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
-                signature.clone(),
+                timestamp,
+                signature_1,
             ),
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
@@ -212,8 +217,8 @@ fn test_update_processor_pairings_failure_3() {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
-                signature.clone(),
+                timestamp,
+                signature_2,
             ),
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
@@ -227,15 +232,16 @@ fn test_update_processor_pairings_failure_3() {
 #[test]
 fn test_update_processor_pairings_failure_4() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![
             ProcessorPairingUpdateFor::<Test> {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
+                    timestamp,
                     signature.clone(),
                 ),
             },
@@ -243,7 +249,7 @@ fn test_update_processor_pairings_failure_4() {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
+                    timestamp,
                     signature.clone(),
                 ),
             },
@@ -251,7 +257,7 @@ fn test_update_processor_pairings_failure_4() {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
+                    timestamp,
                     signature.clone(),
                 ),
             },
@@ -259,7 +265,7 @@ fn test_update_processor_pairings_failure_4() {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
+                    timestamp,
                     signature.clone(),
                 ),
             },
@@ -267,7 +273,7 @@ fn test_update_processor_pairings_failure_4() {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.clone().try_into().unwrap(),
+                    timestamp,
                     signature.clone(),
                 ),
             },
@@ -275,7 +281,7 @@ fn test_update_processor_pairings_failure_4() {
                 operation: ListUpdateOperation::Add,
                 item: ProcessorPairingFor::<Test>::new_with_proof(
                     processor_account.clone(),
-                    message.try_into().unwrap(),
+                    timestamp,
                     signature,
                 ),
             },
@@ -291,14 +297,15 @@ fn test_update_processor_pairings_failure_4() {
 #[test]
 fn test_recover_funds_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
+                timestamp,
                 signature.clone(),
             ),
         }];
@@ -343,14 +350,15 @@ fn test_recover_funds_succeed_1() {
 #[test]
 fn test_recover_funds_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
+                timestamp,
                 signature.clone(),
             ),
         }];
@@ -380,14 +388,15 @@ fn test_recover_funds_succeed_2() {
 #[test]
 fn test_recover_funds_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
+                timestamp,
                 signature.clone(),
             ),
         }];
@@ -411,14 +420,15 @@ fn test_recover_funds_failure_1() {
 #[test]
 fn test_recover_funds_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (processor_pair, processor_account) = generate_account();
-        let message = vec![0u8];
-        let signature: MultiSignature = processor_pair.sign(&message).into();
+        let (signer, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
             item: ProcessorPairingFor::<Test>::new_with_proof(
                 processor_account.clone(),
-                message.clone().try_into().unwrap(),
+                timestamp,
                 signature.clone(),
             ),
         }];
@@ -439,5 +449,47 @@ fn test_recover_funds_failure_2() {
         );
 
         assert_err!(call, Error::<Test>::ProcessorPairedWithAnotherManager);
+    });
+}
+
+#[test]
+fn test_pair_with_manager() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (signer, manager_account) = generate_account();
+        let (_, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &manager_account, timestamp, 1);
+        let update = ProcessorPairingFor::<Test>::new_with_proof(
+            manager_account.clone(),
+            timestamp,
+            signature,
+        );
+        assert_ok!(AcurastProcessorManager::pair_with_manager(
+            RuntimeOrigin::signed(processor_account.clone()),
+            update.clone(),
+        ));
+
+        assert_eq!(Some(1), AcurastProcessorManager::last_manager_id());
+        assert_eq!(
+            Some(1),
+            AcurastProcessorManager::manager_id_for_processor(&processor_account)
+        );
+        assert_eq!(
+            Some(manager_account.clone()),
+            AcurastProcessorManager::manager_for_processor(&processor_account)
+        );
+        assert!(AcurastProcessorManager::managed_processors(1, &processor_account).is_some());
+        let last_events = events();
+        assert_eq!(
+            last_events[(last_events.len() - 2)..],
+            vec![
+                RuntimeEvent::AcurastProcessorManager(Event::ManagerCreated(manager_account, 1)),
+                RuntimeEvent::AcurastProcessorManager(Event::ProcessorPaired(
+                    processor_account,
+                    update
+                )),
+            ]
+        );
     });
 }

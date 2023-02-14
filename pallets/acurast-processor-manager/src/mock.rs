@@ -72,6 +72,7 @@ frame_support::construct_runtime!(
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         Uniques: pallet_uniques::{Pallet, Storage, Event<T>, Call},
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         AcurastProcessorManager: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -157,6 +158,13 @@ impl pallet_uniques::Config for Test {
     type WeightInfo = pallet_uniques::weights::SubstrateWeight<Self>;
 }
 
+impl pallet_timestamp::Config for Test {
+    type Moment = u64;
+    type OnTimestampSet = ();
+    type MinimumPeriod = MinimumPeriod;
+    type WeightInfo = ();
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Proof = MultiSignature;
@@ -164,6 +172,9 @@ impl Config for Test {
     type ManagerIdProvider = AcurastManagerIdProvider;
     type ProcessorAssetRecovery = AcurastProcessorAssetRecovery;
     type MaxPairingUpdates = ConstU32<5>;
+    type Counter = u64;
+    type PairingProofExpirationTimeSeconds = ConstU128<600>;
+    type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = ();
 }
 

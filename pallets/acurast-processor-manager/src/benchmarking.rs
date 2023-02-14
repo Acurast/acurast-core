@@ -5,6 +5,7 @@ use crate::stub::{alice_account_id, generate_account};
 use super::*;
 
 use acurast_common::ListUpdateOperation;
+use codec::Encode;
 use frame_benchmarking::{benchmarks, whitelist_account};
 use frame_support::{
     sp_runtime::{
@@ -15,20 +16,19 @@ use frame_support::{
 };
 use frame_system::RawOrigin;
 use sp_core::Pair;
+use sp_std::prelude::*;
 
 fn generate_pairing_update<T: Config<AccountId = AccountId32, Proof = MultiSignature>>(
     operation: ListUpdateOperation,
+    caller: &T::AccountId,
 ) -> ProcessorPairingUpdateFor<T> {
     let (processor_pair, processor_account_id) = generate_account();
-    let message = vec![0u8];
+    let timestamp = 1657363915002u128;
+    let message = [caller.encode(), timestamp.encode(), 1u128.encode()].concat();
     let signature: MultiSignature = processor_pair.sign(&message).into();
     ProcessorPairingUpdateFor::<T> {
         operation,
-        item: ProcessorPairingFor::<T>::new_with_proof(
-            processor_account_id,
-            message.try_into().unwrap(),
-            signature,
-        ),
+        item: ProcessorPairingFor::<T>::new_with_proof(processor_account_id, timestamp, signature),
     }
 }
 
@@ -45,7 +45,7 @@ benchmarks! {
         let caller: T::AccountId = alice_account_id().into();
         whitelist_account!(caller);
         for i in 0..x {
-            updates.push(generate_pairing_update::<T>(ListUpdateOperation::Add));
+            updates.push(generate_pairing_update::<T>(ListUpdateOperation::Add, &caller));
         }
     }: _(RawOrigin::Signed(caller), updates)
 
@@ -55,21 +55,30 @@ benchmarks! {
         let caller: T::AccountId = alice_account_id().into();
         whitelist_account!(caller);
         for i in 0..x {
-            updates_add.push(generate_pairing_update::<T>(ListUpdateOperation::Add));
+            updates_add.push(generate_pairing_update::<T>(ListUpdateOperation::Add, &caller));
         }
         Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), updates_add.clone())?;
         let updates_remove = updates_add.into_iter().map(|update| ProcessorPairingUpdateFor::<T> {
             operation: ListUpdateOperation::Remove,
-            item: ProcessorPairingFor::<T>::new(update.item.processor),
+            item: ProcessorPairingFor::<T>::new(update.item.account),
         }).collect::<Vec<_>>();
     }: update_processor_pairings(RawOrigin::Signed(caller), updates_remove)
+
+    pair_with_manager {
+        let (signer, manager_account) = generate_account();
+        let (_, processor_account) = generate_account();
+        let timestamp = 1657363915002u128;
+        let message = [manager_account.encode(), timestamp.encode(), 1u128.encode()].concat();
+        let signature: MultiSignature = signer.sign(&message).into();
+        let item = ProcessorPairingFor::<T>::new_with_proof(manager_account, timestamp, signature);
+    }: _(RawOrigin::Signed(processor_account), item)
 
     recover_funds {
         let caller: T::AccountId = alice_account_id().into();
         whitelist_account!(caller);
-        let update = generate_pairing_update::<T>(ListUpdateOperation::Add);
+        let update = generate_pairing_update::<T>(ListUpdateOperation::Add, &caller);
         Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()])?;
-    }: _(RawOrigin::Signed(caller.clone()), update.item.processor.into(), caller.clone().into())
+    }: _(RawOrigin::Signed(caller.clone()), update.item.account.into(), caller.clone().into())
 
     impl_benchmark_test_suite!(Pallet, mock::ExtBuilder::default().build(), mock::Test);
 }

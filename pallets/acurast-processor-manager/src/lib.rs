@@ -27,17 +27,18 @@ pub type ProcessorPairingUpdateFor<T> =
 #[frame_support::pallet]
 pub mod pallet {
     use acurast_common::ListUpdateOperation;
+    use codec::MaxEncodedLen;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
-        pallet_prelude::*,
+        pallet_prelude::{Member, *},
         sp_runtime::traits::{CheckedAdd, IdentifyAccount, StaticLookup, Verify},
-        traits::Get,
+        traits::{Get, UnixTime},
         Blake2_128,
     };
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
     use sp_std::prelude::*;
 
-    use crate::{traits::*, ProcessorPairingUpdateFor};
+    use crate::{traits::*, ProcessorPairingFor, ProcessorPairingUpdateFor};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -45,10 +46,14 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         type Proof: Parameter + Member + Verify + MaxEncodedLen;
-        type ManagerId: Member + Parameter + MaxEncodedLen + Copy + CheckedAdd + From<u128>;
+        type ManagerId: Parameter + Member + MaxEncodedLen + Copy + CheckedAdd + From<u128>;
         type ManagerIdProvider: ManagerIdProvider<Self>;
         type ProcessorAssetRecovery: ProcessorAssetRecovery<Self>;
         type MaxPairingUpdates: Get<u32>;
+        type Counter: Parameter + Member + MaxEncodedLen + Copy + CheckedAdd + Ord + From<u8>;
+        type PairingProofExpirationTimeSeconds: Get<u128>;
+        /// Timestamp
+        type UnixTime: UnixTime;
         /// Weight Info for extrinsics.
         type WeightInfo: WeightInfo;
     }
@@ -67,6 +72,10 @@ pub mod pallet {
     pub(super) type ProcessorToManagerIdIndex<T: Config> =
         StorageMap<_, Blake2_128, T::AccountId, T::ManagerId>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn counter_for_manager)]
+    pub(super) type ManagerCounter<T: Config> = StorageMap<_, Blake2_128, T::AccountId, T::Counter>;
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
@@ -77,6 +86,7 @@ pub mod pallet {
         ManagerCreated(T::AccountId, T::ManagerId),
         ProcessorPairingsUpdated(T::AccountId, Vec<ProcessorPairingUpdateFor<T>>),
         ProcessorFundsRecovered(T::AccountId, T::AccountId),
+        ProcessorPaired(T::AccountId, ProcessorPairingFor<T>),
     }
 
     // Errors inform users that something went wrong.
@@ -88,6 +98,8 @@ pub mod pallet {
         InvalidPairingProof,
         ProcessorHasNoManager,
         TooManyPairingUpdates,
+        CounterOverflow,
+        PairingProofExpired,
     }
 
     #[pallet::call]
@@ -115,15 +127,22 @@ pub mod pallet {
             for update in &pairing_updates {
                 match update.operation {
                     ListUpdateOperation::Add => {
-                        if !update.item.validate() {
+                        if !update.item.validate_timestamp::<T>() {
+                            return Err(Error::<T>::PairingProofExpired)?;
+                        }
+                        let counter = Self::counter_for_manager(&who)
+                            .unwrap_or(0u8.into())
+                            .checked_add(&1u8.into())
+                            .ok_or(Error::<T>::CounterOverflow)?;
+                        if !update.item.validate_signature::<T>(&who, counter) {
                             return Err(Error::<T>::InvalidPairingProof)?;
                         }
-                        Self::do_add_processor_manager_pairing(&update.item.processor, manager_id)?
+                        Self::do_add_processor_manager_pairing(&update.item.account, manager_id)?;
+                        <ManagerCounter<T>>::insert(&who, counter);
                     }
-                    ListUpdateOperation::Remove => Self::do_remove_processor_manager_pairing(
-                        &update.item.processor,
-                        manager_id,
-                    )?,
+                    ListUpdateOperation::Remove => {
+                        Self::do_remove_processor_manager_pairing(&update.item.account, manager_id)?
+                    }
                 }
             }
 
@@ -133,6 +152,42 @@ pub mod pallet {
         }
 
         #[pallet::call_index(1)]
+        #[pallet::weight(T::WeightInfo::pair_with_manager())]
+        pub fn pair_with_manager(
+            origin: OriginFor<T>,
+            pairing: ProcessorPairingFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            if !pairing.validate_timestamp::<T>() {
+                return Err(Error::<T>::PairingProofExpired)?;
+            }
+
+            let (manager_id, created) = Self::do_get_or_create_manager_id(&pairing.account)?;
+            if created {
+                Self::deposit_event(Event::<T>::ManagerCreated(
+                    pairing.account.clone(),
+                    manager_id,
+                ));
+            }
+
+            let counter = Self::counter_for_manager(&pairing.account)
+                .unwrap_or(0u8.into())
+                .checked_add(&1u8.into())
+                .ok_or(Error::<T>::CounterOverflow)?;
+
+            if !pairing.validate_signature::<T>(&pairing.account, counter) {
+                return Err(Error::<T>::InvalidPairingProof)?;
+            }
+            Self::do_add_processor_manager_pairing(&who, manager_id)?;
+            <ManagerCounter<T>>::insert(&pairing.account, counter);
+
+            Self::deposit_event(Event::<T>::ProcessorPaired(who, pairing));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::recover_funds())]
         pub fn recover_funds(
             origin: OriginFor<T>,

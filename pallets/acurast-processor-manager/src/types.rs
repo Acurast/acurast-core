@@ -1,11 +1,12 @@
 use frame_support::{
     pallet_prelude::*,
     sp_runtime::traits::{IdentifyAccount, MaybeDisplay, Verify},
-    traits::IsType,
-    BoundedVec,
+    traits::{IsType, UnixTime},
 };
 
 use acurast_common::ListUpdate;
+
+use crate::Config;
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct ProcessorPairing<AccountId, Signature>
@@ -13,8 +14,8 @@ where
     AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay,
     Signature: Parameter + Member + Verify,
 {
-    pub processor: AccountId,
-    pub proof: Option<ProcessorPairingProof<Signature>>,
+    pub account: AccountId,
+    pub proof: Option<Proof<Signature>>,
 }
 
 impl<AccountId, Signature> ProcessorPairing<AccountId, Signature>
@@ -22,32 +23,22 @@ where
     AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay,
     Signature: Parameter + Member + Verify,
 {
-    pub fn new_with_proof(
-        processor: AccountId,
-        message: BoundedVec<u8, ConstU32<64>>,
-        signature: Signature,
-    ) -> Self {
+    pub fn new_with_proof(account: AccountId, timestamp: u128, signature: Signature) -> Self {
         Self {
-            processor,
-            proof: Some(ProcessorPairingProof::<Signature> { message, signature }),
+            account,
+            proof: Some(Proof {
+                timestamp,
+                signature,
+            }),
         }
     }
 
-    pub fn new(processor: AccountId) -> Self {
+    pub fn new(account: AccountId) -> Self {
         Self {
-            processor,
+            account,
             proof: None,
         }
     }
-}
-
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct ProcessorPairingProof<Signature>
-where
-    Signature: Parameter + Member + Verify,
-{
-    pub message: BoundedVec<u8, ConstU32<64>>,
-    pub signature: Signature,
 }
 
 impl<AccountId, Signature> ProcessorPairing<AccountId, Signature>
@@ -56,15 +47,52 @@ where
     AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
     Signature: Parameter + Member + Verify,
 {
-    pub fn validate(&self) -> bool {
+    pub fn validate_timestamp<T: Config>(&self) -> bool {
         if let Some(proof) = &self.proof {
-            return proof
-                .signature
-                .verify(proof.message.as_ref(), &self.processor.clone().into());
+            let now = T::UnixTime::now().as_millis();
+            if proof.timestamp > now {
+                return false;
+            }
+            if let Some(diff) = now.checked_sub(proof.timestamp) {
+                if diff < T::PairingProofExpirationTimeSeconds::get() {
+                    return true;
+                }
+            } else {
+                return false;
+            }
         }
 
         false
     }
+
+    pub fn validate_signature<T: Config>(
+        &self,
+        account_id: &AccountId,
+        counter: T::Counter,
+    ) -> bool {
+        if let Some(proof) = &self.proof {
+            let message = [
+                account_id.encode(),
+                proof.timestamp.encode(),
+                counter.encode(),
+            ]
+            .concat();
+            return proof
+                .signature
+                .verify(message.as_ref(), &self.account.clone().into());
+        }
+
+        false
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct Proof<Signature>
+where
+    Signature: Parameter + Member + Verify,
+{
+    pub timestamp: u128,
+    pub signature: Signature,
 }
 
 pub type ProcessorPairingUpdate<AccountId, Signature> =
