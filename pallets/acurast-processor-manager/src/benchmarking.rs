@@ -80,5 +80,9 @@ benchmarks! {
         Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()])?;
     }: _(RawOrigin::Signed(caller.clone()), update.item.account.into(), caller.clone().into())
 
+    heartbeat {
+        let caller: T::AccountId = alice_account_id().into();
+    }: _(RawOrigin::Signed(caller.clone()))
+
     impl_benchmark_test_suite!(Pallet, mock::ExtBuilder::default().build(), mock::Test);
 }

@@ -76,6 +76,10 @@ pub mod pallet {
     #[pallet::getter(fn counter_for_manager)]
     pub(super) type ManagerCounter<T: Config> = StorageMap<_, Blake2_128, T::AccountId, T::Counter>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn processor_last_seen)]
+    pub(super) type ProcessorHeartbeat<T: Config> = StorageMap<_, Blake2_128, T::AccountId, u128>;
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
@@ -87,6 +91,7 @@ pub mod pallet {
         ProcessorPairingsUpdated(T::AccountId, Vec<ProcessorPairingUpdateFor<T>>),
         ProcessorFundsRecovered(T::AccountId, T::AccountId),
         ProcessorPaired(T::AccountId, ProcessorPairingFor<T>),
+        ProcessorHeartbeat(T::AccountId),
     }
 
     // Errors inform users that something went wrong.
@@ -214,6 +219,20 @@ pub mod pallet {
                 processor_account_id,
                 destination_account_id,
             ));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(3)]
+        #[pallet::weight(T::WeightInfo::heartbeat())]
+        pub fn heartbeat(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            let _ =
+                Self::manager_id_for_processor(&who).ok_or(Error::<T>::ProcessorHasNoManager)?;
+
+            <ProcessorHeartbeat<T>>::insert(&who, T::UnixTime::now().as_millis());
+
+            Self::deposit_event(Event::<T>::ProcessorHeartbeat(who));
 
             Ok(().into())
         }

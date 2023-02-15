@@ -20,6 +20,7 @@ pub trait WeightInfo {
     fn update_processor_pairings() -> Weight;
     fn pair_with_manager() -> Weight;
     fn recover_funds() -> Weight;
+    fn heartbeat() -> Weight;
 }
 
 impl WeightInfo for () {
@@ -36,6 +37,10 @@ impl WeightInfo for () {
     }
 
     fn recover_funds() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
+
+    fn heartbeat() -> Weight {
         Weight::from_ref_time(10_000)
     }
 }
