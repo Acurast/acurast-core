@@ -51,7 +51,7 @@ pub mod pallet {
         type ProcessorAssetRecovery: ProcessorAssetRecovery<Self>;
         type MaxPairingUpdates: Get<u32>;
         type Counter: Parameter + Member + MaxEncodedLen + Copy + CheckedAdd + Ord + From<u8>;
-        type PairingProofExpirationTimeSeconds: Get<u128>;
+        type PairingProofExpirationTime: Get<u128>;
         /// Timestamp
         type UnixTime: UnixTime;
         /// Weight Info for extrinsics.

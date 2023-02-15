@@ -54,7 +54,7 @@ where
                 return false;
             }
             if let Some(diff) = now.checked_sub(proof.timestamp) {
-                if diff < T::PairingProofExpirationTimeSeconds::get() {
+                if diff < T::PairingProofExpirationTime::get() {
                     return true;
                 }
             } else {

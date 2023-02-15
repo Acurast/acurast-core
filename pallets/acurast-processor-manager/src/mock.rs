@@ -173,7 +173,7 @@ impl Config for Test {
     type ProcessorAssetRecovery = AcurastProcessorAssetRecovery;
     type MaxPairingUpdates = ConstU32<5>;
     type Counter = u64;
-    type PairingProofExpirationTimeSeconds = ConstU128<600>;
+    type PairingProofExpirationTime = ConstU128<600000>;
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = ();
 }
