@@ -86,14 +86,3 @@ pub fn generate_signature(
     signer.sign(&message).into()
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-
-//     #[test]
-//     fn sign() {
-//         let pair = sr25519::Pair::from_string("//Bob", None).unwrap();
-//         let signature = pair.sign(&[0]);
-//         println!("{:?}", signature)
-//     }
-// }
