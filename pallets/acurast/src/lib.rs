@@ -220,10 +220,10 @@ pub mod pallet {
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
-                    .position(|value| value == &update.account_id);
+                    .position(|value| value == &update.item);
                 match (position, update.operation) {
                     (None, ListUpdateOperation::Add) => {
-                        current_allowed_sources.push(update.account_id.clone())
+                        current_allowed_sources.push(update.item.clone())
                     }
                     (Some(pos), ListUpdateOperation::Remove) => {
                         current_allowed_sources.remove(pos);
@@ -307,10 +307,10 @@ pub mod pallet {
             for update in &updates {
                 match &update.operation {
                     ListUpdateOperation::Add => {
-                        <StoredRevokedCertificate<T>>::insert(&update.cert_serial_number, ());
+                        <StoredRevokedCertificate<T>>::insert(&update.item, ());
                     }
                     ListUpdateOperation::Remove => {
-                        <StoredRevokedCertificate<T>>::remove(&update.cert_serial_number);
+                        <StoredRevokedCertificate<T>>::remove(&update.item);
                     }
                 }
             }

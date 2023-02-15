@@ -608,7 +608,7 @@ mod proxy_calls {
 
             let update = AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
-                account_id: source.clone(),
+                item: source.clone(),
             };
 
             let message_call = AcurastProxy(update_allowed_sources {

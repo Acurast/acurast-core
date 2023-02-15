@@ -160,7 +160,7 @@ benchmarks! {
         let (caller, job) = register_job::<T>(true);
         let sources_update = vec![AllowedSourcesUpdate {
             operation: ListUpdateOperation::Add,
-            account_id: account("processor", 0, SEED),
+            item: account("processor", 0, SEED),
         }];
 
     }: _(RawOrigin::Signed(caller.clone()), job.script.clone(), sources_update.clone())
@@ -188,7 +188,7 @@ benchmarks! {
     update_certificate_revocation_list {
         let updates =  vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
-            cert_serial_number: hex!("15905857467176635834").to_vec().try_into().unwrap()
+            item: hex!("15905857467176635834").to_vec().try_into().unwrap()
         }];
 
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();

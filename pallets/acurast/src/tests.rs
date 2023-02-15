@@ -142,21 +142,21 @@ fn test_update_allowed_sources() {
         let updates_1 = vec![
             AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
-                account_id: alice_account_id(),
+                item: alice_account_id(),
             },
             AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
-                account_id: bob_account_id(),
+                item: bob_account_id(),
             },
         ];
         let updates_2 = vec![
             AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Remove,
-                account_id: alice_account_id(),
+                item: alice_account_id(),
             },
             AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Remove,
-                account_id: bob_account_id(),
+                item: bob_account_id(),
             },
         ];
         assert_ok!(Acurast::register(
@@ -221,7 +221,7 @@ fn test_update_allowed_sources_failure() {
     );
     let updates = vec![AllowedSourcesUpdate {
         operation: ListUpdateOperation::Add,
-        account_id: eve_account_id(),
+        item: eve_account_id(),
     }];
     ExtBuilder::default().build().execute_with(|| {
         assert_ok!(Acurast::register(
@@ -369,7 +369,7 @@ fn test_update_revocation_list() {
     ExtBuilder::default().build().execute_with(|| {
         let updates_1 = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
-            cert_serial_number: cert_serial_number(),
+            item: cert_serial_number(),
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
@@ -382,7 +382,7 @@ fn test_update_revocation_list() {
 
         let updates_2 = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Remove,
-            cert_serial_number: cert_serial_number(),
+            item: cert_serial_number(),
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
@@ -426,7 +426,7 @@ fn test_update_revocation_list_submit_attestation() {
     ExtBuilder::default().build().execute_with(|| {
         let updates = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
-            cert_serial_number: cert_serial_number(),
+            item: cert_serial_number(),
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
@@ -457,7 +457,7 @@ fn test_update_revocation_list_assign_job() {
     ExtBuilder::default().build().execute_with(|| {
         let updates = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
-            cert_serial_number: cert_serial_number(),
+            item: cert_serial_number(),
         }];
         let chain = attestation_chain();
         let registration = job_registration(None, true);
