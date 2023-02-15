@@ -50,18 +50,10 @@ where
     pub fn validate_timestamp<T: Config>(&self) -> bool {
         if let Some(proof) = &self.proof {
             let now = T::UnixTime::now().as_millis();
-            if proof.timestamp > now {
-                return false;
-            }
             if let Some(diff) = now.checked_sub(proof.timestamp) {
-                if diff < T::PairingProofExpirationTime::get() {
-                    return true;
-                }
-            } else {
-                return false;
+                 return proof.timestamp <= now && diff < T::PairingProofExpirationTime::get();
             }
         }
-
         false
     }
 
