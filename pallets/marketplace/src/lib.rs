@@ -508,24 +508,14 @@ pub mod pallet {
                     let mut beta_params = <StoredReputation<T>>::get(&who, &reward_asset)
                         .ok_or(Error::<T>::ReputationNotFound)?;
 
-                    for _ in 1..assignment.sla.met {
-                        beta_params = BetaReputation::update(
-                            beta_params,
-                            true,
-                            reward_amount.clone().into(),
-                            average_reward,
-                        )
-                        .ok_or(Error::<T>::CalculationOverflow)?;
-                    }
-                    for _ in 1..assignment.sla.total - assignment.sla.met {
-                        beta_params = BetaReputation::update(
-                            beta_params,
-                            false,
-                            reward_amount.clone().into(),
-                            average_reward,
-                        )
-                        .ok_or(Error::<T>::CalculationOverflow)?;
-                    }
+                    beta_params = BetaReputation::update(
+                        beta_params,
+                        assignment.sla.met,
+                        assignment.sla.total - assignment.sla.met,
+                        reward_amount.clone().into(),
+                        average_reward,
+                    )
+                    .ok_or(Error::<T>::CalculationOverflow)?;
 
                     let new_average_reward = new_total_rewards
                         .checked_div(total_assigned)
