@@ -68,10 +68,8 @@ fn calculates_the_lowest_score_as_zero() {
 }
 
 #[test]
+/// Tests theoretical case that each update has a weight of 1 (job_reward = 0).
 fn has_reached_max_theoretical_reputation_after_600_consecutive_fulfillments() {
-    /***
-     * in the theoretical case that each update has a weight of 1 (job_reward = 0)
-     */
     use crate::{BetaParameters, BetaReputation, ReputationEngine};
     let job_reward = 108;
 
@@ -80,7 +78,8 @@ fn has_reached_max_theoretical_reputation_after_600_consecutive_fulfillments() {
     for _i in 1..60 {
         beta_params = BetaReputation::update(
             beta_params,
-            1,0,
+            1,
+            0,
             job_reward,
             0, // avg_reward = 0 leads to weight = 1
         )
@@ -94,10 +93,8 @@ fn has_reached_max_theoretical_reputation_after_600_consecutive_fulfillments() {
 }
 
 #[test]
+/// Tests practical case that each update has a weight of 0.5 (job_reward == avg_reward).
 fn has_reached_max_practical_reputation_after_600_consecutive_fulfillments() {
-    /***
-     * in the practical case that each update has a weight of 0.5 (job_reward == avg_reward)
-     */
     let job_reward = 108;
 
     let mut beta_params = BetaParameters::default();
@@ -113,12 +110,8 @@ fn has_reached_max_practical_reputation_after_600_consecutive_fulfillments() {
 }
 
 #[test]
+/// Tests more recent scores have a bigger impact for 100 successful and 50 unsuccessful fulfillments in different apply orders.
 fn discounts_older_reputation_updates() {
-    /***
-     * In both cases a processor has 100 successful and 50 unsuccessful fulfillments.
-     * However the order in which they are incurred impacts the reputation score, with more recent scores having a bigger impact.
-     */
-
     let job_reward = 108;
 
     let mut beta_params = BetaParameters::default();
@@ -127,7 +120,7 @@ fn discounts_older_reputation_updates() {
         beta_params = BetaReputation::update(beta_params, 1, 0, job_reward, job_reward).unwrap();
     }
     for _i in 1..50 {
-        beta_params = BetaReputation::update(beta_params, 0,1, job_reward, job_reward).unwrap();
+        beta_params = BetaReputation::update(beta_params, 0, 1, job_reward, job_reward).unwrap();
     }
 
     let reputation_i = BetaReputation::<u128>::normalize(beta_params);
@@ -138,7 +131,7 @@ fn discounts_older_reputation_updates() {
         beta_params = BetaReputation::update(beta_params, 1, 0, job_reward, job_reward).unwrap();
     }
     for _i in 1..50 {
-        beta_params = BetaReputation::update(beta_params, 0,1, job_reward, job_reward).unwrap();
+        beta_params = BetaReputation::update(beta_params, 0, 1, job_reward, job_reward).unwrap();
     }
     for _i in 1..25 {
         beta_params = BetaReputation::update(beta_params, 1, 0, job_reward, job_reward).unwrap();
@@ -152,12 +145,10 @@ fn discounts_older_reputation_updates() {
 }
 
 #[test]
+/// Tests updates weights depending on job reward.
 fn updates_reputation_depending_on_size_of_job_reward() {
-    /***
-     * notice how the last entry of rewards_case_ii is greater than that of rewards_case_i,
-     * leading to a higher weight of the respective reputation update and thus a higher reputation
-     */
-
+    // Note how the last entry of rewards_case_ii is greater than that of rewards_case_i,
+    // leading to a higher weight of the respective reputation update and thus a higher reputation
     let rewards_case_i = [9, 8, 7, 6, 5, 4, 3, 2, 1];
     let rewards_case_ii = [9, 8, 7, 6, 5, 4, 3, 2, 11];
 
