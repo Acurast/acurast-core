@@ -2,6 +2,7 @@
 
 use frame_support::{assert_err, assert_ok, traits::Hooks};
 
+use pallet_acurast::utils::validate_and_extract_attestation;
 use pallet_acurast::JobRegistrationFor;
 use pallet_acurast::Schedule;
 
@@ -17,6 +18,7 @@ fn test_match() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let asset_id = ad.pricing[0].reward_asset;
     let registration = JobRegistrationFor::<Test> {
         script: script(),
         allowed_sources: None,
@@ -34,6 +36,7 @@ fn test_match() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -49,6 +52,14 @@ fn test_match() {
     ExtBuilder::default().build().execute_with(|| {
         // pretend current time
         later(now);
+
+        let chain = attestation_chain();
+        assert_ok!(Acurast::submit_attestation(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            chain.clone()
+        ));
+        let attestation =
+            validate_and_extract_attestation::<Test>(&processor_account_id(), &chain).unwrap();
 
         assert_ok!(AcurastMarketplace::advertise(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -67,7 +78,7 @@ fn test_match() {
             Some(ad.pricing[0].clone()),
             AcurastMarketplace::stored_advertisement_pricing(
                 processor_account_id(),
-                ad.pricing[0].reward_asset.clone()
+                asset_id.clone()
             )
         );
 
@@ -163,6 +174,14 @@ fn test_match() {
             None,
             AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
         );
+        assert_eq!(
+            Some(1),
+            AcurastMarketplace::total_assigned(asset_id.clone())
+        );
+        assert_eq!(
+            Some(6000000),
+            AcurastMarketplace::average_reward(asset_id.clone())
+        );
         // Job no longer assigned after last execution
         assert_eq!(
             None,
@@ -176,6 +195,10 @@ fn test_match() {
         assert_eq!(
             events(),
             [
+                RuntimeEvent::Acurast(pallet_acurast::Event::AttestationStored(
+                    attestation,
+                    processor_account_id()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
                     ad.clone(),
                     processor_account_id()
@@ -279,6 +302,7 @@ fn test_no_match_schedule_overlap() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -301,6 +325,7 @@ fn test_no_match_schedule_overlap() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -398,6 +423,90 @@ fn test_no_match_schedule_overlap() {
 }
 
 #[test]
+fn test_no_match_insufficient_reputation() {
+    let now = 1_671_789_600_000; // 23.12.2022 10:00;
+
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let registration1 = JobRegistrationFor::<Test> {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min -> 2 executions fit
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        extra: JobRequirements {
+            slots: 1,
+            reward: asset(3_000_000 * 2),
+            min_reputation: Some(1_000_000),
+            instant_match: None,
+        },
+    };
+    let job_id1 = (alice_account_id(), registration1.script.clone());
+
+    ExtBuilder::default().build().execute_with(|| {
+        // pretend current time
+        assert_ok!(Timestamp::set(RuntimeOrigin::none(), now));
+        assert_ok!(AcurastMarketplace::advertise(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+
+        // register job
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration1.clone(),
+        ));
+        assert_eq!(
+            Some(JobStatus::Open),
+            AcurastMarketplace::stored_job_status(alice_account_id(), registration1.script.clone())
+        );
+
+        // the job matches except inssufficient reputation
+        let m = Match {
+            job_id: job_id1.clone(),
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
+        };
+        assert_err!(
+            AcurastMarketplace::propose_matching(
+                RuntimeOrigin::signed(charlie_account_id()).into(),
+                vec![m.clone()],
+            ),
+            Error::<Test>::InsufficientReputationInMatch
+        );
+
+        assert_eq!(
+            events(),
+            [
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
+                    id: 0,
+                    amount: 12_000_000
+                })),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration1.clone(),
+                    alice_account_id()
+                )),
+                // no match event for job
+            ]
+        );
+    });
+}
+
+#[test]
 fn test_more_reports_than_expected() {
     let now = 1_671_789_600_000; // 23.12.2022 10:00;
 
@@ -420,6 +529,7 @@ fn test_more_reports_than_expected() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -579,6 +689,165 @@ fn test_more_reports_than_expected() {
         );
     });
 }
+
+// #[test]
+// fn test_reputation_update_for_1000_consecutive_fulfills() {
+//     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+//     let ad = advertisement(1000, 1000, None);
+//
+//     ExtBuilder::default().build().execute_with(|| {
+//         assert_ok!(AcurastMarketplace::advertise(
+//             Origin::signed(bob_account_id()).into(),
+//             ad.clone(),
+//         ));
+//         for _i in 0..1000 {
+//             let registration = job_registration_with_reward(random_script(), 5, 5000, None);
+//
+//             assert_ok!(Acurast::register(
+//                 Origin::signed(alice_account_id()).into(),
+//                 registration.clone(),
+//             ));
+//
+//             let fulfillment = fulfillment_for(&registration);
+//
+//             assert_ok!(Acurast::fulfill(
+//                 Origin::signed(bob_account_id()),
+//                 fulfillment.clone(),
+//                 MultiAddress::Id(alice_account_id())
+//             ));
+//         }
+//
+//         assert_eq!(
+//             Some(crate::BetaParams {
+//                 r: 24_999_951,
+//                 s: 0
+//             }),
+//             AcurastMarketplace::stored_reputation(bob_account_id())
+//         );
+//
+//         let asset_id = 0;
+//
+//         assert_eq!(
+//             Some(1000),
+//             AcurastMarketplace::total_assigned(asset_id)
+//         );
+//         assert_eq!(Some(5000), AcurastMarketplace::average_reward(asset_id));
+//     });
+// }
+//
+// #[test]
+// fn test_match_sufficient_reputation() {
+//     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+//     let ad = advertisement(1000, 5, None);
+//     let ad1 = advertisement(1000, 5, None);
+//     let registration1 = job_registration_with_reward(script(), 5, 5000, None);
+//     let registration2 = job_registration_with_reward(script_random_value(), 5, 5000, Some(1));
+//     let fulfillment = fulfillment_for(&registration1);
+//
+//     ExtBuilder::default().build().execute_with(|| {
+//         assert_ok!(AcurastMarketplace::advertise(
+//             Origin::signed(bob_account_id()).into(),
+//             ad.clone(),
+//         ));
+//
+//         assert_ok!(Acurast::register(
+//             Origin::signed(charlie_account_id()).into(),
+//             registration1.clone(),
+//         ));
+//
+//         assert_ok!(Acurast::fulfill(
+//             Origin::signed(bob_account_id()),
+//             fulfillment.clone(),
+//             MultiAddress::Id(charlie_account_id())
+//         ));
+//
+//         assert_ok!(AcurastMarketplace::advertise(
+//             Origin::signed(alice_account_id()).into(),
+//             ad1.clone(),
+//         ));
+//
+//         assert_ok!(Acurast::register(
+//             Origin::signed(dave_account_id()).into(),
+//             registration2.clone(),
+//         ));
+//
+//         assert_eq!(
+//             events(),
+//             [
+//                 Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+//                     ad.clone(),
+//                     bob_account_id()
+//                 )),
+//                 // first job assigned to Bob
+//                 Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+//                     charlie_account_id(),
+//                     registration1.script.clone()
+//                 ))),
+//                 Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+//                     registration1.clone(),
+//                     charlie_account_id()
+//                 )),
+//                 Event::Acurast(pallet_acurast::Event::ReceivedFulfillment(
+//                     bob_account_id(),
+//                     fulfillment,
+//                     registration1,
+//                     charlie_account_id()
+//                 )),
+//                 Event::AcurastMarketplace(crate::Event::AdvertisementStored(
+//                     ad1.clone(),
+//                     alice_account_id()
+//                 )),
+//                 Event::AcurastMarketplace(crate::Event::JobRegistrationMatched((
+//                     dave_account_id(),
+//                     registration2.script.clone()
+//                 ))),
+//                 Event::Acurast(pallet_acurast::Event::JobRegistrationStored(
+//                     registration2.clone(),
+//                     dave_account_id()
+//                 )),
+//             ]
+//         );
+//     });
+// }
+//
+// #[test]
+// fn test_fulfill_100_processors() {
+//     ExtBuilder::default().build().execute_with(|| {
+//         for i in 0..100 {
+//             let ad = advertisement(1000, 1000, Some(vec![account_id(255 - i)]));
+//             assert_ok!(AcurastMarketplace::advertise(
+//                 Origin::signed(account_id(i)).into(),
+//                 ad.clone(),
+//             ));
+//         }
+//
+//         for _i in 0..10 {
+//             for j in 0..100 {
+//                 let registration = job_registration_with_reward(random_script(), 5, 5000, None);
+//
+//                 assert_ok!(Acurast::register(
+//                     Origin::signed(account_id(255 - j)).into(),
+//                     registration.clone(),
+//                 ));
+//
+//                 let fulfillment = fulfillment_for(&registration);
+//
+//                 assert_ok!(Acurast::fulfill(
+//                     Origin::signed(account_id(j)),
+//                     fulfillment.clone(),
+//                     MultiAddress::Id(account_id(255 - j))
+//                 ));
+//             }
+//         }
+//         let asset_id = 0;
+//
+//         assert_eq!(
+//             Some(1000),
+//             AcurastMarketplace::total_assigned(asset_id)
+//         );
+//         assert_eq!(Some(5000), AcurastMarketplace::average_reward(asset_id));
+//     });
+// }
 
 fn next_block() {
     if System::block_number() >= 1 {

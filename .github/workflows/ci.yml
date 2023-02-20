@@ -33,10 +33,18 @@ jobs:
       # - name: Check and Lint Code
       #   run: cargo clippy -- -D warnings
 
-      - name: Run cargo check
+      - name: Run cargo check for release
         uses: actions-rs/cargo@v1
         with:
           command: check
+          args: --release
+
+      - name: Run cargo check for runtime-benchmarks
+        continue-on-error: true
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --release --features runtime-benchmarks
 
       - name: Run cargo test
         uses: actions-rs/cargo@v1

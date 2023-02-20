@@ -28,8 +28,9 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
-    use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
-    use sp_runtime::SaturatedConversion;
+    use reputation::{BetaParameters, BetaReputation, ReputationEngine};
+    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
+    use sp_runtime::{FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
 
@@ -69,11 +70,15 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + CheckedMul
+            + CheckedDiv
             + From<u8>
             + From<u32>
             + From<u64>
             + From<u128>
+            + Into<u128>
+            + Default
             + Ord
+            + Clone
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
@@ -110,6 +115,29 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn stored_storage_capacity)]
     pub type StoredStorageCapacity<T: Config> = StorageMap<_, Blake2_128, T::AccountId, i64>;
+
+    /// Reputation as a map [`AccountId`] `(source)` -> [`AssetId`] -> [`BetaParameters`].
+    #[pallet::storage]
+    #[pallet::getter(fn stored_reputation)]
+    pub type StoredReputation<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        Blake2_128Concat,
+        T::AssetId,
+        BetaParameters<FixedU128>,
+    >;
+
+    /// Number of total jobs assigned as a map [`AssetId`] -> `AssetAmount`
+    #[pallet::storage]
+    #[pallet::getter(fn total_assigned)]
+    pub type StoredTotalAssigned<T: Config> =
+        StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, u128>;
+
+    /// Average job reward as a map [`AssetId`] -> `AssetAmount`
+    #[pallet::storage]
+    #[pallet::getter(fn average_reward)]
+    pub type StoredAverageReward<T> = StorageMap<_, Blake2_128Concat, <T as Config>::AssetId, u128>;
 
     /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> `SlotId`
     #[pallet::storage]
@@ -220,6 +248,8 @@ pub mod pallet {
         ConsumerNotAllowedInMatch,
         /// Match is invalid due to insufficient reward regarding the current source pricing.
         InsufficientRewardInMatch,
+        /// Match is invalid due to insufficient reputation of a proposed source.
+        InsufficientReputationInMatch,
         /// Match is invalid due to overlapping schedules.
         ScheduleOverlapInMatch,
         /// Received a report from a source that is not assigned.
@@ -228,6 +258,8 @@ pub mod pallet {
         MoreReportsThanExpected,
         /// Report received outside of schedule.
         ReportOutsideSchedule,
+        /// Reputation not known for a source. SEVERE error
+        ReputationNotFound,
     }
 
     #[pallet::hooks]
@@ -279,6 +311,12 @@ pub mod pallet {
             for pricing in &advertisement.pricing {
                 T::AssetValidator::validate(&pricing.reward_asset).map_err(|e| e.into())?;
                 <StoredAdvertisementPricing<T>>::insert(&who, &pricing.reward_asset, pricing);
+
+                <StoredReputation<T>>::mutate(&who, &pricing.reward_asset, |r| {
+                    if r.is_none() {
+                        *r = Some(BetaParameters::default());
+                    }
+                });
             }
 
             Self::deposit_event(Event::AdvertisementStored(advertisement, who));
@@ -435,8 +473,74 @@ pub mod pallet {
             );
 
             if last {
-                // TODO update reputation since we don't expect further reports for this job
-                // (only for attested devices! because non-attested devices)
+                // update reputation since we don't expect further reports for this job
+                // (only update for attested devices!)
+                if ensure_source_verified::<T>(&who).is_ok() {
+                    let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                    let requirements: JobRequirementsFor<T> = e.into();
+
+                    // parse reward into asset_id and amount
+                    let reward_asset: <T as Config>::AssetId = requirements
+                        .reward
+                        .try_get_asset_id()
+                        .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                        .into();
+                    T::AssetValidator::validate(&reward_asset).map_err(|e| e.into())?;
+
+                    let reward_amount: <T as Config>::AssetAmount = requirements
+                        .reward
+                        .try_get_amount()
+                        .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                        .into();
+
+                    let average_reward = <StoredAverageReward<T>>::get(&reward_asset).unwrap_or(0);
+                    let total_assigned =
+                        <StoredTotalAssigned<T>>::get(&reward_asset).unwrap_or_default();
+
+                    let total_reward = average_reward
+                        .checked_mul(total_assigned - 1u128)
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+
+                    let new_total_rewards = total_reward
+                        .checked_add(reward_amount.clone().into())
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+
+                    let mut beta_params = <StoredReputation<T>>::get(&who, &reward_asset)
+                        .ok_or(Error::<T>::ReputationNotFound)?;
+
+                    for _ in 1..assignment.sla.met {
+                        beta_params = BetaReputation::update(
+                            beta_params,
+                            true,
+                            reward_amount.clone().into(),
+                            average_reward,
+                        )
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+                    }
+                    for _ in 1..assignment.sla.total - assignment.sla.met {
+                        beta_params = BetaReputation::update(
+                            beta_params,
+                            false,
+                            reward_amount.clone().into(),
+                            average_reward,
+                        )
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+                    }
+
+                    let new_average_reward = new_total_rewards
+                        .checked_div(total_assigned)
+                        .ok_or(Error::<T>::CalculationOverflow)?;
+
+                    <StoredAverageReward<T>>::insert(reward_asset.clone(), new_average_reward);
+                    <StoredReputation<T>>::insert(
+                        &who,
+                        &reward_asset,
+                        BetaParameters {
+                            r: beta_params.r,
+                            s: beta_params.s,
+                        },
+                    );
+                }
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
                 <StoredMatches<T>>::remove(&who, &job_id);
@@ -723,6 +827,21 @@ pub mod pallet {
                         Error::<T>::ConsumerNotAllowedInMatch
                     );
 
+                    // CHECK reputation sufficient
+                    if let Some(min_reputation) = requirements.min_reputation {
+                        let beta_params =
+                            <StoredReputation<T>>::get(&planned_execution.source, &reward_asset)
+                                .ok_or(Error::<T>::ReputationNotFound)?;
+
+                        let reputation = BetaReputation::<u128>::normalize(beta_params)
+                            .ok_or(Error::<T>::CalculationOverflow)?;
+
+                        ensure!(
+                            reputation >= Permill::from_parts(min_reputation as u32),
+                            Error::<T>::InsufficientReputationInMatch
+                        );
+                    }
+
                     // CHECK schedule
                     Self::fits_schedule(
                         &planned_execution.source,
@@ -804,6 +923,10 @@ pub mod pallet {
                 } else {
                     remaining_reward = Some((requirements.reward, diff));
                 }
+
+                <StoredTotalAssigned<T>>::mutate(&reward_asset, |t| {
+                    *t = Some(t.unwrap_or(0u128).saturating_add(1));
+                });
 
                 <StoredJobStatus<T>>::insert(&m.job_id.0, &registration.script, JobStatus::Matched);
                 Self::deposit_event(Event::JobRegistrationMatched(m.clone()));
