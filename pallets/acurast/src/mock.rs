@@ -1,16 +1,14 @@
-use frame_support::sp_runtime;
-use frame_support::traits::Everything;
-use frame_support::weights::Weight;
-use frame_support::{pallet_prelude::GenesisBuild, PalletId};
+use acurast_common::Schedule;
+use frame_support::{
+    dispatch::Weight, pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
+    traits::Everything, PalletId,
+};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{generic, parameter_types, AccountId32};
+use sp_runtime::{generic, AccountId32};
 
-use crate::{
-    AttestationChain, Fulfillment, JobAssignmentUpdate, JobAssignmentUpdateBarrier,
-    JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber,
-};
+use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber};
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -26,29 +24,6 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
         _updates: &Vec<crate::CertificateRevocationListUpdate>,
     ) -> bool {
         AllowedRevocationListUpdate::get().contains(origin)
-    }
-}
-
-impl JobAssignmentUpdateBarrier<Test> for Barrier {
-    fn can_update_assigned_jobs(
-        origin: &<Test as frame_system::Config>::AccountId,
-        updates: &Vec<crate::JobAssignmentUpdate<<Test as frame_system::Config>::AccountId>>,
-    ) -> bool {
-        updates.iter().all(|update| &update.job_id.0 == origin)
-    }
-}
-
-pub struct Router;
-
-impl crate::FulfillmentRouter<Test> for Router {
-    fn received_fulfillment(
-        _origin: frame_system::pallet_prelude::OriginFor<Test>,
-        _from: <Test as frame_system::Config>::AccountId,
-        _fulfillment: crate::Fulfillment,
-        _registration: crate::JobRegistrationFor<Test>,
-        _requester: <<Test as frame_system::Config>::Lookup as sp_runtime::traits::StaticLookup>::Target,
-    ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-        Ok(().into())
     }
 }
 
@@ -115,7 +90,6 @@ parameter_types! {
     pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
-    pub AllowedJobAssignmentUpdate: Vec<AccountId> = vec![bob_account_id()];
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
 }
 parameter_types! {
@@ -127,7 +101,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type Call = Call;
+    type RuntimeCall = RuntimeCall;
     type Index = u32;
     type BlockNumber = BlockNumber;
     type Hash = sp_core::H256;
@@ -135,8 +109,8 @@ impl frame_system::Config for Test {
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    type Event = Event;
-    type Origin = Origin;
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
@@ -165,7 +139,7 @@ impl pallet_balances::Config for Test {
     type Balance = Balance;
     type DustRemoval = ();
     /// The ubiquitous event type.
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
@@ -175,10 +149,12 @@ impl pallet_balances::Config for Test {
 }
 
 impl pallet_assets::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type Balance = Balance;
     type AssetId = parachains_common::AssetId;
+    type AssetIdParameter = codec::Compact<parachains_common::AssetId>;
     type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
     type AssetDeposit = ConstU128<0>;
     type AssetAccountDeposit = ConstU128<0>;
@@ -189,24 +165,24 @@ impl pallet_assets::Config for Test {
     type Freezer = ();
     type Extra = ();
     type WeightInfo = ();
+    type RemoveItemsLimit = ();
 }
 
 impl parachain_info::Config for Test {}
 
 impl crate::Config for Test {
-    type Event = Event;
+    type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = ();
-    type FulfillmentRouter = Router;
     type MaxAllowedSources = frame_support::traits::ConstU16<4>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
-    type JobAssignmentUpdateBarrier = Barrier;
+    type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type JobHooks = ();
 }
 
-pub fn events() -> Vec<Event> {
+pub fn events() -> Vec<RuntimeEvent> {
     let evt = System::events()
         .into_iter()
         .map(|evt| evt.event)
@@ -240,22 +216,18 @@ pub fn job_registration(
         script: script(),
         allowed_sources,
         allow_only_verified_sources,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
     }
-}
-
-pub fn job_assignment_update_for(
-    registration: &JobRegistration<AccountId, ()>,
-    requester: Option<AccountId>,
-) -> Vec<JobAssignmentUpdate<AccountId>> {
-    vec![JobAssignmentUpdate {
-        operation: crate::ListUpdateOperation::Add,
-        assignee: processor_account_id(),
-        job_id: (
-            requester.unwrap_or(alice_account_id()),
-            registration.script.clone(),
-        ),
-    }]
 }
 
 pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
@@ -263,6 +235,16 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         script: invalid_script_1(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
     }
 }
@@ -272,14 +254,17 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         script: invalid_script_2(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra: (),
-    }
-}
-
-pub fn fulfillment_for(registration: &JobRegistration<AccountId, ()>) -> Fulfillment {
-    Fulfillment {
-        script: registration.script.clone(),
-        payload: hex!("00").to_vec(),
     }
 }
 

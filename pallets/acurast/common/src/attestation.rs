@@ -33,6 +33,7 @@ fn parse_cert_payload(serialized: &[u8]) -> Result<&[u8], ParseError> {
 
 pub type CertificateId = (Vec<u8>, Vec<u8>);
 
+/// Creates a unique id for a certificate.
 pub fn unique_id(
     issuer: &Name,
     serial_number: &asn1::BigUint,
@@ -46,6 +47,7 @@ pub fn unique_id(
 /// [See docs](https://source.android.com/docs/security/keystore/attestation#tbscertificate-sequence)
 pub const KEY_ATTESTATION_OID: ObjectIdentifier = oid!(1, 3, 6, 1, 4, 1, 11129, 2, 1, 17);
 
+/// Extracts and parses the attestation from the extension field of a X.509 certificate.
 pub fn extract_attestation<'a>(
     extensions: Option<SequenceOf<'a, Extension<'a>>>,
 ) -> Result<KeyDescription<'a>, ValidationError> {

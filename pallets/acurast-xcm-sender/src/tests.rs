@@ -104,7 +104,7 @@ mod proxy_calls {
         });
 
         OtherParachain::execute_with(|| {
-            use crate::mock::runtime::receiver_parachain::{Event, System};
+            use crate::mock::runtime::receiver_parachain::{RuntimeEvent, System};
             use pallet_acurast_receiver::Event::FulfillReceived;
 
             let events = System::events();
@@ -112,9 +112,10 @@ mod proxy_calls {
             events.iter().for_each(|ev| println!("{:#?}", ev));
 
             // Check emitted events
-            assert!(events
-                .iter()
-                .any(|event| matches!(&event.event, Event::AcurastReceiver(FulfillReceived(..)))));
+            assert!(events.iter().any(|event| matches!(
+                &event.event,
+                RuntimeEvent::AcurastReceiver(FulfillReceived(..))
+            )));
         });
     }
 }

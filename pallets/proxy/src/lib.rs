@@ -13,9 +13,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::inherent::Vec;
-    use frame_support::{
-        dispatch::DispatchResult, pallet_prelude::*, sp_runtime::traits::StaticLookup,
-    };
+    use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use xcm::v2::prelude::*;
     use xcm::v2::Instruction::{DescendOrigin, Transact};
@@ -26,13 +24,13 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
-    use pallet_acurast::{AllowedSourcesUpdate, Fulfillment, JobRegistration, Script};
+    use acurast_common::{AllowedSourcesUpdate, JobRegistration, Script};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member;
         type AssetId: Parameter + Member;
@@ -64,12 +62,6 @@ pub mod pallet {
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         },
 
-        #[codec(index = 4u8)]
-        Fulfill {
-            fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
-        },
-
         #[codec(index = 0u8)]
         Advertise {
             advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,
@@ -81,7 +73,6 @@ pub mod pallet {
         Register,
         Deregister,
         UpdateAllowedSources,
-        Fulfill,
         Advertise,
     }
 
@@ -91,7 +82,6 @@ pub mod pallet {
                 ProxyCall::Register { .. } => ExtrinsicName::Register,
                 ProxyCall::Deregister { .. } => ExtrinsicName::Deregister,
                 ProxyCall::UpdateAllowedSources { .. } => ExtrinsicName::UpdateAllowedSources,
-                ProxyCall::Fulfill { .. } => ExtrinsicName::Fulfill,
                 ProxyCall::Advertise { .. } => ExtrinsicName::Advertise,
             }
         }
@@ -173,6 +163,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [Registration]. If a job for the same script was previously registered, it will be overwritten.
         // TODO: Define proxy weight
+        #[pallet::call_index(0)]
         #[pallet::weight(10_000)]
         pub fn register(
             origin: OriginFor<T>,
@@ -184,6 +175,7 @@ pub mod pallet {
         }
 
         /// Deregisters a job for the given script.
+        #[pallet::call_index(1)]
         #[pallet::weight(10_000)]
         pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResult {
             let caller = ensure_signed(origin)?;
@@ -192,6 +184,7 @@ pub mod pallet {
         }
 
         /// Updates the allowed sources list of a [Registration].
+        #[pallet::call_index(2)]
         #[pallet::weight(10_000)]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
@@ -203,22 +196,8 @@ pub mod pallet {
             acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 
-        /// Fulfills a previously registered job.
-        #[pallet::weight(10_000)]
-        pub fn fulfill(
-            origin: OriginFor<T>,
-            fulfillment: Fulfillment,
-            requester: <T::Lookup as StaticLookup>::Source,
-        ) -> DispatchResult {
-            let caller = ensure_signed(origin)?;
-            let proxy_call = ProxyCall::Fulfill {
-                fulfillment,
-                requester,
-            };
-            acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
-        }
-
         /// Advertise resources by providing a [Advertisement]. If an advertisement for the same script was previously registered, it will be overwritten.
+        #[pallet::call_index(4)]
         #[pallet::weight(10_000)]
         pub fn advertise(
             origin: OriginFor<T>,

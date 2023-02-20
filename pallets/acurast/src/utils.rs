@@ -1,17 +1,17 @@
+use acurast_common::{
+    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
+    PublicKey,
+};
 use codec::Encode;
 use frame_support::{ensure, traits::UnixTime};
 use sp_std::prelude::*;
 
-use crate::attestation::{
-    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
-    PublicKey,
-};
 use crate::{
     Attestation, AttestationChain, AttestationValidity, CertId, Config, Error, IssuerName,
-    JobRegistrationFor, SerialNumber, StoredAttestation, StoredRevokedCertificate,
-    ValidatingCertIds,
+    SerialNumber, StoredAttestation, StoredRevokedCertificate, ValidatingCertIds,
 };
 
+/// Validates and returns an [Attestation] from the provided chain.
 pub fn validate_and_extract_attestation<T: Config>(
     source: &T::AccountId,
     attestation_chain: &AttestationChain,
@@ -56,40 +56,16 @@ pub fn validate_and_extract_attestation<T: Config>(
     })
 }
 
-pub(crate) fn ensure_source_allowed<T: Config>(
-    source: &T::AccountId,
-    registration: &JobRegistrationFor<T>,
-) -> Result<(), Error<T>> {
-    registration
-        .allowed_sources
-        .as_ref()
-        .map(|allowed_sources| {
-            allowed_sources
-                .iter()
-                .position(|allowed_source| allowed_source == source)
-                .map(|_| ())
-                .ok_or(Error::<T>::FulfillSourceNotAllowed)
-        })
-        .unwrap_or(Ok(()))?;
-
-    ensure_source_verified(source, registration)?;
-
+/// Ensures that the provided account id has a valid (not expired and not revoked) key attestation.
+pub fn ensure_source_verified<T: Config>(source: &T::AccountId) -> Result<(), Error<T>> {
+    let attestation =
+        <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotVerified)?;
+    ensure_not_expired(&attestation)?;
+    ensure_not_revoked(&attestation)?;
     Ok(())
 }
 
-pub(crate) fn ensure_source_verified<T: Config>(
-    source: &T::AccountId,
-    registration: &JobRegistrationFor<T>,
-) -> Result<(), Error<T>> {
-    if registration.allow_only_verified_sources {
-        let attestation =
-            <StoredAttestation<T>>::get(source).ok_or(Error::<T>::FulfillSourceNotVerified)?;
-        ensure_not_expired(&attestation)?;
-        ensure_not_revoked(&attestation)?;
-    }
-    Ok(())
-}
-
+/// Ensures the attestation is not expired.
 pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
     let now: u64 = T::UnixTime::now()
         .as_millis()
@@ -117,6 +93,7 @@ pub(crate) fn ensure_not_expired<T: Config>(attestation: &Attestation) -> Result
     Ok(())
 }
 
+/// Ensures the attestation is not signed by a revoked certificate.
 pub(crate) fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result<(), Error<T>> {
     let ids = &attestation.cert_ids;
     for id in ids {
@@ -127,6 +104,7 @@ pub(crate) fn ensure_not_revoked<T: Config>(attestation: &Attestation) -> Result
     Ok(())
 }
 
+/// Ensures the provided public key correponds to the provided account id.
 fn ensure_valid_public_key_for_source<T: Config>(
     source: &T::AccountId,
     public_key: &PublicKey,

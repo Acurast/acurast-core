@@ -26,10 +26,11 @@
 
 use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use sp_std::marker::PhantomData;
+use pallet_acurast;
 
 /// Weights for pallet_acurast_marketplace using the Substrate node and recommended hardware.
-pub struct Weights<T>(PhantomData<T>);
-impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInfo for Weights<T> {
+pub struct Weights<T, W>(PhantomData<(T, W)>);
+impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::WeightInfo> pallet_acurast::WeightInfo for Weights<T, W> {
     // Storage: AcurastMarketplace StoredJobStatus (r:1 w:1)
     // Storage: AcurastMarketplace StoredAdIndex (r:1 w:0)
     // Storage: AcurastMarketplace StoredCapacity (r:1 w:1)
@@ -37,7 +38,6 @@ impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInf
     // Storage: Assets Asset (r:1 w:1)
     // Storage: Assets Account (r:2 w:2)
     // Storage: System Account (r:1 w:1)
-    // Storage: AcurastMarketplace StoredJobAssignment (r:0 w:1)
     // Storage: Acurast StoredJobRegistration (r:0 w:1)
     fn register() -> Weight {
         // Minimum execution time:  nanoseconds.
@@ -53,23 +53,13 @@ impl<T: frame_system::Config + pallet_acurast::Config> pallet_acurast::WeightInf
             .saturating_add(T::DbWeight::get().reads(1))
             .saturating_add(T::DbWeight::get().writes(2))
     }
-    fn fulfill() -> Weight {
-        // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(50_437_000)
-            .saturating_add(T::DbWeight::get().reads(1))
-            .saturating_add(T::DbWeight::get().writes(2))
-    }
-
     fn update_allowed_sources() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_allowed_sources()
-    }
-    fn update_job_assignments() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_job_assignments()
+        W::update_allowed_sources()
     }
     fn submit_attestation() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::submit_attestation()
+        W::submit_attestation()
     }
     fn update_certificate_revocation_list() -> Weight {
-        <T as pallet_acurast::Config>::WeightInfo::update_certificate_revocation_list()
+        W::update_certificate_revocation_list()
     }
 }

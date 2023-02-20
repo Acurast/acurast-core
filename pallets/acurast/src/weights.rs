@@ -49,23 +49,6 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
-	// Storage: Acurast StoredJobRegistration (r:1 w:0)
-	// Storage: Acurast StoredJobAssignment (r:1 w:1)
-	fn update_job_assignments() -> Weight {
-		Weight::from_ref_time(21_000_000 as u64)
-			.saturating_add(T::DbWeight::get().reads(2 as u64))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
-	}
-	// Storage: Acurast StoredJobAssignment (r:1 w:1)
-	// Storage: Acurast StoredJobRegistration (r:1 w:0)
-	// Storage: Assets Asset (r:1 w:1)
-	// Storage: Assets Account (r:2 w:2)
-	// Storage: System Account (r:2 w:2)
-	fn fulfill() -> Weight {
-		Weight::from_ref_time(57_000_000 as u64)
-			.saturating_add(T::DbWeight::get().reads(7 as u64))
-			.saturating_add(T::DbWeight::get().writes(6 as u64))
-	}
 	// Storage: Timestamp Now (r:1 w:0)
 	// Storage: Acurast StoredRevokedCertificate (r:4 w:0)
 	// Storage: Acurast StoredAttestation (r:0 w:1)

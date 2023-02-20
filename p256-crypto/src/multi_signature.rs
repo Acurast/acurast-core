@@ -228,6 +228,7 @@ impl std::fmt::Display for MultiSigner {
 
 impl Verify for MultiSignature {
     type Signer = MultiSigner;
+
     fn verify<L: Lazy<[u8]>>(&self, mut msg: L, signer: &AccountId32) -> bool {
         match (self, signer) {
             (Self::Ed25519(multi_sig), _) => {
@@ -245,7 +246,7 @@ impl Verify for MultiSignature {
             (Self::P256(ref sig), who) => {
                 match p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
                     .unwrap()
-                    .recover_verify_key(msg.get())
+                    .recover_verifying_key(msg.get())
                 {
                     Ok(pubkey) => {
                         &sp_io::hashing::blake2_256(pubkey.to_bytes().as_slice())

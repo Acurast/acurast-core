@@ -3,7 +3,7 @@ name = "pallet-acurast-xcm-receiver"
 authors = ["Papers AG"]
 description = "Pallet for defining the receiving logic from acurast parachain."
 version = "0.0.1"
-license = "Unlicense"
+license = "MIT"
 homepage = "https://docs.acurast.com/"
 edition = "2021"
 publish = false
@@ -16,22 +16,22 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 
 # Benchmarks
-frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", optional = true, default-features = false }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", optional = true, default-features = false }
 
 # Substrate
-frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
-frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
-scale-info = { version = "2.0", default-features = false, features = [ "derive" ] }
-sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+scale-info = { version = "2.2.0", default-features = false, features = [ "derive" ] }
+sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 
 [dev-dependencies]
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.29", default-features = false }
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 # XCM
-xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.29" }
-xcm-builder = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.29" }
-pallet-xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.29" }
+xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.36" }
+xcm-builder = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.36" }
+pallet-xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.36" }
 
 [features]
 default = ["std"]

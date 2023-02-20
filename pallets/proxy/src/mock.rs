@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 
 use frame_support::traits::OriginTrait;
+use pallet_acurast_marketplace::Reward;
 use scale_info::TypeInfo;
 use sp_core::*;
+use sp_std::prelude::*;
 use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-use pallet_acurast_marketplace::Reward;
-
-pub type AcurastAssetId = u32;
+pub type AcurastAssetId = AssetId;
+pub type InternalAssetId = u32;
 pub type AcurastAssetAmount = u128;
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
@@ -29,18 +30,12 @@ impl Reward for AcurastAsset {
     }
 
     fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        match &self.0.id {
-            Concrete(location) => match location.last() {
-                Some(GeneralIndex(id)) => (*id).try_into().map_err(|_| ()),
-                _ => Err(()),
-            },
-            Abstract(_) => Err(()),
-        }
+        Ok(self.0.id.clone())
     }
 
     fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        match &self.0.fun {
-            Fungible(amount) => Ok(*amount),
+        match self.0.fun {
+            Fungible(amount) => Ok(amount),
             _ => Err(()),
         }
     }
@@ -50,12 +45,13 @@ pub mod acurast_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32},
-        traits::{Everything, Nothing},
+        traits::{AsEnsureOriginWithArg, Everything, Nothing},
         PalletId,
     };
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
     use sp_core::*;
+    use sp_runtime::DispatchError;
     use sp_std::prelude::*;
     use xcm::latest::prelude::*;
     use xcm_builder::{
@@ -67,14 +63,14 @@ pub mod acurast_runtime {
     use xcm_executor::XcmExecutor;
 
     pub use pallet_acurast;
-    use pallet_acurast::JobAssignmentUpdateBarrier;
+    use pallet_acurast_assets::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
 
-    use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
+    use super::{AcurastAsset, AcurastAssetAmount, AcurastAssetId, InternalAssetId};
 
     pub type AccountId = AccountId32;
-    pub type LocalOriginToLocation = SignedToAccountId32<Origin, AccountId, RelayNetwork>;
+    pub type LocalOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>;
     pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
     pub type Block = frame_system::mocking::MockBlock<Runtime>;
     pub type LocationToAccountId = (
@@ -87,43 +83,27 @@ pub mod acurast_runtime {
     pub type XcmRouter = crate::tests::ParachainXcmRouter<MsgQueue>;
     pub type Barrier = AllowUnpaidExecutionFrom<Everything>;
     pub type XcmOriginToCallOrigin = (
-        SovereignSignedViaLocation<LocationToAccountId, Origin>,
-        SignedAccountId32AsNative<RelayNetwork, Origin>,
+        SovereignSignedViaLocation<LocationToAccountId, RuntimeOrigin>,
+        SignedAccountId32AsNative<RelayNetwork, RuntimeOrigin>,
         // TODO: safety check of signature
-        super::SignedAccountId32FromXcm<Origin>,
-        XcmPassthrough<Origin>,
+        super::SignedAccountId32FromXcm<RuntimeOrigin>,
+        XcmPassthrough<RuntimeOrigin>,
     );
 
-    pub struct FulfillmentRouter;
-
-    impl pallet_acurast::FulfillmentRouter<Runtime> for FulfillmentRouter {
-        fn received_fulfillment(
-            _origin: frame_system::pallet_prelude::OriginFor<Runtime>,
-            _from: <Runtime as frame_system::Config>::AccountId,
-            _fulfillment: pallet_acurast::Fulfillment,
-            _registration: pallet_acurast::JobRegistrationFor<Runtime>,
-            _requester: <<Runtime as frame_system::Config>::Lookup as frame_support::sp_runtime::traits::StaticLookup>::Target,
-        ) -> frame_support::pallet_prelude::DispatchResultWithPostInfo {
-            Ok(().into())
-        }
-    }
-
     pub struct AcurastBarrier;
-
-    impl JobAssignmentUpdateBarrier<Runtime> for AcurastBarrier {
-        fn can_update_assigned_jobs(
-            origin: &<Runtime as frame_system::Config>::AccountId,
-            updates: &Vec<
-                pallet_acurast::JobAssignmentUpdate<<Runtime as frame_system::Config>::AccountId>,
-            >,
-        ) -> bool {
-            updates.iter().all(|update| &update.job_id.0 == origin)
-        }
-    }
 
     impl AssetBarrier<AcurastAsset> for AcurastBarrier {
         fn can_use_asset(_asset: &AcurastAsset) -> bool {
             true
+        }
+    }
+
+    pub struct PassAllAssets {}
+    impl<AssetId> AssetValidator<AssetId> for PassAllAssets {
+        type Error = DispatchError;
+
+        fn validate(_: &AssetId) -> Result<(), Self::Error> {
+            Ok(())
         }
     }
 
@@ -141,7 +121,8 @@ pub mod acurast_runtime {
             System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
             Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-            Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
+            Assets: pallet_assets::{Pallet, Storage, Event<T>, Config<T>}, // hide calls since they get proxied by `pallet_acurast_assets`
+            AcurastAssets: pallet_acurast_assets::{Pallet, Storage, Event<T>, Config<T>, Call},
             ParachainInfo: parachain_info::{Pallet, Storage, Config},
             MsgQueue: super::mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
@@ -154,6 +135,7 @@ pub mod acurast_runtime {
         pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
         pub const IsRelay: bool = false;
         pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
+        pub const ReportTolerance: u64 = 12000;
     }
     parameter_types! {
         pub const BlockHashCount: u64 = 250;
@@ -177,7 +159,7 @@ pub mod acurast_runtime {
     pub struct XcmConfig;
 
     impl xcm_executor::Config for XcmConfig {
-        type Call = Call;
+        type RuntimeCall = RuntimeCall;
         type XcmSender = XcmRouter;
         type AssetTransactor = LocalAssetTransactor;
         type OriginConverter = XcmOriginToCallOrigin;
@@ -185,7 +167,7 @@ pub mod acurast_runtime {
         type IsTeleporter = ();
         type LocationInverter = LocationInverter<Ancestry>;
         type Barrier = Barrier;
-        type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
         type ResponseHandler = ();
         type AssetTrap = ();
@@ -196,7 +178,7 @@ pub mod acurast_runtime {
     impl pallet_balances::Config for Runtime {
         type Balance = AcurastAssetAmount;
         type DustRemoval = ();
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;
         type AccountStore = System;
         type WeightInfo = ();
@@ -209,8 +191,8 @@ pub mod acurast_runtime {
         type BaseCallFilter = Everything;
         type BlockWeights = ();
         type BlockLength = ();
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
@@ -218,7 +200,7 @@ pub mod acurast_runtime {
         type AccountId = AccountId;
         type Lookup = AccountIdLookup<AccountId, ()>;
         type Header = Header;
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type BlockHashCount = BlockHashCount;
         type DbWeight = ();
         type Version = ();
@@ -242,10 +224,12 @@ pub mod acurast_runtime {
     }
 
     impl pallet_assets::Config for Runtime {
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type Balance = AcurastAssetAmount;
-        type AssetId = AcurastAssetId;
+        type AssetId = InternalAssetId;
+        type AssetIdParameter = codec::Compact<InternalAssetId>;
         type Currency = Balances;
+        type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
         type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
         type AssetDeposit = frame_support::traits::ConstU128<0>;
         type AssetAccountDeposit = frame_support::traits::ConstU128<0>;
@@ -256,6 +240,12 @@ pub mod acurast_runtime {
         type Freezer = ();
         type Extra = ();
         type WeightInfo = ();
+        type RemoveItemsLimit = ();
+    }
+
+    impl pallet_acurast_assets::Config for Runtime {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     pub struct FeeManagerImpl;
@@ -265,53 +255,58 @@ pub mod acurast_runtime {
             sp_runtime::Percent::from_percent(30)
         }
 
+        fn get_matcher_percentage() -> sp_runtime::Percent {
+            sp_runtime::Percent::from_percent(10)
+        }
+
         fn pallet_id() -> PalletId {
             PalletId(*b"acurfees")
         }
     }
 
     impl pallet_acurast::Config for Runtime {
-        type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
-        type FulfillmentRouter = FulfillmentRouter;
+        type RuntimeEvent = RuntimeEvent;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
-        type JobAssignmentUpdateBarrier = AcurastBarrier;
+        type KeyAttestationBarrier = ();
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type JobHooks = pallet_acurast_marketplace::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
     }
 
     impl pallet_acurast_marketplace::Config for Runtime {
-        type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RuntimeEvent = RuntimeEvent;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
+        type ReportTolerance = ReportTolerance;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
+        type AssetValidator = PassAllAssets;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
     }
 
     impl pallet_xcm::Config for Runtime {
-        type Event = Event;
-        type SendXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type RuntimeEvent = RuntimeEvent;
+        type SendXcmOrigin = EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmRouter = XcmRouter;
-        type ExecuteXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type ExecuteXcmOrigin = EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmExecuteFilter = Everything;
         type XcmExecutor = XcmExecutor<XcmConfig>;
         type XcmTeleportFilter = Nothing;
         type XcmReserveTransferFilter = Everything;
-        type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type LocationInverter = LocationInverter<Ancestry>;
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
     }
 
     impl super::mock_msg_queue::Config for Runtime {
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type XcmExecutor = XcmExecutor<XcmConfig>;
     }
 }
@@ -345,15 +340,15 @@ pub mod proxy_runtime {
         SiblingParachainConvertsVia<Sibling, AccountId>,
         AccountId32Aliases<RelayNetwork, AccountId>,
     );
-    pub type LocalOriginToLocation = SignedToAccountId32<Origin, AccountId, RelayNetwork>;
+    pub type LocalOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>;
     pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
     pub type Block = frame_system::mocking::MockBlock<Runtime>;
     pub type XcmOriginToCallOrigin = (
-        SovereignSignedViaLocation<LocationToAccountId, Origin>,
-        SignedAccountId32AsNative<RelayNetwork, Origin>,
+        SovereignSignedViaLocation<LocationToAccountId, RuntimeOrigin>,
+        SignedAccountId32AsNative<RelayNetwork, RuntimeOrigin>,
         // TODO: safety check of signature
-        super::SignedAccountId32FromXcm<Origin>,
-        XcmPassthrough<Origin>,
+        super::SignedAccountId32FromXcm<RuntimeOrigin>,
+        XcmPassthrough<RuntimeOrigin>,
     );
     pub type LocalAssetTransactor =
         XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, LocationToAccountId, AccountId, ()>;
@@ -363,7 +358,7 @@ pub mod proxy_runtime {
     pub struct XcmConfig;
 
     impl Config for XcmConfig {
-        type Call = Call;
+        type RuntimeCall = RuntimeCall;
         type XcmSender = XcmRouter;
         type AssetTransactor = LocalAssetTransactor;
         type OriginConverter = XcmOriginToCallOrigin;
@@ -371,7 +366,7 @@ pub mod proxy_runtime {
         type IsTeleporter = ();
         type LocationInverter = LocationInverter<Ancestry>;
         type Barrier = Barrier;
-        type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
         type ResponseHandler = ();
         type AssetTrap = ();
@@ -429,8 +424,8 @@ pub mod proxy_runtime {
         type BaseCallFilter = Everything;
         type BlockWeights = ();
         type BlockLength = ();
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
@@ -438,7 +433,7 @@ pub mod proxy_runtime {
         type AccountId = AccountId;
         type Lookup = AccountIdLookup<AccountId, ()>;
         type Header = Header;
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type BlockHashCount = BlockHashCount;
         type DbWeight = ();
         type Version = ();
@@ -455,7 +450,7 @@ pub mod proxy_runtime {
     impl pallet_balances::Config for Runtime {
         type Balance = AcurastAssetAmount;
         type DustRemoval = ();
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;
         type AccountStore = System;
         type WeightInfo = ();
@@ -465,30 +460,30 @@ pub mod proxy_runtime {
     }
 
     impl super::mock_msg_queue::Config for Runtime {
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type XcmExecutor = XcmExecutor<XcmConfig>;
     }
 
     impl pallet_xcm::Config for Runtime {
-        type Event = Event;
-        type SendXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type RuntimeEvent = RuntimeEvent;
+        type SendXcmOrigin = EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmRouter = XcmRouter;
-        type ExecuteXcmOrigin = EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type ExecuteXcmOrigin = EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmExecuteFilter = Everything;
         type XcmExecutor = XcmExecutor<XcmConfig>;
         type XcmTeleportFilter = Nothing;
         type XcmReserveTransferFilter = Everything;
-        type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type LocationInverter = LocationInverter<Ancestry>;
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
     }
 
     impl crate::Config for Runtime {
-        type Event = Event;
-        type RegistrationExtra = JobRequirements<AcurastAsset>;
+        type RuntimeEvent = RuntimeEvent;
+        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;
@@ -534,12 +529,12 @@ pub mod relay_chain {
     pub type LocalAssetTransactor =
         XcmCurrencyAdapter<Balances, IsConcrete<KsmLocation>, SovereignAccountOf, AccountId, ()>;
     pub type LocalOriginConverter = (
-        SovereignSignedViaLocation<SovereignAccountOf, Origin>,
-        ChildParachainAsNative<origin::Origin, Origin>,
-        SignedAccountId32AsNative<KusamaNetwork, Origin>,
-        ChildSystemParachainAsSuperuser<ParaId, Origin>,
+        SovereignSignedViaLocation<SovereignAccountOf, RuntimeOrigin>,
+        ChildParachainAsNative<origin::Origin, RuntimeOrigin>,
+        SignedAccountId32AsNative<KusamaNetwork, RuntimeOrigin>,
+        ChildSystemParachainAsSuperuser<ParaId, RuntimeOrigin>,
     );
-    pub type LocalOriginToLocation = SignedToAccountId32<Origin, AccountId, KusamaNetwork>;
+    pub type LocalOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, KusamaNetwork>;
     pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
     pub type Block = frame_system::mocking::MockBlock<Runtime>;
     pub type XcmRouter = crate::tests::RelayChainXcmRouter;
@@ -548,7 +543,7 @@ pub mod relay_chain {
     pub struct XcmConfig;
 
     impl Config for XcmConfig {
-        type Call = Call;
+        type RuntimeCall = RuntimeCall;
         type XcmSender = XcmRouter;
         type AssetTransactor = LocalAssetTransactor;
         type OriginConverter = LocalOriginConverter;
@@ -556,7 +551,7 @@ pub mod relay_chain {
         type IsTeleporter = ();
         type LocationInverter = LocationInverter<Ancestry>;
         type Barrier = Barrier;
-        type Weigher = FixedWeightBounds<BaseXcmWeight, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<BaseXcmWeight, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
         type ResponseHandler = ();
         type AssetTrap = ();
@@ -606,8 +601,8 @@ pub mod relay_chain {
         type BaseCallFilter = Everything;
         type BlockWeights = ();
         type BlockLength = ();
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         type Index = u64;
         type BlockNumber = u64;
         type Hash = H256;
@@ -615,7 +610,7 @@ pub mod relay_chain {
         type AccountId = AccountId;
         type Lookup = IdentityLookup<Self::AccountId>;
         type Header = Header;
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type BlockHashCount = BlockHashCount;
         type DbWeight = ();
         type Version = ();
@@ -632,7 +627,7 @@ pub mod relay_chain {
     impl pallet_balances::Config for Runtime {
         type Balance = AcurastAssetAmount;
         type DustRemoval = ();
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;
         type AccountStore = System;
         type WeightInfo = ();
@@ -648,25 +643,25 @@ pub mod relay_chain {
     }
 
     impl pallet_xcm::Config for Runtime {
-        type Event = Event;
-        type SendXcmOrigin = xcm_builder::EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type RuntimeEvent = RuntimeEvent;
+        type SendXcmOrigin = xcm_builder::EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmRouter = XcmRouter;
         // Anyone can execute XCM messages locally...
-        type ExecuteXcmOrigin = xcm_builder::EnsureXcmOrigin<Origin, LocalOriginToLocation>;
+        type ExecuteXcmOrigin = xcm_builder::EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
         type XcmExecuteFilter = Nothing;
         type XcmExecutor = XcmExecutor<XcmConfig>;
         type XcmTeleportFilter = Everything;
         type XcmReserveTransferFilter = Everything;
-        type Weigher = FixedWeightBounds<BaseXcmWeight, Call, MaxInstructions>;
+        type Weigher = FixedWeightBounds<BaseXcmWeight, RuntimeCall, MaxInstructions>;
         type LocationInverter = LocationInverter<Ancestry>;
-        type Origin = Origin;
-        type Call = Call;
+        type RuntimeOrigin = RuntimeOrigin;
+        type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
     }
 
     impl ump::Config for Runtime {
-        type Event = Event;
+        type RuntimeEvent = RuntimeEvent;
         type UmpSink = ump::XcmSink<XcmExecutor<XcmConfig>, Runtime>;
         type FirstMessageFactorPercent = FirstMessageFactorPercent;
         type ExecuteOverweightOrigin = frame_system::EnsureRoot<AccountId>;
@@ -690,8 +685,8 @@ pub mod mock_msg_queue {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-        type XcmExecutor: ExecuteXcm<Self::Call>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type XcmExecutor: ExecuteXcm<Self::RuntimeCall>;
     }
 
     #[pallet::call]
@@ -709,7 +704,7 @@ pub mod mock_msg_queue {
     #[pallet::storage]
     #[pallet::getter(fn received_dmp)]
     /// A queue of received DMP messages
-    pub(super) type ReceivedDmp<T: Config> = StorageValue<_, Vec<Xcm<T::Call>>, ValueQuery>;
+    pub(super) type ReceivedDmp<T: Config> = StorageValue<_, Vec<Xcm<T::RuntimeCall>>, ValueQuery>;
 
     impl<T: Config> Get<ParaId> for Pallet<T> {
         fn get() -> ParaId {
@@ -749,11 +744,11 @@ pub mod mock_msg_queue {
         fn handle_xcmp_message(
             sender: ParaId,
             _sent_at: RelayBlockNumber,
-            xcm: VersionedXcm<T::Call>,
+            xcm: VersionedXcm<T::RuntimeCall>,
             max_weight: Weight,
         ) -> Result<Weight, XcmError> {
             let hash = Encode::using_encoded(&xcm, T::Hashing::hash);
-            let (result, event) = match Xcm::<T::Call>::try_from(xcm) {
+            let (result, event) = match Xcm::<T::RuntimeCall>::try_from(xcm) {
                 Ok(xcm) => {
                     let location = (1, Parachain(sender.into()));
                     match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
@@ -790,8 +785,17 @@ pub mod mock_msg_queue {
 
                 let mut remaining_fragments = &data_ref[..];
                 while !remaining_fragments.is_empty() {
-                    if let Ok(xcm) = VersionedXcm::<T::Call>::decode(&mut remaining_fragments) {
-                        let _ = Self::handle_xcmp_message(sender, sent_at, xcm, max_weight);
+                    if let Ok(xcm) =
+                        VersionedXcm::<T::RuntimeCall>::decode(&mut remaining_fragments)
+                    {
+                        let _ = Self::handle_xcmp_message(sender, sent_at, xcm, max_weight)
+                            .map_err(|e| {
+                                debug_assert!(
+                                    false,
+                                    "Handling XCMP message returned error {:?}",
+                                    e
+                                );
+                            });
                     } else {
                         debug_assert!(false, "Invalid incoming XCMP message data");
                     }
@@ -808,8 +812,8 @@ pub mod mock_msg_queue {
         ) -> Weight {
             for (_i, (_sent_at, data)) in iter.enumerate() {
                 let id = sp_io::hashing::blake2_256(&data[..]);
-                let maybe_msg =
-                    VersionedXcm::<T::Call>::decode(&mut &data[..]).map(Xcm::<T::Call>::try_from);
+                let maybe_msg = VersionedXcm::<T::RuntimeCall>::decode(&mut &data[..])
+                    .map(Xcm::<T::RuntimeCall>::try_from);
                 match maybe_msg {
                     Err(_) => {
                         Self::deposit_event(Event::InvalidFormat(id));

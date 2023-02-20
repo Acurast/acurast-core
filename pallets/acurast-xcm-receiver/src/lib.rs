@@ -24,7 +24,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The fulfillment payload.
         type Payload: Parameter + Member + Clone + Into<Vec<u8>>;
         /// Generic parameters
@@ -57,6 +57,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Dispatchable function that notifies the runtime about a fulfilment coming from acurast parachain.
+        #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().writes(1)))]
         pub fn fulfill(
             origin: OriginFor<T>,

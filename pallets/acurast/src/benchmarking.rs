@@ -1,3 +1,4 @@
+use acurast_common::{AttestationChain, JobRegistration, Script};
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
@@ -9,7 +10,6 @@ use hex_literal::hex;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use types::{AttestationChain, JobRegistration, JobRegistrationFor, Script};
 
 use crate::utils::validate_and_extract_attestation;
 use crate::Pallet as Acurast;
@@ -27,7 +27,7 @@ pub const INITIAL_BALANCE: u128 = UNIT * 10;
 pub const UNIT: Balance = 1_000_000;
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
-pub fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
+pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
@@ -36,6 +36,16 @@ pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrati
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
         extra,
     };
 }
@@ -74,21 +84,21 @@ where
     let caller: T::AccountId = account("token_account", 0, SEED);
     whitelist_account!(caller);
     let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-    let pallet_origin: T::Origin = RawOrigin::Signed(pallet_account.clone()).into();
+    let pallet_origin: T::RuntimeOrigin = RawOrigin::Signed(pallet_account.clone()).into();
 
     T::Currency::make_free_balance_be(&caller, u32::MAX.into());
 
     // might fail if asset is already created in genesis config. Fail doesn't affect later mint
     let _create_token_call = Assets::<T>::create(
         pallet_origin.clone(),
-        22.into(),
+        T::AssetId::from(22).into(),
         T::Lookup::unlookup(pallet_account.clone()),
         10u32.into(),
     );
 
     let mint_token_call = Assets::<T>::mint(
         pallet_origin,
-        22.into(),
+        T::AssetId::from(22).into(),
         T::Lookup::unlookup(caller.clone()),
         INITIAL_BALANCE.into(),
     );
@@ -116,36 +126,6 @@ where
     }
 
     (caller, job)
-}
-
-fn assign_job<T: Config>(
-    submit: bool,
-    caller: T::AccountId,
-    job: JobRegistrationFor<T>,
-) -> JobAssignmentUpdate<T::AccountId>
-where
-    T: pallet_assets::Config,
-{
-    let processor_account: T::AccountId = account("processor", 0, SEED);
-
-    let job_assignment = JobAssignmentUpdate {
-        operation: ListUpdateOperation::Add,
-        assignee: processor_account.clone(),
-        job_id: (caller.clone(), job.script.clone()),
-    };
-
-    // create processor account by giving t over existential deposit
-    T::Currency::make_free_balance_be(&processor_account, u32::MAX.into());
-
-    if submit {
-        let assignment_call = Acurast::<T>::update_job_assignments(
-            RawOrigin::Signed(caller.clone()).into(),
-            vec![job_assignment.clone()],
-        );
-        assert_ok!(assignment_call);
-    }
-
-    job_assignment
 }
 
 benchmarks! {
@@ -180,7 +160,7 @@ benchmarks! {
         let (caller, job) = register_job::<T>(true);
         let sources_update = vec![AllowedSourcesUpdate {
             operation: ListUpdateOperation::Add,
-            account_id: account("processor", 0, SEED),
+            item: account("processor", 0, SEED),
         }];
 
     }: _(RawOrigin::Signed(caller.clone()), job.script.clone(), sources_update.clone())
@@ -190,28 +170,10 @@ benchmarks! {
         ).into());
     }
 
-    fulfill {
-        let (caller, job) = register_job::<T>(true);
-        let job_assignment = assign_job::<T>(true, caller.clone(), job.clone());
-        let fulfillment = Fulfillment {
-            script: job.script.clone(),
-            payload: hex!("00").to_vec(),
-        };
-
-    }: _(RawOrigin::Signed(job_assignment.assignee.clone()), fulfillment.clone(), T::Lookup::unlookup(caller.clone()))
-    verify {
-        assert_last_event::<T>(Event::ReceivedFulfillment(
-            job_assignment.assignee.clone(),
-            fulfillment,
-            job,
-            caller
-        ).into());
-    }
-
     submit_attestation {
         let processor_account: T::AccountId = processor_account_id::<T>();
         let attestation_chain = attestation_chain();
-        let timestamp_call = pallet_timestamp::Pallet::<T>::set(T::Origin::none(), 1657363915001u64.into());
+        let timestamp_call = pallet_timestamp::Pallet::<T>::set(T::RuntimeOrigin::none(), 1657363915001u64.into());
         assert_ok!(timestamp_call);
 
     }: _(RawOrigin::Signed(processor_account.clone()), attestation_chain.clone())
@@ -226,7 +188,7 @@ benchmarks! {
     update_certificate_revocation_list {
         let updates =  vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
-            cert_serial_number: hex!("15905857467176635834").to_vec().try_into().unwrap()
+            item: hex!("15905857467176635834").to_vec().try_into().unwrap()
         }];
 
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();

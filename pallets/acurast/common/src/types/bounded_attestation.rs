@@ -1,103 +1,18 @@
-use frame_support::{
-    pallet_prelude::*, sp_runtime::traits::MaybeDisplay, storage::bounded_vec::BoundedVec,
-};
-use sp_std::prelude::*;
+#![cfg(feature = "attestation")]
 
 use crate::{
     attestation::{
         asn::{self, KeyDescription},
         CertificateChainInput, CHAIN_MAX_LENGTH,
     },
-    Config,
+    SerialNumber,
 };
 
-pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
-pub(crate) const SCRIPT_LENGTH: u32 = 53;
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+use sp_std::prelude::*;
 
-pub type JobRegistrationFor<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
-
-/// Type representing the utf8 bytes of a string containing the value of an ipfs url.
-/// The ipfs url is expected to point to a script.
-pub type Script = BoundedVec<u8, ConstU32<SCRIPT_LENGTH>>;
-
-/// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.2
 const ISSUER_NAME_MAX_LENGTH: u32 = 64;
-const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
-
 pub type IssuerName = BoundedVec<u8, ConstU32<ISSUER_NAME_MAX_LENGTH>>;
-pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
-
-/// Structure representing a job fulfillment. It contains the script that generated the payload and the actual payload.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct Fulfillment {
-    /// The script that generated the payload.
-    pub script: Script,
-    /// The output of a script.
-    pub payload: Vec<u8>,
-}
-
-/// Structure used to updated the allowed sources list of a [Registration].
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct AllowedSourcesUpdate<A>
-where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-{
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to add or remove.
-    pub account_id: A,
-}
-
-/// A Job ID consists of an [AccountId] and a [Script].
-pub type JobId<AccountId> = (AccountId, Script);
-
-/// Structure used to updated the allowed sources list of a [Registration].
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct JobAssignmentUpdate<A>
-where
-    A: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord + MaxEncodedLen,
-{
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to assign the job to.
-    pub assignee: A,
-    /// the job id to be assigned.
-    pub job_id: JobId<A>,
-}
-
-/// Structure used to updated the certificate recovation list.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct CertificateRevocationListUpdate {
-    /// The update operation.
-    pub operation: ListUpdateOperation,
-    /// The [AccountId] to add or remove.
-    pub cert_serial_number: SerialNumber,
-}
-
-/// The allowed sources update operation.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
-pub enum ListUpdateOperation {
-    Add,
-    Remove,
-}
-
-/// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct JobRegistration<AccountId, Extra>
-where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member,
-{
-    /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
-    pub script: Script,
-    /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<AccountId>>,
-    /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
-    pub allow_only_verified_sources: bool,
-    /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
-    pub extra: Extra,
-}
 
 pub(crate) const PURPOSE_MAX_LENGTH: u32 = 50;
 pub(crate) const DIGEST_MAX_LENGTH: u32 = 32;
@@ -106,7 +21,9 @@ pub(crate) const MGF_DIGEST_MAX_LENGTH: u32 = 32;
 pub(crate) const VERIFIED_BOOT_KEY_MAX_LENGTH: u32 = 32;
 pub(crate) const VERIFIED_BOOT_HASH_MAX_LENGTH: u32 = 32;
 pub(crate) const ATTESTATION_ID_MAX_LENGTH: u32 = 256;
-pub(crate) const BOUDNED_SET_PROPERTY: u32 = 16;
+pub(crate) const BOUNDED_SET_PROPERTY: u32 = 16;
+pub(crate) const PACKAGE_NAME_MAX_LENGTH: u32 = 128;
+pub(crate) const SIGNATURE_DIGEST_SET_MAX_LENGTH: u32 = 16;
 
 pub type Purpose = BoundedVec<u8, ConstU32<PURPOSE_MAX_LENGTH>>;
 pub type Digest = BoundedVec<u8, ConstU32<DIGEST_MAX_LENGTH>>;
@@ -117,7 +34,10 @@ pub type VerifiedBootHash = BoundedVec<u8, ConstU32<VERIFIED_BOOT_HASH_MAX_LENGT
 pub type AttestationIdProperty = BoundedVec<u8, ConstU32<ATTESTATION_ID_MAX_LENGTH>>;
 pub type CertId = (IssuerName, SerialNumber);
 pub type ValidatingCertIds = BoundedVec<CertId, ConstU32<CHAIN_MAX_LENGTH>>;
-pub type BoundedSetProperty = BoundedVec<CertId, ConstU32<BOUDNED_SET_PROPERTY>>;
+pub type BoundedSetProperty = BoundedVec<CertId, ConstU32<BOUNDED_SET_PROPERTY>>;
+pub type PackageName = BoundedVec<u8, ConstU32<PACKAGE_NAME_MAX_LENGTH>>;
+pub type SignatureDigestSet = BoundedVec<Digest, ConstU32<SIGNATURE_DIGEST_SET_MAX_LENGTH>>;
+pub type PackageInfoSet = BoundedVec<BoundedAttestationPackageInfo, ConstU32<16>>;
 
 /// Structure representing a submitted attestation chain.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
@@ -277,7 +197,7 @@ pub struct BoundedAuthorizationList {
     pub root_of_trust: Option<BoundedRootOfTrust>,
     pub os_version: Option<u32>,
     pub os_patch_level: Option<u32>,
-    pub attestation_application_id: Option<AttestationIdProperty>,
+    pub attestation_application_id: Option<BoundedAttestationApplicationId>,
     pub attestation_id_brand: Option<AttestationIdProperty>,
     pub attestation_id_device: Option<AttestationIdProperty>,
     pub attestation_id_product: Option<AttestationIdProperty>,
@@ -301,6 +221,7 @@ macro_rules! try_bound_set {
         .map_err(|_| ())?
         .map(|v| <$target_vec_type>::try_from(v))
         .map_or(Ok(None), |r| r.map(Some))
+        .map_err(|_| ())
     }};
 }
 
@@ -343,7 +264,8 @@ impl TryFrom<asn::AuthorizationListV1<'_>> for BoundedAuthorizationList {
             application_id: data
                 .application_id
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             creation_date_time: try_bound!(data.creation_date_time, u64)?,
             origin: try_bound!(data.origin, u8)?,
             root_of_trust: data
@@ -398,7 +320,8 @@ impl TryFrom<asn::AuthorizationListV2<'_>> for BoundedAuthorizationList {
             application_id: data
                 .application_id
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             creation_date_time: try_bound!(data.creation_date_time, u64)?,
             origin: try_bound!(data.origin, u8)?,
             root_of_trust: data
@@ -409,40 +332,53 @@ impl TryFrom<asn::AuthorizationListV2<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_brand: data
                 .attestation_id_brand
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_device: data
                 .attestation_id_device
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_product: data
                 .attestation_id_product
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_serial: data
                 .attestation_id_serial
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_imei: data
                 .attestation_id_imei
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_meid: data
                 .attestation_id_meid
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_manufacturer: data
                 .attestation_id_manufacturer
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_model: data
                 .attestation_id_model
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             vendor_patch_level: None,
             boot_patch_level: None,
             device_unique_attestation: None,
@@ -480,7 +416,8 @@ impl TryFrom<asn::AuthorizationListV3<'_>> for BoundedAuthorizationList {
             application_id: data
                 .application_id
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             creation_date_time: try_bound!(data.creation_date_time, u64)?,
             origin: try_bound!(data.origin, u8)?,
             root_of_trust: data
@@ -491,40 +428,53 @@ impl TryFrom<asn::AuthorizationListV3<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_brand: data
                 .attestation_id_brand
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_device: data
                 .attestation_id_device
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_product: data
                 .attestation_id_product
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_serial: data
                 .attestation_id_serial
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_imei: data
                 .attestation_id_imei
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_meid: data
                 .attestation_id_meid
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_manufacturer: data
                 .attestation_id_manufacturer
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_model: data
                 .attestation_id_model
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
             boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
             device_unique_attestation: None,
@@ -562,7 +512,8 @@ impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
             application_id: data
                 .application_id
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             creation_date_time: try_bound!(data.creation_date_time, u64)?,
             origin: try_bound!(data.origin, u8)?,
             root_of_trust: data
@@ -573,40 +524,53 @@ impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_brand: data
                 .attestation_id_brand
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_device: data
                 .attestation_id_device
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_product: data
                 .attestation_id_product
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_serial: data
                 .attestation_id_serial
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_imei: data
                 .attestation_id_imei
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_meid: data
                 .attestation_id_meid
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_manufacturer: data
                 .attestation_id_manufacturer
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_model: data
                 .attestation_id_model
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
             boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
             device_unique_attestation: Some(data.device_unique_attestation.is_some()),
@@ -652,40 +616,52 @@ impl TryFrom<asn::AuthorizationListV100V200<'_>> for BoundedAuthorizationList {
             os_patch_level: try_bound!(data.os_patch_level, u32)?,
             attestation_application_id: data
                 .attestation_application_id
-                .map(|v| AttestationIdProperty::try_from(v.to_vec()))
+                .map(|bytes| {
+                    asn1::parse_single::<asn::AttestationApplicationId>(bytes)
+                        .map_err(|_| ())
+                        .and_then(|app_id| BoundedAttestationApplicationId::try_from(app_id))
+                })
                 .map_or(Ok(None), |r| r.map(Some))?,
             attestation_id_brand: data
                 .attestation_id_brand
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_device: data
                 .attestation_id_device
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_product: data
                 .attestation_id_product
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_serial: data
                 .attestation_id_serial
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_imei: data
                 .attestation_id_imei
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_meid: data
                 .attestation_id_meid
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_manufacturer: data
                 .attestation_id_manufacturer
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             attestation_id_model: data
                 .attestation_id_model
                 .map(|v| AttestationIdProperty::try_from(v.to_vec()))
-                .map_or(Ok(None), |r| r.map(Some))?,
+                .map_or(Ok(None), |r| r.map(Some))
+                .map_err(|_| ())?,
             vendor_patch_level: try_bound!(data.vendor_patch_level, u32)?,
             boot_patch_level: try_bound!(data.boot_patch_level, u32)?,
             device_unique_attestation: Some(data.device_unique_attestation.is_some()),
@@ -706,7 +682,8 @@ impl TryFrom<asn::RootOfTrustV1V2<'_>> for BoundedRootOfTrust {
 
     fn try_from(data: asn::RootOfTrustV1V2) -> Result<Self, Self::Error> {
         Ok(BoundedRootOfTrust {
-            verified_boot_key: VerifiedBootKey::try_from(data.verified_boot_key.to_vec())?,
+            verified_boot_key: VerifiedBootKey::try_from(data.verified_boot_key.to_vec())
+                .map_err(|_| ())?,
             device_locked: data.device_locked,
             verified_boot_state: data.verified_boot_state.into(),
             verified_boot_hash: None,
@@ -719,12 +696,13 @@ impl TryFrom<asn::RootOfTrust<'_>> for BoundedRootOfTrust {
 
     fn try_from(data: asn::RootOfTrust) -> Result<Self, Self::Error> {
         Ok(BoundedRootOfTrust {
-            verified_boot_key: VerifiedBootKey::try_from(data.verified_boot_key.to_vec())?,
+            verified_boot_key: VerifiedBootKey::try_from(data.verified_boot_key.to_vec())
+                .map_err(|_| ())?,
             device_locked: data.device_locked,
             verified_boot_state: data.verified_boot_state.into(),
-            verified_boot_hash: Some(VerifiedBootHash::try_from(
-                data.verified_boot_hash.to_vec(),
-            )?),
+            verified_boot_hash: Some(
+                VerifiedBootHash::try_from(data.verified_boot_hash.to_vec()).map_err(|_| ())?,
+            ),
         })
     }
 }
@@ -745,5 +723,50 @@ impl From<asn::VerifiedBootState> for VerifiedBootState {
             2 => VerifiedBootState::Unverified,
             _ => VerifiedBootState::Failed,
         }
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct BoundedAttestationApplicationId {
+    pub package_infos: PackageInfoSet,
+    pub signature_digests: SignatureDigestSet,
+}
+
+impl<'a> TryFrom<asn::AttestationApplicationId<'a>> for BoundedAttestationApplicationId {
+    type Error = ();
+
+    fn try_from(value: asn::AttestationApplicationId<'a>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            package_infos: value
+                .package_infos
+                .map(|package_info| BoundedAttestationPackageInfo::try_from(package_info))
+                .collect::<Result<Vec<BoundedAttestationPackageInfo>, Self::Error>>()?
+                .try_into()
+                .map_err(|_| ())?,
+            signature_digests: value
+                .signature_digests
+                .map(|digest| Digest::try_from(digest.to_vec()))
+                .collect::<Result<Vec<Digest>, Vec<u8>>>()
+                .map_err(|_| ())?
+                .try_into()
+                .map_err(|_| ())?,
+        })
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct BoundedAttestationPackageInfo {
+    pub package_name: PackageName,
+    pub version: i64,
+}
+
+impl<'a> TryFrom<asn::AttestationPackageInfo<'a>> for BoundedAttestationPackageInfo {
+    type Error = ();
+
+    fn try_from(value: asn::AttestationPackageInfo<'a>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            package_name: value.package_name.to_vec().try_into().map_err(|_| ())?,
+            version: value.version,
+        })
     }
 }
