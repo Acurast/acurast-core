@@ -82,7 +82,13 @@ pub fn generate_signature(
     timestamp: u128,
     counter: u64,
 ) -> MultiSignature {
-    let message = [account.encode(), timestamp.encode(), counter.encode()].concat();
+    let message = [
+        b"<Bytes>".to_vec(),
+        account.encode(),
+        timestamp.encode(),
+        counter.encode(),
+        b"</Bytes>".to_vec(),
+    ]
+    .concat();
     signer.sign(&message).into()
 }
-
