@@ -51,7 +51,7 @@ where
         if let Some(proof) = &self.proof {
             let now = T::UnixTime::now().as_millis();
             if let Some(diff) = now.checked_sub(proof.timestamp) {
-                 return proof.timestamp <= now && diff < T::PairingProofExpirationTime::get();
+                return proof.timestamp <= now && diff < T::PairingProofExpirationTime::get();
             }
         }
         false
@@ -64,9 +64,11 @@ where
     ) -> bool {
         if let Some(proof) = &self.proof {
             let message = [
+                b"<Bytes>".to_vec(),
                 account_id.encode(),
                 proof.timestamp.encode(),
                 counter.encode(),
+                b"</Bytes>".to_vec(),
             ]
             .concat();
             return proof
