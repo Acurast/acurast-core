@@ -6,7 +6,7 @@ use sp_arithmetic::Permill;
 
 #[test]
 fn neutral_reputation() {
-    let mut beta_params: BetaParameters<FixedU128> = BetaParameters::default();
+    let beta_params: BetaParameters<FixedU128> = BetaParameters::default();
     assert_eq!(beta_params.r, FixedU128::from_u32(0));
     assert_eq!(beta_params.s, FixedU128::from_u32(0));
 
