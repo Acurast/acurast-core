@@ -1,3 +1,6 @@
+// SBP-M1 review: missing benchmarking & tests
+
+// SBP-M1 review: I strongly advise to have a dedicated name for this pallet - `pallet_asset` is misleading
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(dead_code)]
 
@@ -126,6 +129,8 @@ pub mod pallet {
         ) -> DispatchResult {
             let new = Self::update_index(id, asset)?;
 
+            //SBP-M1 review: missing ensure_signed stuff...
+
             if new {
                 <pallet_assets::Pallet<T, I>>::create(origin, id, admin, min_balance)
             } else {
@@ -168,6 +173,7 @@ pub mod pallet {
         pub fn set_metadata(
             origin: OriginFor<T>,
             id: AssetId,
+            // SBP-M1 review: use BoundedVec instead of just Vec. Potential security issue...
             name: Vec<u8>,
             symbol: Vec<u8>,
             decimals: u8,

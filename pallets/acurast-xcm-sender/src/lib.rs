@@ -50,6 +50,7 @@ pub mod pallet {
         pub fn send(
             caller: T::AccountId,
             destination: MultiLocation,
+            // SBP-M1 review: use BoundedVec...
             payload: Vec<u8>,
             parameters: Option<Vec<u8>>,
         ) -> DispatchResult {
@@ -65,6 +66,7 @@ pub mod pallet {
             // Add transact instruction with the fulfill call.
             let transaction = Transact {
                 origin_type: OriginKind::Xcm,
+                // SBP-M1 review: just a note, 2D weights are used in feature releases
                 require_weight_at_most: 1_000_000_000u64, // TODO: Review this value
                 call: encoded_call.into(),
             };

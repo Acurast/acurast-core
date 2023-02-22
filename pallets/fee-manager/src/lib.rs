@@ -61,6 +61,7 @@ pub mod pallet {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
+            // SBP-M1 review: usage of root is not recommended
             ensure_root(origin)?;
             let (new_version, _) = Self::set_fee_percentage(fee);
             Self::deposit_event(Event::FeeUpdated {

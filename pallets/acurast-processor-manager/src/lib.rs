@@ -116,10 +116,14 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::update_processor_pairings())]
         pub fn update_processor_pairings(
             origin: OriginFor<T>,
+            // SBP-M1 review: security issue
+            // Use BoundedVec 
             pairing_updates: Vec<ProcessorPairingUpdateFor<T>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
+            // SBP-M1 review: use `ensure` for checks
+            // This check can be eliminated with BoundedVec
             if pairing_updates.len() > T::MaxPairingUpdates::get() as usize {
                 return Err(Error::<T>::TooManyPairingUpdates)?;
             }

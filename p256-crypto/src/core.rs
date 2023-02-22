@@ -174,6 +174,10 @@ pub mod p256 {
         }
     }
 
+    // SBP-M1 review: I would use const values for lenght like for signature length;
+    // You need to use that value multiple times, so you can mistype it somewhere
+    // With const value it is easier to manage it
+    
     #[cfg(feature = "full_crypto")]
     type Seed = [u8; 32];
 
@@ -294,6 +298,9 @@ pub mod p256 {
                     let verifying_key = VerifyingKey::from(public_key);
                     let verifying_key_from_signature =
                         recoverable::Signature::try_from(signature_bytes)
+                            // SBP-M1 review: apply error handling instead of `unwrap`
+                            // It can cause unexpected panic
+                            // That is hard to debug
                             .unwrap()
                             .recover_verifying_key(message)
                             .unwrap();
@@ -356,6 +363,7 @@ pub mod p256 {
         fn to_bytes(&self) -> [u8; 33] {
             let encoded_point = EncodedPoint::from(self);
             let compressed_point = encoded_point.compress();
+            // SBP-M1 review: same stuff about `unwrap`
             compressed_point.as_bytes().try_into().unwrap()
         }
     }

@@ -1,3 +1,5 @@
+// SBP-M1 review: missing tests
+
 use codec::{Decode, Encode, MaxEncodedLen};
 
 use scale_info::TypeInfo;
@@ -13,6 +15,8 @@ use crate::application_crypto::p256::{Public, Signature};
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Eq, PartialEq, Clone, Encode, Decode, MaxEncodedLen, RuntimeDebug, TypeInfo)]
+// SBP-M1 review: `MultiSignature` is a misleading name -> similar to multisig that is responsible for handling e.g. n of m signatures
+// I would use different name for it
 pub enum MultiSignature {
     /// An Ed25519 signature.
     Ed25519(ed25519::Signature),
@@ -94,6 +98,7 @@ impl TryFrom<MultiSignature> for Signature {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+// SBP-M1 review: same as previous comment
 pub enum MultiSigner {
     /// An Ed25519 identity.
     Ed25519(ed25519::Public),
@@ -245,6 +250,8 @@ impl Verify for MultiSignature {
             }
             (Self::P256(ref sig), who) => {
                 match p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
+                    // SBP-M1 review: apply error handling instead of `unwrap`
+                    // it can cause unexpected panic
                     .unwrap()
                     .recover_verifying_key(msg.get())
                 {

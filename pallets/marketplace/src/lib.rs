@@ -594,12 +594,14 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// Checks if a Processor - Job match is possible and returns the job reward.
+        // SBP-M1 review: too long function
         fn process_matching<'a>(
             matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
         ) -> Result<RewardFor<T>, DispatchError> {
             // Currently we require all matches to be rewarded with the same asset
             let mut remaining_reward: Option<(RewardFor<T>, T::AssetAmount)> = None;
 
+            // SBP-M1 review: many loops, potentially they can exceed block time
             for m in matching {
                 let registration = <StoredJobRegistration<T>>::get(&m.job_id.0, &m.job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;

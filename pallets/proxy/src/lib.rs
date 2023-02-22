@@ -1,3 +1,5 @@
+// SBP-M1 review: missing benchmarks
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(test)]
@@ -93,6 +95,8 @@ pub mod pallet {
         pallet_id: u8,
     ) -> DispatchResult {
         // extract bytes from struct
+        // SBP-M1 review: using of `unwrap` is not safe
+        // Apply error handling...
         let account_bytes = caller.encode().try_into().unwrap();
         let mut xcm_message = Vec::new();
         let extrinsic = proxy_call.get_name();

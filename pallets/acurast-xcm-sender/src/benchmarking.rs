@@ -1,3 +1,5 @@
+// SBP-M1 review: missing benchmarks
+
 //! Benchmarking setup for pallet-template
 
 use super::*;

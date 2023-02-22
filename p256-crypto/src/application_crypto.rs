@@ -1,3 +1,5 @@
+// SBP-M1 review: missing tests
+
 pub mod p256 {
     use sp_application_crypto::RuntimePublic;
     use sp_core::crypto::KeyTypeId;
@@ -39,6 +41,7 @@ pub mod p256 {
         }
 
         fn sign<M: AsRef<[u8]>>(&self, _key_type: KeyTypeId, _msg: &M) -> Option<Self::Signature> {
+            // SBP-M1 review: why None value?
             None
         }
 
