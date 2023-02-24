@@ -157,6 +157,10 @@ pub fn eve_account_id() -> AccountId {
     [4; 32].into()
 }
 
+pub fn account_id(i: u8) -> AccountId {
+    [i; 32].into()
+}
+
 pub fn script_random_value() -> Script {
     SCRIPT_RANDOM_VALUE_BYTES.to_vec().try_into().unwrap()
 }

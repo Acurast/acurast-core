@@ -1,9 +1,12 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok, traits::Hooks};
+use sp_runtime::Permill;
 
+use pallet_acurast::utils::validate_and_extract_attestation;
 use pallet_acurast::JobRegistrationFor;
 use pallet_acurast::Schedule;
+use reputation::{BetaReputation, ReputationEngine};
 
 use crate::stub::*;
 use crate::{
@@ -17,6 +20,7 @@ fn test_match() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let asset_id = ad.pricing[0].reward_asset;
     let registration = JobRegistrationFor::<Test> {
         script: script(),
         allowed_sources: None,
@@ -34,6 +38,7 @@ fn test_match() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -49,6 +54,14 @@ fn test_match() {
     ExtBuilder::default().build().execute_with(|| {
         // pretend current time
         later(now);
+
+        let chain = attestation_chain();
+        assert_ok!(Acurast::submit_attestation(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            chain.clone()
+        ));
+        let attestation =
+            validate_and_extract_attestation::<Test>(&processor_account_id(), &chain).unwrap();
 
         assert_ok!(AcurastMarketplace::advertise(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -67,7 +80,7 @@ fn test_match() {
             Some(ad.pricing[0].clone()),
             AcurastMarketplace::stored_advertisement_pricing(
                 processor_account_id(),
-                ad.pricing[0].reward_asset.clone()
+                asset_id.clone()
             )
         );
 
@@ -126,6 +139,17 @@ fn test_match() {
             false,
             ExecutionResult::Success(operation_hash())
         ));
+        // average reward only updated at end of job
+        assert_eq!(None, AcurastMarketplace::average_reward(asset_id.clone()),);
+        // reputation still ~50%
+        assert_eq!(
+            Permill::from_parts(509_803),
+            BetaReputation::<u128>::normalize(
+                AcurastMarketplace::stored_reputation(processor_account_id(), asset_id.clone())
+                    .unwrap()
+            )
+            .unwrap()
+        );
         assert_eq!(
             Some(Assignment {
                 slot: 0,
@@ -163,6 +187,24 @@ fn test_match() {
             None,
             AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
         );
+        assert_eq!(
+            Some(1),
+            AcurastMarketplace::total_assigned(asset_id.clone())
+        );
+        // average reward only updated at end of job
+        assert_eq!(
+            Some(6000000),
+            AcurastMarketplace::average_reward(asset_id.clone())
+        );
+        // reputation increased
+        assert_eq!(
+            Permill::from_parts(763_424),
+            BetaReputation::<u128>::normalize(
+                AcurastMarketplace::stored_reputation(processor_account_id(), asset_id.clone())
+                    .unwrap()
+            )
+            .unwrap()
+        );
         // Job no longer assigned after last execution
         assert_eq!(
             None,
@@ -176,6 +218,10 @@ fn test_match() {
         assert_eq!(
             events(),
             [
+                RuntimeEvent::Acurast(pallet_acurast::Event::AttestationStored(
+                    attestation,
+                    processor_account_id()
+                )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
                     ad.clone(),
                     processor_account_id()
@@ -279,6 +325,7 @@ fn test_no_match_schedule_overlap() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -301,6 +348,7 @@ fn test_no_match_schedule_overlap() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };
@@ -398,6 +446,90 @@ fn test_no_match_schedule_overlap() {
 }
 
 #[test]
+fn test_no_match_insufficient_reputation() {
+    let now = 1_671_789_600_000; // 23.12.2022 10:00;
+
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let registration1 = JobRegistrationFor::<Test> {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min -> 2 executions fit
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        extra: JobRequirements {
+            slots: 1,
+            reward: asset(3_000_000 * 2),
+            min_reputation: Some(1_000_000),
+            instant_match: None,
+        },
+    };
+    let job_id1 = (alice_account_id(), registration1.script.clone());
+
+    ExtBuilder::default().build().execute_with(|| {
+        // pretend current time
+        assert_ok!(Timestamp::set(RuntimeOrigin::none(), now));
+        assert_ok!(AcurastMarketplace::advertise(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+
+        // register job
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration1.clone(),
+        ));
+        assert_eq!(
+            Some(JobStatus::Open),
+            AcurastMarketplace::stored_job_status(alice_account_id(), registration1.script.clone())
+        );
+
+        // the job matches except inssufficient reputation
+        let m = Match {
+            job_id: job_id1.clone(),
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
+        };
+        assert_err!(
+            AcurastMarketplace::propose_matching(
+                RuntimeOrigin::signed(charlie_account_id()).into(),
+                vec![m.clone()],
+            ),
+            Error::<Test>::InsufficientReputationInMatch
+        );
+
+        assert_eq!(
+            events(),
+            [
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
+                    id: 0,
+                    amount: 12_000_000
+                })),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration1.clone(),
+                    alice_account_id()
+                )),
+                // no match event for job
+            ]
+        );
+    });
+}
+
+#[test]
 fn test_more_reports_than_expected() {
     let now = 1_671_789_600_000; // 23.12.2022 10:00;
 
@@ -420,6 +552,7 @@ fn test_more_reports_than_expected() {
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
+            min_reputation: None,
             instant_match: None,
         },
     };

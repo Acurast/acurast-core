@@ -214,6 +214,7 @@ pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset
         extra: JobRequirements {
             slots: 1,
             reward: owned_asset(20000),
+            min_reputation: None,
             instant_match: None,
         },
     }

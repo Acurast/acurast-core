@@ -72,6 +72,7 @@ where
     let r = JobRequirements {
         slots: 1,
         reward: asset(reward_value).into(),
+        min_reputation: Some(0),
         instant_match: None,
     };
     let r: <T as Config>::RegistrationExtra = r.into();

@@ -144,6 +144,8 @@ where
     pub slots: u8,
     /// Reward offered for each slot and scheduled execution of the job.
     pub reward: Reward,
+    /// Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
+    pub min_reputation: Option<u128>,
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
     pub instant_match: Option<Vec<PlannedExecution<AccountId>>>,

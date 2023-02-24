@@ -44,6 +44,7 @@ parachains-common = { git = "https://github.com/paritytech/cumulus", default-fea
 
 pallet-acurast = { path = "../acurast", default-features = false}
 pallet-acurast-assets = { path = "../assets", default-features = false }
+acurast-reputation = { path = "./reputation", default-features = false }
 
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
@@ -91,5 +92,6 @@ std = [
 	"xcm/std",
 	"pallet-acurast/std",
 	"pallet-acurast-assets/std",
+	"acurast-reputation/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
