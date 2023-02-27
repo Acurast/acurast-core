@@ -30,11 +30,13 @@ pub mod pallet {
     use sp_runtime::traits::Hash;
     use types::*;
 
+    /// A instantiable pallet for receiving secure state synchronizations into Acurast.
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
+    /// Configures the pallet instance for a specific target chain from which we synchronize state into Acurast.
     #[pallet::config]
     pub trait Config<I: 'static = ()>: frame_system::Config {
         type RuntimeEvent: From<Event<Self, I>>
@@ -76,6 +78,8 @@ pub mod pallet {
         /// Transmission rate in blocks; `block % transmission_rate == 0` must hold.
         type TransmissionRate: Get<Self::TargetChainBlockNumber>;
         /// The quorum size of transmitters that need to agree on a state merkle root before accepting in proofs.
+        ///
+        /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
     }
 
@@ -103,7 +107,7 @@ pub mod pallet {
         },
     }
 
-    /// This storage field maps the state transmitters to their respective activiti window.
+    /// This storage field maps the state transmitters to their respective activity window.
     ///
     /// These transmitters are responsible for submitting the merkle roots of supported
     /// source chains to acurast.
@@ -138,7 +142,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
-        /// This extrinsic is used to add, update or remove state transmitters.
+        /// Used to add, update or remove state transmitters.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_state_transmitters(
@@ -188,6 +192,7 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Used by transmitters to submit a `state_merkle_root` at the specified `block` on the target chain.
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn submit_state_merkle_root(
@@ -239,12 +244,8 @@ pub mod pallet {
         }
     }
 
-    pub enum ValidationResult {
-        UnconfirmedStateRoot,
-    }
-
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
-        /// Validates a
+        /// Validates a state merkle root with respect to roots submitted by a quorum of transmitters.
         pub fn validate_state_merkle_root(
             block: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
