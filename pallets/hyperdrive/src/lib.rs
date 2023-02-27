@@ -18,8 +18,16 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use frame_support::pallet_prelude::*;
+    use core::{fmt::Debug, str::FromStr};
+    use frame_support::{
+        pallet_prelude::*,
+        sp_runtime::traits::{
+            AtLeast32BitUnsigned, Bounded, CheckEqual, MaybeDisplay, SimpleBitOps,
+        },
+    };
     use frame_system::pallet_prelude::*;
+    use sp_arithmetic::traits::{CheckedRem, Zero};
+    use sp_runtime::traits::Hash;
     use types::*;
 
     #[pallet::pallet]
@@ -31,20 +39,67 @@ pub mod pallet {
     pub trait Config<I: 'static = ()>: frame_system::Config {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        type StateRoot: Parameter + Member + MaxEncodedLen;
+
+        /// The output of the `Hashing` function used to derive hashes of target chain state.
+        type TargetChainHash: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + sp_std::hash::Hash
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen;
+        /// The block number type used by the target runtime.
+        type TargetChainBlockNumber: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + AtLeast32BitUnsigned
+            + Default
+            + Bounded
+            + Copy
+            + sp_std::hash::Hash
+            + FromStr
+            + MaxEncodedLen
+            + TypeInfo
+            + Zero
+            + CheckedRem;
+        /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
+        type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
+        /// Transmission rate in blocks; `block % transmission_rate == 0` must hold.
+        type TransmissionRate: Get<Self::TargetChainBlockNumber>;
+        /// The quorum size of transmitters that need to agree on a state merkle root before accepting in proofs.
+        type TransmissionQuorum: Get<u8>;
     }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config<I>, I: 'static = ()> {
-        StateSubmitted {
-            snapshot: u64,
-            root: T::StateRoot,
-        },
         StateTransmittersUpdate {
-            added: Vec<(T::AccountId, types::ActivityWindow<T::BlockNumber>)>,
-            updated: Vec<(T::AccountId, types::ActivityWindow<T::BlockNumber>)>,
+            added: Vec<(
+                T::AccountId,
+                types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
+            )>,
+            updated: Vec<(
+                T::AccountId,
+                types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
+            )>,
             removed: Vec<T::AccountId>,
+        },
+        StateMerkleRootSubmitted {
+            block: T::TargetChainBlockNumber,
+            state_merkle_root: T::TargetChainHash,
+        },
+        StateMerkleRootAccepted {
+            block: T::TargetChainBlockNumber,
+            state_merkle_root: T::TargetChainHash,
         },
     }
 
@@ -54,8 +109,43 @@ pub mod pallet {
     /// source chains to acurast.
     #[pallet::storage]
     #[pallet::getter(fn state_transmitter)]
-    pub type StateTransmitter<T: Config<I>, I: 'static = ()> =
-        StorageMap<_, Blake2_128, T::AccountId, ActivityWindow<T::BlockNumber>, ValueQuery>;
+    pub type StateTransmitter<T: Config<I>, I: 'static = ()> = StorageMap<
+        _,
+        Blake2_128,
+        T::AccountId,
+        ActivityWindow<<T as frame_system::Config>::BlockNumber>,
+        ValueQuery,
+    >;
+
+    #[pallet::storage]
+    #[pallet::getter(fn state_merkle_root_proposals)]
+    pub type StateMerkleRootProposals<T: Config<I>, I: 'static = ()> = StorageDoubleMap<
+        _,
+        Blake2_128,
+        T::TargetChainBlockNumber,
+        Blake2_128,
+        T::AccountId,
+        T::TargetChainHash,
+    >;
+
+    #[pallet::storage]
+    #[pallet::getter(fn state_merkle_root)]
+    pub type StateMerkleRootCount<T: Config<I>, I: 'static = ()> = StorageDoubleMap<
+        _,
+        Blake2_128,
+        T::TargetChainBlockNumber,
+        Identity,
+        T::TargetChainHash,
+        u8,
+    >;
+
+    #[pallet::error]
+    pub enum Error<T, I = ()> {
+        /// A known transmitter submits outside the window of activity he is permissioned to.
+        SubmitOutsideTransmitterActivityWindow,
+        SubmitOutsideTransmissionRate,
+        CalculationOverflow,
+    }
 
     #[pallet::call]
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
@@ -64,7 +154,9 @@ pub mod pallet {
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_state_transmitters(
             origin: OriginFor<T>,
-            actions: Vec<StateTransmitterUpdate<T::AccountId, T::BlockNumber>>,
+            actions: Vec<
+                StateTransmitterUpdate<T::AccountId, <T as frame_system::Config>::BlockNumber>,
+            >,
         ) -> DispatchResult {
             ensure_root(origin)?;
 
@@ -106,7 +198,75 @@ pub mod pallet {
 
             Ok(())
         }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
+        pub fn submit_state_merkle_root(
+            origin: OriginFor<T>,
+            block: T::TargetChainBlockNumber,
+            state_merkle_root: T::TargetChainHash,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let activity_window = <StateTransmitter<T, I>>::get(&who);
+            let current_block = <frame_system::Pallet<T>>::block_number();
+            // valid window is defined inclusive start_block, exclusive end_block
+            ensure!(
+                activity_window.start_block <= current_block
+                    && current_block < activity_window.end_block,
+                Error::<T, I>::SubmitOutsideTransmitterActivityWindow
+            );
+            ensure!(
+                block
+                    .checked_rem(&T::TransmissionRate::get())
+                    .ok_or(Error::<T, I>::CalculationOverflow)?
+                    .is_zero(),
+                Error::<T, I>::SubmitOutsideTransmissionRate
+            );
+
+            // insert merkle root proposal since all checks passed
+            // ---------------------------------------------------
+            // insert by whom submitted to track deviating submissions
+            // TODO blacklist transmitters with deviating submission?
+            StateMerkleRootProposals::<T, I>::insert(&block, &who, &state_merkle_root);
+            // update count for constant-time validity checks
+            let accepted =
+                StateMerkleRootCount::<T, I>::mutate(&block, &state_merkle_root, |count| {
+                    let count_ = count.unwrap_or(0) + 1;
+                    *count = Some(count_);
+                    count_ >= <T as Config<I>>::TransmissionQuorum::get()
+                });
+
+            // Emit event to inform that the state merkle root has been sumitted
+            Self::deposit_event(Event::StateMerkleRootSubmitted {
+                block,
+                state_merkle_root,
+            });
+
+            if accepted {
+                Self::deposit_event(Event::StateMerkleRootAccepted {
+                    block,
+                    state_merkle_root,
+                });
+            }
+
+            Ok(())
+        }
+    }
+
+    pub enum ValidationResult {
+        UnconfirmedStateRoot,
+    }
+
+    impl<T: Config<I>, I: 'static> Pallet<T, I> {
+        /// Validates a
+        pub fn validate_state_merkle_root(
+            block: T::TargetChainBlockNumber,
+            state_merkle_root: T::TargetChainHash,
+        ) -> bool {
+            StateMerkleRootCount::<T, I>::get(&block, &state_merkle_root).map_or(false, |count| {
+                count >= <T as Config<I>>::TransmissionQuorum::get()
+            })
+        }
     }
 }
-
-impl<T: Config<I>, I: 'static> Pallet<T, I> {}
