@@ -1,9 +1,10 @@
 use frame_support::{
+    parameter_types,
     traits::{ConstU16, ConstU64},
-    BoundedVec,
 };
 use frame_system as system;
-use sp_core::{ConstU32, H256};
+use sp_core::H256;
+use sp_runtime::traits::Keccak256;
 use sp_runtime::{
     testing::Header,
     traits::{BlakeTwo256, IdentityLookup},
@@ -12,6 +13,11 @@ use sp_runtime::{
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+
+parameter_types! {
+    pub const TransmissionRate: u64 = 5;
+    pub const TransmissionQuorum: u8 = 2;
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -54,7 +60,11 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type StateRoot = BoundedVec<u8, ConstU32<32>>;
+    type TargetChainHash = H256;
+    type TargetChainBlockNumber = u64;
+    type TargetChainHashing = Keccak256;
+    type TransmissionRate = TransmissionRate;
+    type TransmissionQuorum = TransmissionQuorum;
 }
 
 // Build genesis storage according to the mock runtime.
