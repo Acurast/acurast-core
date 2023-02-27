@@ -118,17 +118,6 @@ pub mod pallet {
     >;
 
     #[pallet::storage]
-    #[pallet::getter(fn state_merkle_root_proposals)]
-    pub type StateMerkleRootProposals<T: Config<I>, I: 'static = ()> = StorageDoubleMap<
-        _,
-        Blake2_128,
-        T::TargetChainBlockNumber,
-        Blake2_128,
-        T::AccountId,
-        T::TargetChainHash,
-    >;
-
-    #[pallet::storage]
     #[pallet::getter(fn state_merkle_root)]
     pub type StateMerkleRootCount<T: Config<I>, I: 'static = ()> = StorageDoubleMap<
         _,
@@ -225,11 +214,7 @@ pub mod pallet {
             );
 
             // insert merkle root proposal since all checks passed
-            // ---------------------------------------------------
-            // insert by whom submitted to track deviating submissions
-            // TODO blacklist transmitters with deviating submission?
-            StateMerkleRootProposals::<T, I>::insert(&block, &who, &state_merkle_root);
-            // update count for constant-time validity checks
+            // allows for constant-time validity checks
             let accepted =
                 StateMerkleRootCount::<T, I>::mutate(&block, &state_merkle_root, |count| {
                     let count_ = count.unwrap_or(0) + 1;
