@@ -1,6 +1,17 @@
 use codec::{Decode, Encode};
 use frame_support::RuntimeDebug;
 use scale_info::TypeInfo;
+use sp_core::bounded::BoundedVec;
+use sp_core::ConstU32;
+
+pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
+pub type StateTransmitterUpdates<T> =
+    BoundedVec<StateTransmitterUpdateFor<T>, ConstU32<STATE_TRANSMITTER_UPDATES_MAX_LENGTH>>;
+
+pub type StateTransmitterUpdateFor<T> = StateTransmitterUpdate<
+    <T as frame_system::Config>::AccountId,
+    <T as frame_system::Config>::BlockNumber,
+>;
 
 /// This struct defines the transmitter activity window
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
