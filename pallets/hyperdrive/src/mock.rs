@@ -11,6 +11,8 @@ use sp_runtime::{
     AccountId32,
 };
 
+use crate::weights;
+
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -65,6 +67,7 @@ impl crate::Config for Test {
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
+    type WeightInfo = weights::Weights<Test>;
 }
 
 // Build genesis storage according to the mock runtime.

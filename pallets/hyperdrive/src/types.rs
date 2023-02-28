@@ -25,3 +25,8 @@ pub enum StateTransmitterUpdate<AccountId, BlockNumber> {
     Remove(AccountId),
     Update(AccountId, ActivityWindow<BlockNumber>),
 }
+
+pub type StateTransmitterUpdateFor<T> = StateTransmitterUpdate<
+    <T as frame_system::Config>::AccountId,
+    <T as frame_system::Config>::BlockNumber,
+>;

@@ -1,8 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use pallet::*;
+
 #[cfg(test)]
 mod mock;
-
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod stub;
 #[cfg(test)]
 mod tests;
 
@@ -10,15 +13,13 @@ mod tests;
 mod benchmarking;
 
 mod types;
-
-use frame_support::{dispatch::Weight, traits::Get};
-
-pub use pallet::*;
+pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::*;
     use core::{fmt::Debug, str::FromStr};
+
+    use frame_support::traits::Get;
     use frame_support::{
         pallet_prelude::*,
         sp_runtime::traits::{
@@ -28,7 +29,12 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
+
     use types::*;
+
+    use crate::weights::WeightInfo;
+
+    use super::*;
 
     /// A instantiable pallet for receiving secure state synchronizations into Acurast.
     #[pallet::pallet]
@@ -81,6 +87,7 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::event]
@@ -144,12 +151,10 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Used to add, update or remove state transmitters.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters())]
         pub fn update_state_transmitters(
             origin: OriginFor<T>,
-            actions: Vec<
-                StateTransmitterUpdate<T::AccountId, <T as frame_system::Config>::BlockNumber>,
-            >,
+            actions: Vec<StateTransmitterUpdateFor<T>>,
         ) -> DispatchResult {
             ensure_root(origin)?;
 
@@ -194,7 +199,7 @@ pub mod pallet {
 
         /// Used by transmitters to submit a `state_merkle_root` at the specified `block` on the target chain.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::submit_state_merkle_root())]
         pub fn submit_state_merkle_root(
             origin: OriginFor<T>,
             block: T::TargetChainBlockNumber,

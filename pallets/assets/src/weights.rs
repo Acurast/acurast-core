@@ -7,20 +7,18 @@
 //! EXECUTION: Some(Wasm), WASM-EXECUTION: Compiled, CHAIN: Some("dev"), DB CACHE: 1024
 
 // Executed Command:
-// ./target/production/substrate
+// ../../../acurast-substrate/target/release/acurast-node
 // benchmark
 // pallet
-// --chain=dev
-// --steps=50
-// --repeat=20
-// --pallet=pallet_assets
-// --extrinsic=*
+// --chain=acurast-dev
 // --execution=wasm
 // --wasm-execution=compiled
-// --heap-pages=4096
-// --output=./frame/assets/src/weights.rs
-// --header=./HEADER-APACHE2
-// --template=./.maintain/frame-weight-template.hbs
+// --pallet=pallet_acurast_assets
+// --extrinsic=*
+// --steps=50
+// --repeat=20
+// --output=./src/weights.rs
+// --template=./src/weights.hbs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
