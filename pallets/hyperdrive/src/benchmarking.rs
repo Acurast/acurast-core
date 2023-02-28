@@ -4,6 +4,7 @@ use frame_support::assert_ok;
 use frame_system::RawOrigin;
 use sp_core::crypto::AccountId32;
 use sp_core::H256;
+use sp_std::iter;
 
 pub use crate::stub::*;
 use crate::types::*;
@@ -20,8 +21,9 @@ fn assert_event<T: Config<I>, I: 'static>(generic_event: <T as Config<I>>::Runti
 }
 
 fn update_state_transmitters_helper<T: Config<I>, I: 'static>(
+    l: usize,
     submit: bool,
-) -> (T::AccountId, Vec<StateTransmitterUpdateFor<T>>)
+) -> (T::AccountId, StateTransmitterUpdates<T>)
 where
     T::AccountId: From<AccountId32>,
     T::BlockNumber: From<u64>,
@@ -29,13 +31,18 @@ where
     let caller: T::AccountId = alice_account_id().into();
     whitelist_account!(caller);
 
-    let actions = vec![StateTransmitterUpdate::Add(
-        caller.clone(),
-        ActivityWindow {
-            start_block: 0.into(),
-            end_block: 100.into(),
-        },
-    )];
+    let actions = StateTransmitterUpdates::<T>::try_from(
+        iter::repeat(StateTransmitterUpdate::Add(
+            caller.clone(),
+            ActivityWindow {
+                start_block: 0.into(),
+                end_block: 100.into(),
+            },
+        ))
+        .take(l)
+        .collect::<Vec<StateTransmitterUpdateFor<T>>>(),
+    )
+    .unwrap();
 
     if submit {
         let call = AcurastHyperdrive::<T, I>::update_state_transmitters(
@@ -58,28 +65,30 @@ benchmarks_instance_pallet! {
         <T as pallet::Config<I>>::TargetChainHash: From<H256>,
     }
     update_state_transmitters {
-        // just create the data, do not submit the actual call (we want to benchmark `advertise`)
-        let (caller, actions) = update_state_transmitters_helper::<T, I>(false);
+        let l in 0 .. STATE_TRANSMITTER_UPDATES_MAX_LENGTH;
+
+        // just create the data, do not submit the actual call (it gets executed by the benchmark call)
+        let (caller, actions) = update_state_transmitters_helper::<T, I>(l as usize, false);
     }: _(RawOrigin::Root, actions.clone())
     verify {
         assert_last_event::<T, I>(Event::StateTransmittersUpdate{
-                    added: vec![
-                        (
+                    added: iter::repeat((
                             alice_account_id().into(),
                             ActivityWindow {
                                 start_block: 0.into(),
                                 end_block: 100.into()
                             }
-                        )
-                    ],
+                        ))
+                        .take(l as usize)
+                        .collect::<Vec<(T::AccountId, ActivityWindow<<T as frame_system::Config>::BlockNumber>)>>(),
                     updated: vec![],
                     removed: vec![],
                 }.into());
     }
 
     submit_state_merkle_root {
-        // create the data and submit so we have an add in storage to delete when benchmarking `delete_advertisement`
-        let (caller, _) = update_state_transmitters_helper::<T, I>(true);
+        // add the transmitters and submit before benchmarked extrinsic
+        let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
     }: _(RawOrigin::Signed(caller.clone()), 5.into(), HASH.into())
     verify {
          assert_event::<T, I>(Event::StateMerkleRootSubmitted{

@@ -1,9 +1,6 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok, error::BadOrigin};
-use hex_literal::hex;
-use sp_core::H256;
-use sp_runtime::AccountId32;
 
 use crate::{
     mock::*,
@@ -12,6 +9,7 @@ use crate::{
 };
 
 use crate::stub::*;
+use crate::types::StateTransmitterUpdates;
 
 #[test]
 fn update_single_state_transmitters() {
@@ -30,7 +28,7 @@ fn update_single_state_transmitters() {
 
         assert_ok!(TezosHyperdrive::update_state_transmitters(
             RuntimeOrigin::root().into(),
-            actions
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
         ));
 
         assert_eq!(
@@ -77,7 +75,7 @@ fn update_multiple_state_transmitters() {
 
         assert_ok!(TezosHyperdrive::update_state_transmitters(
             RuntimeOrigin::root().into(),
-            actions.clone()
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
         ));
 
         assert_eq!(
@@ -122,7 +120,7 @@ fn update_state_transmitters_non_root() {
         assert_err!(
             TezosHyperdrive::update_state_transmitters(
                 RuntimeOrigin::signed(alice_account_id()).into(),
-                actions
+                StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
             ),
             BadOrigin
         );
@@ -144,7 +142,7 @@ fn submit_outside_activity_window() {
 
         assert_ok!(TezosHyperdrive::update_state_transmitters(
             RuntimeOrigin::root().into(),
-            actions
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
         ));
 
         System::set_block_number(9);
@@ -198,7 +196,7 @@ fn submit_outside_transmission_rate() {
 
         assert_ok!(TezosHyperdrive::update_state_transmitters(
             RuntimeOrigin::root().into(),
-            actions
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
         ));
 
         System::set_block_number(10);
@@ -237,7 +235,7 @@ fn submit_state_merkle_root() {
 
         assert_ok!(TezosHyperdrive::update_state_transmitters(
             RuntimeOrigin::root().into(),
-            actions
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
         ));
 
         System::set_block_number(10);

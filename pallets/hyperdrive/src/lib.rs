@@ -19,6 +19,7 @@ pub mod weights;
 pub mod pallet {
     use core::{fmt::Debug, str::FromStr};
 
+    use frame_support::dispatch::PostDispatchInfo;
     use frame_support::traits::Get;
     use frame_support::{
         pallet_prelude::*,
@@ -154,8 +155,8 @@ pub mod pallet {
         #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters())]
         pub fn update_state_transmitters(
             origin: OriginFor<T>,
-            actions: Vec<StateTransmitterUpdateFor<T>>,
-        ) -> DispatchResult {
+            actions: StateTransmitterUpdates<T>,
+        ) -> DispatchResultWithPostInfo {
             ensure_root(origin)?;
 
             // Process actions
@@ -194,7 +195,10 @@ pub mod pallet {
                 removed,
             });
 
-            Ok(())
+            Ok(PostDispatchInfo {
+                actual_weight: None,
+                pays_fee: Pays::No,
+            })
         }
 
         /// Used by transmitters to submit a `state_merkle_root` at the specified `block` on the target chain.
