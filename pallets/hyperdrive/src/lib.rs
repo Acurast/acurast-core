@@ -14,6 +14,7 @@ mod benchmarking;
 
 mod types;
 pub mod weights;
+mod tezos;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -84,6 +85,10 @@ pub mod pallet {
             + Zero
             + From<u8>
             + CheckedRem;
+        type TargetChainStateKey: Parameter + Member + Debug;
+        type TargetChainStateValue: Parameter + Member + Debug;
+        type RegistrationExtra: Parameter + Member;
+
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
         /// Transmission rate in blocks; `block % transmission_rate == 0` must hold.
@@ -217,7 +222,7 @@ pub mod pallet {
             })
         }
 
-        /// Used by transmitters to submit a `state_merkle_root` at the specified `block` on the target chain.
+        /// Used by Acurast transmitters to submit a `state_merkle_root` at the specified `block` on the target chain.
         #[pallet::call_index(1)]
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_state_merkle_root())]
         pub fn submit_state_merkle_root(
@@ -281,6 +286,19 @@ pub mod pallet {
                     state_merkle_root,
                 });
             }
+
+            Ok(())
+        }
+
+        /// Used by any transmitter to submit a `state` that is at the specified `block` on the target chain.
+        #[pallet::call_index(2)]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
+        pub fn submit_message(
+            origin: OriginFor<T>,
+            proof: StateProofFor<T::TargetChainBlockNumber, T::TargetChainHash, T::TargetChainStateKey, T::TargetChainStateValue>,
+            message: Message,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
 
             Ok(())
         }

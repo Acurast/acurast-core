@@ -31,6 +31,7 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
 	fn update_state_transmitters() -> Weight;
 	fn submit_state_merkle_root() -> Weight;
+	fn submit_message() -> Weight;
 }
 
 pub struct Weights<T>(PhantomData<T>);
@@ -43,5 +44,8 @@ impl<T: frame_system::Config> WeightInfo for Weights<T> {
 		// Minimum execution time: 33_241 nanoseconds.
 		Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2))
 	}
-	
+	fn submit_message() -> Weight {
+		// Minimum execution time: 33_241 nanoseconds.
+		Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2))
+	}
 }

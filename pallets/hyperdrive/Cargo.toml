@@ -17,6 +17,11 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 	"derive",
 ] }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
+pallet-acurast = { git = "https://github.com/Acurast/acurast-core.git", default-features = false }
+xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
+
+# SDKs
+tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "main" }
 
 # Benchmarks
 hex-literal = { version = "0.3", optional = true }
@@ -51,6 +56,8 @@ std = [
 	"frame-benchmarking/std",
 	"sp-std/std",
 	"sp-runtime/std",
+	"pallet-acurast/std",
+	"xcm/std"
 ]
 
 runtime-benchmarks = [

@@ -1,3 +1,4 @@
+use crate::types::Action;
 use frame_support::{
     parameter_types,
     traits::{ConstU16, ConstU64},
@@ -64,6 +65,9 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
+    type TargetChainStateKey = String;
+    type TargetChainStateValue = String; // Action<Test>;
+    type RegistrationExtra = ();
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
