@@ -278,6 +278,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
+        type MaxAllowedConsumers = frame_support::traits::ConstU16<4>;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;

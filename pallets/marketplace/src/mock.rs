@@ -284,6 +284,7 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type MaxAllowedConsumers = frame_support::traits::ConstU16<4>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type ReportTolerance = ReportTolerance;

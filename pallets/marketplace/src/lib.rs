@@ -52,6 +52,9 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>>
             + IsType<<Self as pallet_acurast::Config>::RuntimeEvent>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        /// The max length of the allowed sources list for a registration.
+        #[pallet::constant]
+        type MaxAllowedConsumers: Get<u16>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirementsFor<Self>>;
@@ -192,8 +195,6 @@ pub mod pallet {
         JobRegistrationEndBeforeStart,
         /// The job registration's must specify non-zero `slots`.
         JobRegistrationZeroSlots,
-        /// The job registration's must specify non-zero `reward`.
-        JobRegistrationZeroReward,
         /// Job status not found. SEVERE error
         JobStatusNotFound,
         /// The job registration can't be modified.
@@ -208,6 +209,10 @@ pub mod pallet {
         AdvertisementPricingNotFound,
         /// Fulfill was executed for a not registered job.
         EmptyPricing,
+        /// The allowed consumers list for a registration exeeded the max length.
+        TooManyAllowedConsumers,
+        /// The allowed consumers list for a registration cannot be empty if provided.
+        TooFewAllowedConsumers,
         /// Advertisement cannot be deleted while matched to at least one job.
         ///
         /// Pricing and capacity can be updated, e.g. the capacity can be set to 0 no no longer receive job matches.
@@ -280,6 +285,18 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
+
+            if let Some(allowed_consumers) = &advertisement.allowed_consumers {
+                let max_allowed_consumers_len = T::MaxAllowedSources::get() as usize;
+                ensure!(
+                    allowed_consumers.len() > 0,
+                    Error::<T>::TooFewAllowedConsumers
+                );
+                ensure!(
+                    allowed_consumers.len() <= max_allowed_consumers_len,
+                    Error::<T>::TooManyAllowedConsumers
+                );
+            }
 
             // update capacity to save on operations when checking available capacity
             if let Some(old) = <StoredAdvertisementRestriction<T>>::get(&who) {
@@ -493,43 +510,47 @@ pub mod pallet {
                         .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                         .into();
 
-                    let average_reward = <StoredAverageReward<T>>::get(&reward_asset).unwrap_or(0);
-                    let total_assigned =
-                        <StoredTotalAssigned<T>>::get(&reward_asset).unwrap_or_default();
+                    // skip reputation update if reward is 0
+                    if reward_amount > 0u8.into() {
+                        let average_reward =
+                            <StoredAverageReward<T>>::get(&reward_asset).unwrap_or(0);
+                        let total_assigned =
+                            <StoredTotalAssigned<T>>::get(&reward_asset).unwrap_or_default();
 
-                    let total_reward = average_reward
-                        .checked_mul(total_assigned - 1u128)
+                        let total_reward = average_reward
+                            .checked_mul(total_assigned - 1u128)
+                            .ok_or(Error::<T>::CalculationOverflow)?;
+
+                        let new_total_rewards = total_reward
+                            .checked_add(reward_amount.clone().into())
+                            .ok_or(Error::<T>::CalculationOverflow)?;
+
+                        let mut beta_params = <StoredReputation<T>>::get(&who, &reward_asset)
+                            .ok_or(Error::<T>::ReputationNotFound)?;
+
+                        beta_params = BetaReputation::update(
+                            beta_params,
+                            assignment.sla.met,
+                            assignment.sla.total - assignment.sla.met,
+                            reward_amount.clone().into(),
+                            average_reward,
+                        )
                         .ok_or(Error::<T>::CalculationOverflow)?;
 
-                    let new_total_rewards = total_reward
-                        .checked_add(reward_amount.clone().into())
-                        .ok_or(Error::<T>::CalculationOverflow)?;
+                        let new_average_reward = new_total_rewards
+                            .checked_div(total_assigned)
+                            .ok_or(Error::<T>::CalculationOverflow)?;
 
-                    let mut beta_params = <StoredReputation<T>>::get(&who, &reward_asset)
-                        .ok_or(Error::<T>::ReputationNotFound)?;
-
-                    beta_params = BetaReputation::update(
-                        beta_params,
-                        assignment.sla.met,
-                        assignment.sla.total - assignment.sla.met,
-                        reward_amount.clone().into(),
-                        average_reward,
-                    )
-                    .ok_or(Error::<T>::CalculationOverflow)?;
-
-                    let new_average_reward = new_total_rewards
-                        .checked_div(total_assigned)
-                        .ok_or(Error::<T>::CalculationOverflow)?;
-
-                    <StoredAverageReward<T>>::insert(reward_asset.clone(), new_average_reward);
-                    <StoredReputation<T>>::insert(
-                        &who,
-                        &reward_asset,
-                        BetaParameters {
-                            r: beta_params.r,
-                            s: beta_params.s,
-                        },
-                    );
+                        <StoredAverageReward<T>>::insert(reward_asset.clone(), new_average_reward);
+                        <StoredReputation<T>>::insert(
+                            &who,
+                            &reward_asset,
+                            BetaParameters {
+                                r: beta_params.r,
+                                s: beta_params.s,
+                            },
+                        );
+                    }
                 }
 
                 // removed completed job from all storage points (completed SLA gets still deposited in event below)
@@ -606,15 +627,6 @@ pub mod pallet {
                 Error::<T>::JobRegistrationEndBeforeStart
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
-            let reward_amount: T::AssetAmount = requirements
-                .reward
-                .try_get_amount()
-                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
-                .into();
-            ensure!(
-                reward_amount > 0u8.into(),
-                Error::<T>::JobRegistrationZeroReward
-            );
 
             if let Some(job_status) = <StoredJobStatus<T>>::get(&who, &registration.script) {
                 ensure!(

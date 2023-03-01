@@ -169,15 +169,11 @@ pub mod pallet {
                 is_valid_script(&registration.script),
                 Error::<T>::InvalidScriptValue
             );
-            let allowed_sources_len = registration
-                .allowed_sources
-                .as_ref()
-                .map(|sources| sources.len());
-            if let Some(allowed_sources_len) = allowed_sources_len {
+            if let Some(allowed_sources) = &registration.allowed_sources {
                 let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
-                ensure!(allowed_sources_len > 0, Error::<T>::TooFewAllowedSources);
+                ensure!(allowed_sources.len() > 0, Error::<T>::TooFewAllowedSources);
                 ensure!(
-                    allowed_sources_len <= max_allowed_sources_len,
+                    allowed_sources.len() <= max_allowed_sources_len,
                     Error::<T>::TooManyAllowedSources
                 );
             }
