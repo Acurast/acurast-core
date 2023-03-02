@@ -21,6 +21,7 @@ p384 = { package = "p384_vendored", path = "../p384", default-features = false, 
 sha2 = { version = "0.10", default-features = false, optional = true }
 num-bigint = { version = "0.4.3", default-features = false, optional = true }
 ecdsa-vendored = { package = "ecdsa_vendored", path = "../p384/ecdsa", default-features = false, optional = true }
+serde = { version = "1.0.136", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
@@ -32,6 +33,7 @@ std = [
     "sp-std/std",
     "codec/std",
     "scale-info/std",
+    "serde",
 ]
 attestation = [
     "asn1",
