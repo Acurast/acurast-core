@@ -9,6 +9,8 @@ use crate::{
 };
 
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
 use sp_std::prelude::*;
 
 const ISSUER_NAME_MAX_LENGTH: u32 = 64;
@@ -48,6 +50,7 @@ pub struct AttestationChain {
 
 /// Structure representing a stored attestation.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Attestation {
     pub cert_ids: ValidatingCertIds,
     pub key_description: BoundedKeyDescription,
@@ -55,12 +58,14 @@ pub struct Attestation {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct AttestationValidity {
     pub not_before: u64,
     pub not_after: u64,
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct BoundedKeyDescription {
     pub attestation_security_level: AttestationSecurityLevel,
     pub key_mint_security_level: AttestationSecurityLevel,
@@ -149,6 +154,7 @@ impl TryFrom<asn::KeyDescriptionV100V200<'_>> for BoundedKeyDescription {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum AttestationSecurityLevel {
     Software,
     TrustedEnvironemnt,
@@ -168,6 +174,7 @@ impl From<asn::SecurityLevel> for AttestationSecurityLevel {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct BoundedAuthorizationList {
     pub purpose: Option<Purpose>,
     pub algorithm: Option<u8>,
@@ -670,6 +677,7 @@ impl TryFrom<asn::AuthorizationListV100V200<'_>> for BoundedAuthorizationList {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct BoundedRootOfTrust {
     pub verified_boot_key: VerifiedBootKey,
     pub device_locked: bool,
@@ -708,6 +716,7 @@ impl TryFrom<asn::RootOfTrust<'_>> for BoundedRootOfTrust {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum VerifiedBootState {
     Verified,
     SelfSigned,
@@ -727,6 +736,7 @@ impl From<asn::VerifiedBootState> for VerifiedBootState {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct BoundedAttestationApplicationId {
     pub package_infos: PackageInfoSet,
     pub signature_digests: SignatureDigestSet,
@@ -755,6 +765,7 @@ impl<'a> TryFrom<asn::AttestationApplicationId<'a>> for BoundedAttestationApplic
 }
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct BoundedAttestationPackageInfo {
     pub package_name: PackageName,
     pub version: i64,
