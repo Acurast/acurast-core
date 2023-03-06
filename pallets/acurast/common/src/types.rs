@@ -153,23 +153,25 @@ impl Schedule {
 
     pub fn overlaps(&self, start_delay: u64, a: u64, b: u64) -> Option<bool> {
         let (start, end) = self.range(start_delay)?;
-        if a == b || start == end || b <= start || a >= end {
+        if b <= a || start == end || b <= start || end <= a {
             return Some(false);
         }
 
         // if query interval `[a, b]` starts before, we can pretend it only starts at `start`
-        let relative_a = a.checked_sub(start).or(Some(start))?;
+        let relative_a = a.checked_sub(start).unwrap_or(start);
 
         if let Some(relative_b) = b.checked_sub(start) {
+            let a = relative_a % self.interval;
             let _b = relative_b % self.interval;
-            let (a, b) = (
-                relative_a % self.interval,
-                if _b == 0 { self.interval } else { _b },
-            );
-            // b > a from here
+            let b = if _b == 0 { self.interval } else { _b };
 
-            let l = b.checked_sub(a)?;
-            Some(a < self.duration || l >= self.interval)
+            let l = b.checked_sub(a).unwrap_or(0);
+            //   ╭a    ╭b
+            // ■■■■______■■■■______
+            // OR
+            //   ╭b  ╭a    ╭b'
+            // ■■■■______■■■■______
+            Some(b < a || a < self.duration || l >= self.interval)
         } else {
             Some(false)
         }
