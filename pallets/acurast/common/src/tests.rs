@@ -311,6 +311,24 @@ tests! {
             0,
             vec![((0,1), true), ((8,10), false)]
         );
+        //  ╭start ╭end
+        // _■■■■■■■■
+        // ranges:
+        // ■
+        // ■■
+        // ■■■■■■■■■■
+        //          ■■
+        test_schedule_overlaps_start(
+            Schedule{
+                duration: 2,
+                start_time: 1,
+                end_time: 9,
+                interval: 2,
+                max_start_delay: 0,
+            },
+            0,
+            vec![((0,1), false), ((0,2), true), ((0, 10), true), ((8, 10), true), ((9, 10), false)]
+        );
         // ╭start         ╭end
         // ■■___■■___■■___
         //      ■■
@@ -345,6 +363,28 @@ tests! {
             },
             2,
             vec![((0,3), false), ((2,4), false), ((10,12), true), ((12,15), false)]
+        );
+        test_schedule_overlaps_end_before_start(
+            Schedule{
+                duration: 2,
+                start_time: 1,
+                end_time: 0,
+                interval: 2,
+                max_start_delay: 0,
+            },
+            0,
+            vec![((0,1), false), ((0,2), false)]
+        );
+        test_schedule_overlaps_equal_start_end(
+            Schedule{
+                duration: 2,
+                start_time: 0,
+                end_time: 0,
+                interval: 2,
+                max_start_delay: 0,
+            },
+            0,
+            vec![((0,1), false), ((0,2), false)]
         );
     }
 }
