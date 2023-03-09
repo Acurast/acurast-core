@@ -1,14 +1,15 @@
-use crate::Config;
 use codec::{Decode, Encode};
 use frame_support::RuntimeDebug;
-use pallet_acurast::JobRegistration;
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use scale_info::TypeInfo;
 use sp_core::ConstU32;
 use sp_runtime::traits::Hash;
-use sp_runtime::MultiAddress;
-use xcm::latest::MultiLocation;
 use sp_std::prelude::*;
-use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+use strum_macros::EnumString;
+
+use pallet_acurast::{JobId, JobRegistration};
+
+use crate::{Config, Error};
 
 pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
 pub type StateTransmitterUpdates<T> =
@@ -133,11 +134,27 @@ where
 pub const MESSAGE_MAX_LENGTH: u32 = 5;
 pub type Message = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
 
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum Action<T: Config> {
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
+pub enum Action {
+    #[strum(disabled)]
     OnlyStore,
-    RegisterJob(
-        MultiLocation,
-        JobRegistration<T::AccountId, T::RegistrationExtra>,
-    ),
+    #[strum(serialize = "REGISTER_JOB")]
+    RegisterJob,
+}
+
+pub type JobRegistrationFor<T> =
+    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+
+pub trait MessageParser<T: Config> {
+    type Error: Into<Error<T>>;
+
+    fn parse(
+        encoded: &[u8],
+    ) -> Result<
+        (
+            JobId<<T as frame_system::Config>::AccountId>,
+            JobRegistrationFor<T>,
+        ),
+        Self::Error,
+    >;
 }

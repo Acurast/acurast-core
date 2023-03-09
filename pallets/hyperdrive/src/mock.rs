@@ -1,16 +1,22 @@
+#![allow(unused_imports)]
 use crate::types::Action;
+use frame_support::pallet_prelude::*;
 use frame_support::{
     parameter_types,
     traits::{ConstU16, ConstU64},
 };
 use frame_system as system;
+use hex_literal::hex;
+use pallet_acurast_marketplace::{RegistrationExtra, Reward};
 use sp_core::H256;
+use sp_core::*;
 use sp_runtime::traits::Keccak256;
 use sp_runtime::{
     testing::Header,
     traits::{BlakeTwo256, IdentityLookup},
     AccountId32,
 };
+use sp_std::prelude::*;
 
 use crate::weights;
 
@@ -18,6 +24,7 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 parameter_types! {
+    pub const TargetChainId: u32 = 5000;
     pub const TransmissionRate: u64 = 5;
     pub const TransmissionQuorum: u8 = 2;
 }
@@ -63,11 +70,16 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type AccountId = AccountId32;
+    type TargetChainId = TargetChainId;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type TargetChainStateKey = String;
-    type TargetChainStateValue = String; // Action<Test>;
-    type RegistrationExtra = ();
+    type TargetChainStateValue = String;
+    type Reward = MockAsset;
+    type Balance = u128;
+    type RegistrationExtra =
+        RegistrationExtra<MockAsset, AssetAmount, <Self as frame_system::Config>::AccountId>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
@@ -96,4 +108,42 @@ pub fn events() -> Vec<RuntimeEvent> {
     System::reset_events();
 
     evt
+}
+
+pub type AssetId = u32;
+pub type AssetAmount = u128;
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct MockAsset {
+    pub id: AssetId,
+    pub amount: AssetAmount,
+}
+
+impl Reward for MockAsset {
+    type AssetId = AssetId;
+    type AssetAmount = AssetAmount;
+    type Error = ();
+
+    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
+        self.amount = amount;
+        Ok(self)
+    }
+
+    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
+        Ok(self.id)
+    }
+
+    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
+        Ok(self.amount)
+    }
+}
+
+impl From<Vec<u8>> for MockAsset {
+    fn from(bytes: Vec<u8>) -> Self {
+        // TOOD parse
+        MockAsset {
+            id: 5,
+            amount: 10000,
+        }
+    }
 }

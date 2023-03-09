@@ -17,11 +17,16 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 	"derive",
 ] }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
-pallet-acurast = { git = "https://github.com/Acurast/acurast-core.git", default-features = false }
+pallet-acurast = { path = "../acurast", default-features = false }
+pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.36" }
 
 # SDKs
+tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "main" }
 tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "main" }
+derive_more = { version = "0.99.17", default-features = false }
+strum = { version = "0.24.1", default-features = false }
+strum_macros = { version = "0.24.1", default-features = false }
 
 # Benchmarks
 hex-literal = { version = "0.3", optional = true }
@@ -57,6 +62,7 @@ std = [
 	"sp-std/std",
 	"sp-runtime/std",
 	"pallet-acurast/std",
+	"pallet-acurast-marketplace/std",
 	"xcm/std"
 ]
 

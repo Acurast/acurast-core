@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use types::*;
 
 #[cfg(test)]
 mod mock;
@@ -12,9 +13,9 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+pub mod tezos;
 mod types;
 pub mod weights;
-mod tezos;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -30,12 +31,14 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_arithmetic::traits::{CheckedRem, Zero};
+    use sp_core::crypto::Ss58Codec;
     use sp_runtime::traits::Hash;
     use sp_std::collections::btree_set::BTreeSet;
     use sp_std::prelude::*;
     use sp_std::vec;
 
-    use types::*;
+    use pallet_acurast_marketplace::types::RegistrationExtra;
+    use pallet_acurast_marketplace::Reward;
 
     use crate::weights::WeightInfo;
 
@@ -53,6 +56,9 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
+        type AccountId: IsType<<Self as frame_system::Config>::AccountId> + Ss58Codec;
+        /// The parachain ID used in [`MultiLocation`].
+        type TargetChainId: Get<u32>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
             + Member
@@ -87,7 +93,26 @@ pub mod pallet {
             + CheckedRem;
         type TargetChainStateKey: Parameter + Member + Debug;
         type TargetChainStateValue: Parameter + Member + Debug;
-        type RegistrationExtra: Parameter + Member;
+        type Reward: Parameter + Member + Reward + TryFrom<Vec<u8>>;
+        type Balance: Member
+            + Parameter
+            + AtLeast32BitUnsigned
+            + From<u128>
+            // required to translate Tezos Ints of unknown precision (Alternative: use Tezos SDK types in clients of this pallet)
+            + Default
+            + Copy
+            + MaybeSerializeDeserialize
+            + MaxEncodedLen
+            + TypeInfo;
+        type RegistrationExtra: Parameter
+            + Member
+            + From<
+                RegistrationExtra<
+                    Self::Reward,
+                    Self::Balance,
+                    <Self as frame_system::Config>::AccountId,
+                >,
+            >;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -105,17 +130,17 @@ pub mod pallet {
     pub enum Event<T: Config<I>, I: 'static = ()> {
         StateTransmittersUpdate {
             added: Vec<(
-                T::AccountId,
+                <T as frame_system::Config>::AccountId,
                 types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
             )>,
             updated: Vec<(
-                T::AccountId,
+                <T as frame_system::Config>::AccountId,
                 types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
             )>,
-            removed: Vec<T::AccountId>,
+            removed: Vec<<T as frame_system::Config>::AccountId>,
         },
         StateMerkleRootSubmitted {
-            source: T::AccountId,
+            source: <T as frame_system::Config>::AccountId,
             snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         },
@@ -134,7 +159,7 @@ pub mod pallet {
     pub type StateTransmitter<T: Config<I>, I: 'static = ()> = StorageMap<
         _,
         Blake2_128,
-        T::AccountId,
+        <T as frame_system::Config>::AccountId,
         ActivityWindow<<T as frame_system::Config>::BlockNumber>,
         ValueQuery,
     >;
@@ -158,7 +183,7 @@ pub mod pallet {
         T::TargetChainBlockNumber,
         Identity,
         T::TargetChainHash,
-        BTreeSet<T::AccountId>,
+        BTreeSet<<T as frame_system::Config>::AccountId>,
     >;
 
     #[pallet::error]
@@ -167,6 +192,7 @@ pub mod pallet {
         SubmitOutsideTransmitterActivityWindow,
         CalculationOverflow,
         UnexpectedSnapshot,
+        MessageParsingFailed,
     }
 
     #[pallet::call]
@@ -260,7 +286,7 @@ pub mod pallet {
                             transmitters.insert(who.clone());
                         }
                     } else {
-                        let mut set = BTreeSet::<T::AccountId>::new();
+                        let mut set = BTreeSet::<<T as frame_system::Config>::AccountId>::new();
                         set.insert(who.clone());
                         *submissions = Some(set);
                     }
@@ -295,7 +321,12 @@ pub mod pallet {
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
         pub fn submit_message(
             origin: OriginFor<T>,
-            proof: StateProofFor<T::TargetChainBlockNumber, T::TargetChainHash, T::TargetChainStateKey, T::TargetChainStateValue>,
+            proof: StateProofFor<
+                T::TargetChainBlockNumber,
+                T::TargetChainHash,
+                T::TargetChainStateKey,
+                T::TargetChainStateValue,
+            >,
             message: Message,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;

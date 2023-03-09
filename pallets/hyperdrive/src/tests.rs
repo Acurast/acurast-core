@@ -15,8 +15,8 @@ use crate::{
     Error,
 };
 
-use crate::stub::*;
 use crate::types::*;
+use crate::{stub::*, Config};
 
 #[test]
 fn update_single_state_transmitters() {
@@ -314,14 +314,14 @@ fn submit_state_merkle_root() {
 fn test_verify_proof() {
     let mut test = new_test_ext();
 
-    const owner: [u8; 28] = hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9");
-    const key: [u8; 15] = hex!("0000000000000000000000000003e7");
-    const value: [u8; 15] = hex!("0000000000000000000000000003e7");
+    const OWNER: [u8; 28] = hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9");
+    const KEY: [u8; 15] = hex!("0000000000000000000000000003e7");
+    const VALUE: [u8; 15] = hex!("0000000000000000000000000003e7");
 
-    let mut combined = vec![0_u8; owner.len() + key.len() + value.len()];
-    combined[..owner.len()].copy_from_slice(&owner.as_ref());
-    combined[owner.len()..owner.len() + key.len()].copy_from_slice(&key.as_ref());
-    combined[owner.len() + key.len()..].copy_from_slice(&value.as_ref());
+    let mut combined = vec![0_u8; OWNER.len() + KEY.len() + VALUE.len()];
+    combined[..OWNER.len()].copy_from_slice(&OWNER.as_ref());
+    combined[OWNER.len()..OWNER.len() + KEY.len()].copy_from_slice(&KEY.as_ref());
+    combined[OWNER.len() + KEY.len()..].copy_from_slice(&VALUE.as_ref());
     let leaf = Keccak256::hash(&combined);
 
     test.execute_with(|| {
@@ -358,7 +358,12 @@ fn test_verify_proof() {
             ))),
         ];
         // just instantiate the proof to get the types of Config checked by compiler
-        let _proof = StateProofFor::<Test> {
+        let _proof = StateProofFor::<
+            <Test as Config>::TargetChainBlockNumber,
+            <Test as Config>::TargetChainHash,
+            <Test as Config>::TargetChainStateKey,
+            <Test as Config>::TargetChainStateValue,
+        > {
             block: 0,
             proof: proof_items.clone(),
             leaf: StateLeaf {

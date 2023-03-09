@@ -18,6 +18,28 @@ pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MES
 pub type JobRegistrationForMarketplace<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
+/// Struct defining the extra fields for a `JobRegistration`.
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
+pub struct RegistrationExtra<Reward, Balance, AccountId>
+where
+    Reward: Parameter + Member,
+{
+    pub destination: MultiOrigin<AccountId>,
+    pub parameters: Option<Vec<u8>>,
+    pub requirements: JobRequirements<Reward, AccountId>,
+    pub expected_fulfillment_fee: Balance,
+}
+
+impl<Reward, Balance, AccountId> From<RegistrationExtra<Reward, Balance, AccountId>>
+    for JobRequirements<Reward, AccountId>
+where
+    Reward: Parameter + Member,
+{
+    fn from(extra: RegistrationExtra<Reward, Balance, AccountId>) -> Self {
+        extra.requirements
+    }
+}
+
 /// The resource advertisement by a source containing pricing and capacity announcements.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct Advertisement<AccountId, AssetId, AssetAmount> {
