@@ -12,7 +12,7 @@ Please refer to the respective READMEs for more information:
 Pallets and crates relevant for third, party integrations.
 
 - [Acurast P256 crypto](p256-crypto/README.md): Crates providing crypto primitives to support p256 signatures in substrate
-- [Acurast Fulfillment Receiver Pallet](pallets/acurast-fulfillment-receiver/README.md): Pallet meant to be integrated by other parachains to receive fulfillments from Acurast Processors
+- [Acurast Fulfillment Receiver Pallet](pallets/acurast-fulfillment-receiver/README.md): Pallet meant to be integrated by other parachains to receive fulfillments from Acurast Processors, such as [this implementation](https://github.com/Acurast/data-processor)
 - [Acurast Proxy Pallet](pallets/proxy/README.md): Pallet meant to be integrated by other parachains to interact with the Acurast parachain
 
 ## Acurast Protocol
