@@ -28,6 +28,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
+    use std::ops::AddAssign;
 
     use crate::{traits::*, utils::*, JobRegistrationFor};
 
@@ -184,15 +185,20 @@ pub mod pallet {
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
+    /// A unique job identifier sequence for jobs created directly from this pallet.
+    #[pallet::storage]
+    #[pallet::getter(fn job_id_sequence)]
+    pub type LocalJobIdSequence<T: Config> = StorageValue<_, JobIdSequence, ValueQuery>;
+
     /// The storage for [JobRegistration]s. They are stored by [AccountId] and [Script].
     #[pallet::storage]
     #[pallet::getter(fn stored_job_registration)]
     pub type StoredJobRegistration<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        MultiOrigin<T::AccountId>,
         Blake2_128Concat,
-        Script,
+        JobIdSequence,
         JobRegistrationFor<T>,
     >;
 
@@ -211,13 +217,13 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// A registration was successfully stored. [registration, who]
-        JobRegistrationStored(JobRegistrationFor<T>, T::AccountId),
-        /// A registration was successfully removed. [registration, who]
-        JobRegistrationRemoved(Script, T::AccountId),
+        /// A registration was successfully stored. [registration, job_id]
+        JobRegistrationStored(JobRegistrationFor<T>, JobId<T::AccountId>),
+        /// A registration was successfully removed. [job_id]
+        JobRegistrationRemoved(JobId<T::AccountId>),
         /// The allowed sources have been updated. [who, old_registration, updates]
         AllowedSourcesUpdated(
-            T::AccountId,
+            JobId<T::AccountId>,
             JobRegistrationFor<T>,
             Vec<AllowedSourcesUpdate<T::AccountId>>,
         ),
@@ -290,6 +296,7 @@ pub mod pallet {
             registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
+            let multi_origin = MultiOrigin::Acurast(who.clone());
             ensure!(
                 is_valid_script(&registration.script),
                 Error::<T>::InvalidScriptValue
@@ -303,24 +310,30 @@ pub mod pallet {
                 );
             }
 
-            <StoredJobRegistration<T>>::insert(&who, &registration.script, registration.clone());
+            let job_id = (multi_origin.clone(), Self::next_job_id());
+            <StoredJobRegistration<T>>::insert(&job_id.0, &job_id.1, registration.clone());
 
-            <T as Config>::JobHooks::register_hook(&who, &registration)?;
+            <T as Config>::JobHooks::register_hook(&who, &job_id, &registration)?;
 
-            Self::deposit_event(Event::JobRegistrationStored(registration, who));
+            Self::deposit_event(Event::JobRegistrationStored(registration, job_id));
             Ok(().into())
         }
 
         /// Deregisters a job for the given script.
         #[pallet::call_index(1)]
         #[pallet::weight(< T as Config >::WeightInfo::deregister())]
-        pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResultWithPostInfo {
+        pub fn deregister(
+            origin: OriginFor<T>,
+            local_job_id: JobIdSequence,
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            <StoredJobRegistration<T>>::remove(&who, &script);
+            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let job_id = (multi_origin, local_job_id);
+            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
 
-            <T as Config>::JobHooks::deregister_hook(&who, &script)?;
+            <T as Config>::JobHooks::deregister_hook(&who, &job_id)?;
 
-            Self::deposit_event(Event::JobRegistrationRemoved(script, who));
+            Self::deposit_event(Event::JobRegistrationRemoved(job_id));
             Ok(().into())
         }
 
@@ -329,11 +342,13 @@ pub mod pallet {
         #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources())]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
-            script: Script,
+            local_job_id: JobIdSequence,
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let registration = <StoredJobRegistration<T>>::get(&who, &script)
+            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let job_id: JobId<T::AccountId> = (multi_origin.clone(), local_job_id);
+            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
             let mut current_allowed_sources =
@@ -364,17 +379,17 @@ pub mod pallet {
                 Some(current_allowed_sources)
             };
             <StoredJobRegistration<T>>::insert(
-                &who,
-                &script,
+                &job_id.0,
+                &job_id.1,
                 JobRegistration {
                     allowed_sources,
                     ..registration.clone()
                 },
             );
 
-            <T as Config>::JobHooks::update_allowed_sources_hook(&who, &script, &updates)?;
+            <T as Config>::JobHooks::update_allowed_sources_hook(&who, &job_id, &updates)?;
 
-            Self::deposit_event(Event::AllowedSourcesUpdated(who, registration, updates));
+            Self::deposit_event(Event::AllowedSourcesUpdated(job_id, registration, updates));
 
             Ok(().into())
         }
@@ -437,6 +452,16 @@ pub mod pallet {
             }
             Self::deposit_event(Event::CertificateRecovationListUpdated(who, updates));
             Ok(().into())
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        /// Get and update the next job identifier in the sequence.
+        pub fn next_job_id() -> JobIdSequence {
+            <LocalJobIdSequence<T>>::mutate(|job_id_seq| {
+                job_id_seq.add_assign(1);
+                *job_id_seq
+            })
         }
     }
 }
