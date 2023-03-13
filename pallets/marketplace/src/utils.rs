@@ -1,11 +1,11 @@
 use crate::Config;
-use pallet_acurast::JobRegistrationFor;
+use pallet_acurast::{JobRegistrationFor, MultiOrigin};
 use sp_std::prelude::*;
 
 /// Checks if a consumer is whitelisted/
 pub(crate) fn is_consumer_whitelisted<T: Config>(
-    consumer: &T::AccountId,
-    allowed_consumers: &Option<Vec<T::AccountId>>,
+    consumer: &MultiOrigin<T::AccountId>,
+    allowed_consumers: &Option<Vec<MultiOrigin<T::AccountId>>>,
 ) -> bool {
     allowed_consumers
         .as_ref()

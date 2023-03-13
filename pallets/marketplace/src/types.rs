@@ -1,7 +1,7 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobId, JobRegistration};
+use pallet_acurast::{JobId, JobRegistration, MultiOrigin};
 
 use crate::payments::RewardFor;
 use crate::Config;
@@ -30,7 +30,7 @@ pub struct Advertisement<AccountId, AssetId, AssetAmount> {
     /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
     pub storage_capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-    pub allowed_consumers: Option<Vec<AccountId>>,
+    pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
 }
 
 pub type AdvertisementFor<T> = Advertisement<
@@ -49,7 +49,7 @@ pub struct AdvertisementRestriction<AccountId> {
     /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
     pub storage_capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-    pub allowed_consumers: Option<Vec<AccountId>>,
+    pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
 }
 
 /// Defines the scheduling window in which to accept matches for this pricing,
@@ -153,11 +153,11 @@ where
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub struct Match<AccountId> {
+pub struct Match<AcurastAccountId> {
     /// The job to match.
-    pub job_id: JobId<AccountId>,
+    pub job_id: JobId<AcurastAccountId>,
     /// The sources to match each of the job's slots with.
-    pub sources: Vec<PlannedExecution<AccountId>>,
+    pub sources: Vec<PlannedExecution<AcurastAccountId>>,
 }
 
 /// The details for a single planned slot execution with the delay.

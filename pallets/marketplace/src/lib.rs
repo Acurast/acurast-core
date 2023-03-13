@@ -36,8 +36,8 @@ pub mod pallet {
 
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
-        AllowedSourcesUpdate, JobHooks, JobId, JobRegistrationFor, Schedule, Script,
-        StoredJobRegistration,
+        AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
+        Schedule, StoredJobRegistration,
     };
     use pallet_acurast_assets::traits::AssetValidator;
 
@@ -97,8 +97,14 @@ pub mod pallet {
     /// The storage for jobs' status as a map [`AccountId`] `(consumer)` -> [`Script`] -> [`JobStatus`].
     #[pallet::storage]
     #[pallet::getter(fn stored_job_status)]
-    pub type StoredJobStatus<T: Config> =
-        StorageDoubleMap<_, Blake2_128, T::AccountId, Blake2_128, Script, JobStatus>;
+    pub type StoredJobStatus<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128,
+        MultiOrigin<T::AccountId>,
+        Blake2_128,
+        JobIdSequence,
+        JobStatus,
+    >;
 
     /// The storage for basic advertisements' restrictions (without pricing). They are stored as a map [`AccountId`] `(source)` -> [`AdvertisementRestriction`] since only one
     /// advertisement per client is allowed.
@@ -596,6 +602,7 @@ pub mod pallet {
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
             who: &T::AccountId,
+            job_id: &JobId<T::AccountId>,
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
@@ -628,19 +635,19 @@ pub mod pallet {
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
 
-            if let Some(job_status) = <StoredJobStatus<T>>::get(&who, &registration.script) {
+            if let Some(job_status) = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1) {
                 ensure!(
                     job_status == JobStatus::Open,
                     Error::<T>::JobRegistrationUnmodifiable
                 );
             } else {
-                <StoredJobStatus<T>>::insert(&who, &registration.script, JobStatus::default());
+                <StoredJobStatus<T>>::insert(&job_id.0, &job_id.1, JobStatus::default());
             }
 
             match requirements.instant_match {
                 Some(sources) => {
                     Self::process_matching(once(&Match {
-                        job_id: (who.clone(), registration.script.clone()),
+                        job_id: job_id.clone(),
                         sources,
                     }))?;
                 }
@@ -654,18 +661,22 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::RewardConversionFailed)?;
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
+            // TODO(RODRIGO): This is not compatible with multi chain job registrations
             T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
 
             Ok(().into())
         }
 
         /// Deregisters a job for the given script.
-        fn deregister_hook(who: &T::AccountId, script: &Script) -> Result<(), DispatchError> {
-            let job_status =
-                <StoredJobStatus<T>>::get(&who, &script).ok_or(Error::<T>::JobStatusNotFound)?;
+        fn deregister_hook(
+            _who: &T::AccountId,
+            job_id: &JobId<T::AccountId>,
+        ) -> Result<(), DispatchError> {
+            let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(Error::<T>::JobStatusNotFound)?;
             // lazily evaluated check if job is overdue
             let overdue = || -> Result<bool, DispatchError> {
-                let registration = <StoredJobRegistration<T>>::get(&who, &script)
+                let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
                 Ok(Self::now()? >= registration.schedule.start_time)
@@ -676,18 +687,18 @@ pub mod pallet {
                 Error::<T>::JobRegistrationUnmodifiable
             );
 
-            <StoredJobStatus<T>>::remove(&who, &script);
+            <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
             Ok(().into())
         }
 
         /// Updates the allowed sources list of a [JobRegistration].
         fn update_allowed_sources_hook(
-            who: &T::AccountId,
-            script: &Script,
+            _who: &<T as frame_system::Config>::AccountId,
+            job_id: &JobId<<T as frame_system::Config>::AccountId>,
             _updates: &Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> Result<(), DispatchError> {
-            let job_status =
-                <StoredJobStatus<T>>::get(&who, &script).ok_or(Error::<T>::JobStatusNotFound)?;
+            let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(Error::<T>::JobStatusNotFound)?;
 
             ensure!(
                 job_status == JobStatus::Open,
@@ -930,7 +941,7 @@ pub mod pallet {
                     *t = Some(t.unwrap_or(0u128).saturating_add(1));
                 });
 
-                <StoredJobStatus<T>>::insert(&m.job_id.0, &registration.script, JobStatus::Matched);
+                <StoredJobStatus<T>>::insert(&m.job_id.0, &m.job_id.1, JobStatus::Matched);
                 Self::deposit_event(Event::JobRegistrationMatched(m.clone()));
             }
             // If we arrive here with remaining_reward None, then matching was empty

@@ -1,10 +1,9 @@
-use acurast_common::Attestation;
+use acurast_common::{Attestation, JobId};
 use frame_support::{sp_runtime::DispatchError, weights::Weight};
 use sp_std::prelude::*;
 
 use crate::{
     AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, JobRegistrationFor,
-    Script,
 };
 
 /// Allows to customize who can perform an update to the certificate revocation list.
@@ -47,15 +46,16 @@ pub trait WeightInfo {
 pub trait JobHooks<T: Config> {
     fn register_hook(
         who: &<T as frame_system::Config>::AccountId,
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
         registration: &JobRegistrationFor<T>,
     ) -> Result<(), DispatchError>;
     fn deregister_hook(
         who: &<T as frame_system::Config>::AccountId,
-        script: &Script,
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
     ) -> Result<(), DispatchError>;
     fn update_allowed_sources_hook(
         who: &<T as frame_system::Config>::AccountId,
-        script: &Script,
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
         updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
     ) -> Result<(), DispatchError>;
 }
@@ -63,19 +63,20 @@ pub trait JobHooks<T: Config> {
 impl<T: Config> JobHooks<T> for () {
     fn register_hook(
         _who: &<T as frame_system::Config>::AccountId,
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _registration: &JobRegistrationFor<T>,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
     fn deregister_hook(
         _who: &<T as frame_system::Config>::AccountId,
-        _script: &Script,
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
     fn update_allowed_sources_hook(
         _who: &<T as frame_system::Config>::AccountId,
-        _script: &Script,
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
     ) -> Result<(), DispatchError> {
         Ok(())

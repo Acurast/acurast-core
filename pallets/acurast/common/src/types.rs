@@ -26,8 +26,18 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
-/// A Job ID consists of an [AccountId] and a [Script].
-pub type JobId<AccountId> = (AccountId, Script);
+/// A multi origin identifies a given address from a given origin chain.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+pub enum MultiOrigin<AcurastAccountId> {
+    Acurast(AcurastAccountId),
+    Tezos(BoundedVec<u8, ConstU32<36>>),
+}
+
+/// The type of a job identifier sequence.
+pub type JobIdSequence = u128;
+
+/// A Job ID consists of a [MultiOrigin] and a job identifier respective to the source chain.
+pub type JobId<AcurastAccountId> = (MultiOrigin<AcurastAccountId>, JobIdSequence);
 
 /// The allowed sources update operation.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
