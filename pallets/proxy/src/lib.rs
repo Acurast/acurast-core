@@ -24,7 +24,7 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
-    use acurast_common::{AllowedSourcesUpdate, JobRegistration, Script};
+    use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -54,11 +54,11 @@ pub mod pallet {
         },
 
         #[codec(index = 1u8)]
-        Deregister { script: Script },
+        Deregister { local_job_id: JobIdSequence },
 
         #[codec(index = 2u8)]
         UpdateAllowedSources {
-            script: Script,
+            job_id: JobIdSequence,
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         },
 
@@ -177,9 +177,11 @@ pub mod pallet {
         /// Deregisters a job for the given script.
         #[pallet::call_index(1)]
         #[pallet::weight(10_000)]
-        pub fn deregister(origin: OriginFor<T>, script: Script) -> DispatchResult {
+        pub fn deregister(origin: OriginFor<T>, job_id: JobIdSequence) -> DispatchResult {
             let caller = ensure_signed(origin)?;
-            let proxy_call = ProxyCall::Deregister { script };
+            let proxy_call = ProxyCall::Deregister {
+                local_job_id: job_id,
+            };
             acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 
@@ -188,11 +190,11 @@ pub mod pallet {
         #[pallet::weight(10_000)]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
-            script: Script,
+            job_id: JobIdSequence,
             updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
-            let proxy_call = ProxyCall::UpdateAllowedSources { script, updates };
+            let proxy_call = ProxyCall::UpdateAllowedSources { job_id, updates };
             acurast_call::<T>(proxy_call, caller, T::AcurastPalletId::get())
         }
 

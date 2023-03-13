@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok, traits::Hooks};
+use pallet_acurast::MultiOrigin;
 use sp_runtime::Permill;
 
 use pallet_acurast::utils::validate_and_extract_attestation;
@@ -42,16 +43,10 @@ fn test_match() {
             instant_match: None,
         },
     };
-    let job_id = (alice_account_id(), registration.script.clone());
-    let m = Match {
-        job_id: job_id.clone(),
-        sources: vec![PlannedExecution {
-            source: processor_account_id(),
-            start_delay: 0,
-        }],
-    };
 
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         // pretend current time
         later(now);
 
@@ -90,33 +85,36 @@ fn test_match() {
         ));
         assert_eq!(
             Some(JobStatus::Open),
-            AcurastMarketplace::stored_job_status(alice_account_id(), script())
+            AcurastMarketplace::stored_job_status(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
         assert_eq!(
             Some(100_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
+        let job_id = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+        let job_match = Match {
+            job_id: job_id.clone(),
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }],
+        };
+
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
-            vec![m.clone()],
+            vec![job_match.clone()],
         ));
         assert_eq!(
             Some(JobStatus::Matched),
-            AcurastMarketplace::stored_job_status(alice_account_id(), script())
+            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1)
         );
         assert_eq!(
             Some(80_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
-        );
-
-        // updating job registration is prohibited after match found
-        assert_err!(
-            Acurast::register(
-                RuntimeOrigin::signed(alice_account_id()).into(),
-                registration.clone(),
-            ),
-            Error::<Test>::JobRegistrationUnmodifiable
         );
 
         assert_ok!(AcurastMarketplace::acknowledge_match(
@@ -125,7 +123,7 @@ fn test_match() {
         ));
         assert_eq!(
             Some(JobStatus::Assigned(1)),
-            AcurastMarketplace::stored_job_status(alice_account_id(), script())
+            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1)
         );
 
         // pretend time moved on
@@ -166,7 +164,7 @@ fn test_match() {
         // Job still assigned after one execution
         assert_eq!(
             Some(JobStatus::Assigned(1)),
-            AcurastMarketplace::stored_job_status(alice_account_id(), script()),
+            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1),
         );
         assert_eq!(
             Some(80000),
@@ -208,7 +206,7 @@ fn test_match() {
         // Job no longer assigned after last execution
         assert_eq!(
             None,
-            AcurastMarketplace::stored_job_status(alice_account_id(), script()),
+            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1),
         );
         assert_eq!(
             Some(100_000),
@@ -232,9 +230,9 @@ fn test_match() {
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
-                    alice_account_id()
+                    job_id.clone(),
                 )),
-                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
                     id: 0,
                     amount: 1_960_000 // this is before splitting of the configured percentage that actually is transfered to the matcher
@@ -329,7 +327,6 @@ fn test_no_match_schedule_overlap() {
             instant_match: None,
         },
     };
-    let job_id1 = (alice_account_id(), registration1.script.clone());
 
     let registration2 = JobRegistrationFor::<Test> {
         script: script_random_value(),
@@ -352,9 +349,11 @@ fn test_no_match_schedule_overlap() {
             instant_match: None,
         },
     };
-    let _job_id2 = (alice_account_id(), registration2.script.clone());
 
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
         // pretend current time
         assert_ok!(Timestamp::set(RuntimeOrigin::none(), now));
         assert_ok!(AcurastMarketplace::advertise(
@@ -369,7 +368,7 @@ fn test_no_match_schedule_overlap() {
         ));
         assert_eq!(
             Some(JobStatus::Open),
-            AcurastMarketplace::stored_job_status(alice_account_id(), registration1.script.clone())
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1)
         );
 
         // register second job
@@ -379,7 +378,7 @@ fn test_no_match_schedule_overlap() {
         ));
         assert_eq!(
             Some(JobStatus::Open),
-            AcurastMarketplace::stored_job_status(alice_account_id(), registration2.script.clone())
+            AcurastMarketplace::stored_job_status(&job_id1.0, job_id1.1 + 1)
         );
 
         // the first job matches because capacity left
@@ -424,7 +423,7 @@ fn test_no_match_schedule_overlap() {
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
-                    alice_account_id()
+                    job_id1.clone()
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
                     id: 0,
@@ -432,7 +431,7 @@ fn test_no_match_schedule_overlap() {
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration2.clone(),
-                    alice_account_id()
+                    (job_id1.0.clone(), &job_id1.1 + 1)
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
@@ -472,9 +471,11 @@ fn test_no_match_insufficient_reputation() {
             instant_match: None,
         },
     };
-    let job_id1 = (alice_account_id(), registration1.script.clone());
 
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+        let job_id = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
         // pretend current time
         assert_ok!(Timestamp::set(RuntimeOrigin::none(), now));
         assert_ok!(AcurastMarketplace::advertise(
@@ -489,12 +490,12 @@ fn test_no_match_insufficient_reputation() {
         ));
         assert_eq!(
             Some(JobStatus::Open),
-            AcurastMarketplace::stored_job_status(alice_account_id(), registration1.script.clone())
+            AcurastMarketplace::stored_job_status(&job_id.0, job_id.1)
         );
 
         // the job matches except inssufficient reputation
         let m = Match {
-            job_id: job_id1.clone(),
+            job_id: job_id.clone(),
             sources: vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
@@ -521,7 +522,7 @@ fn test_no_match_insufficient_reputation() {
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
-                    alice_account_id()
+                    job_id.clone()
                 )),
                 // no match event for job
             ]
@@ -556,8 +557,11 @@ fn test_more_reports_than_expected() {
             instant_match: None,
         },
     };
-    let job_id = (alice_account_id(), registration.script.clone());
+
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+        let job_id = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
         // pretend current time
         assert_ok!(Timestamp::set(RuntimeOrigin::none(), now));
         assert_ok!(AcurastMarketplace::advertise(
@@ -643,7 +647,7 @@ fn test_more_reports_than_expected() {
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
-                    alice_account_id()
+                    job_id.clone()
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
