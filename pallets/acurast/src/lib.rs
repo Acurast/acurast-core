@@ -28,7 +28,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
-    use std::ops::AddAssign;
+    use core::ops::AddAssign;
 
     use crate::{traits::*, utils::*, JobRegistrationFor};
 

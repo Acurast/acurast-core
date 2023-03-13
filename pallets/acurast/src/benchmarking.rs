@@ -143,16 +143,17 @@ benchmarks! {
     }: _(RawOrigin::Signed(caller.clone()), job.clone())
     verify {
         assert_last_event::<T>(Event::<T>::JobRegistrationStored(
-            job, caller
+            job, (MultiOrigin::Acurast(caller), 1)
         ).into());
     }
 
     deregister {
         let (caller, job) = register_job::<T>(true);
-    }: _(RawOrigin::Signed(caller.clone()), job.script.clone())
+        let local_job_id = 1;
+    }: _(RawOrigin::Signed(caller.clone()), local_job_id.clone())
     verify {
         assert_last_event::<T>(Event::<T>::JobRegistrationRemoved(
-            job.script, caller
+            (MultiOrigin::Acurast(caller), local_job_id)
         ).into());
     }
 
@@ -162,11 +163,11 @@ benchmarks! {
             operation: ListUpdateOperation::Add,
             item: account("processor", 0, SEED),
         }];
-
-    }: _(RawOrigin::Signed(caller.clone()), job.script.clone(), sources_update.clone())
+        let local_job_id = 1;
+    }: _(RawOrigin::Signed(caller.clone()), local_job_id, sources_update.clone())
     verify {
         assert_last_event::<T>(Event::AllowedSourcesUpdated(
-            caller, job, sources_update
+            (MultiOrigin::Acurast(caller), 1), job, sources_update
         ).into());
     }
 
