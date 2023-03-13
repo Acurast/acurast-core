@@ -190,7 +190,7 @@ pub mod pallet {
     #[pallet::getter(fn job_id_sequence)]
     pub type LocalJobIdSequence<T: Config> = StorageValue<_, JobIdSequence, ValueQuery>;
 
-    /// The storage for [JobRegistration]s. They are stored by [AccountId] and [Script].
+    /// The storage for [JobRegistration]s. They are stored by the origin chain address and job identifier.
     #[pallet::storage]
     #[pallet::getter(fn stored_job_registration)]
     pub type StoredJobRegistration<T: Config> = StorageDoubleMap<

@@ -4,11 +4,14 @@ use crate::{
     mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate,
     CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
+use acurast_common::MultiOrigin;
 use frame_support::{assert_err, assert_ok};
 
 #[test]
 fn test_job_registration() {
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         let registration = job_registration(None, false);
         let register_call = Acurast::register(
             RuntimeOrigin::signed(alice_account_id()).into(),
@@ -18,17 +21,23 @@ fn test_job_registration() {
 
         assert_eq!(
             Some(registration.clone()),
-            Acurast::stored_job_registration(alice_account_id(), registration.script.clone())
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_ok!(Acurast::deregister(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.script.clone()
+            Acurast::job_id_sequence()
         ));
 
         assert_eq!(
             None,
-            Acurast::stored_job_registration(alice_account_id(), registration.script.clone())
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(
@@ -36,12 +45,12 @@ fn test_job_registration() {
             [
                 RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
-                    alice_account_id()
+                    (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1)
                 )),
-                RuntimeEvent::Acurast(crate::Event::JobRegistrationRemoved(
-                    registration.script,
-                    alice_account_id()
-                ))
+                RuntimeEvent::Acurast(crate::Event::JobRegistrationRemoved((
+                    MultiOrigin::Acurast(alice_account_id()),
+                    initial_job_id + 1
+                )))
             ]
         );
     });
@@ -51,6 +60,9 @@ fn test_job_registration() {
 fn test_job_registration_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
         let registration = invalid_job_registration_1();
+
+        let initial_job_id = Acurast::job_id_sequence();
+
         assert_err!(
             Acurast::register(
                 RuntimeOrigin::signed(alice_account_id()).into(),
@@ -61,7 +73,10 @@ fn test_job_registration_failure_1() {
 
         assert_eq!(
             None,
-            Acurast::stored_job_registration(alice_account_id(), registration.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(events(), []);
@@ -71,6 +86,8 @@ fn test_job_registration_failure_1() {
 #[test]
 fn test_job_registration_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         let registration = invalid_job_registration_2();
         assert_err!(
             Acurast::register(
@@ -82,7 +99,10 @@ fn test_job_registration_failure_2() {
 
         assert_eq!(
             None,
-            Acurast::stored_job_registration(alice_account_id(), registration.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(events(), []);
@@ -92,6 +112,8 @@ fn test_job_registration_failure_2() {
 #[test]
 fn test_job_registration_failure_3() {
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         let registration_1 = job_registration(
             Some(vec![
                 alice_account_id(),
@@ -113,7 +135,10 @@ fn test_job_registration_failure_3() {
 
         assert_eq!(
             None,
-            Acurast::stored_job_registration(alice_account_id(), registration_1.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_err!(
@@ -126,7 +151,10 @@ fn test_job_registration_failure_3() {
 
         assert_eq!(
             None,
-            Acurast::stored_job_registration(alice_account_id(), registration_2.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(events(), []);
@@ -136,6 +164,8 @@ fn test_job_registration_failure_3() {
 #[test]
 fn test_update_allowed_sources() {
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         let registration_1 = job_registration(None, false);
         let registration_2 =
             job_registration(Some(vec![alice_account_id(), bob_account_id()]), false);
@@ -166,24 +196,30 @@ fn test_update_allowed_sources() {
 
         assert_ok!(Acurast::update_allowed_sources(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            registration_1.script.clone(),
+            Acurast::job_id_sequence(),
             updates_1.clone()
         ));
 
         assert_eq!(
             Some(registration_2.clone()),
-            Acurast::stored_job_registration(alice_account_id(), &registration_1.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_ok!(Acurast::update_allowed_sources(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            registration_1.script.clone(),
+            Acurast::job_id_sequence(),
             updates_2.clone()
         ));
 
         assert_eq!(
             Some(registration_1.clone()),
-            Acurast::stored_job_registration(alice_account_id(), &registration_1.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(
@@ -191,15 +227,15 @@ fn test_update_allowed_sources() {
             [
                 RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
                     registration_1.clone(),
-                    alice_account_id()
+                    (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1)
                 )),
                 RuntimeEvent::Acurast(crate::Event::AllowedSourcesUpdated(
-                    alice_account_id(),
+                    (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1),
                     registration_1,
                     updates_1
                 )),
                 RuntimeEvent::Acurast(crate::Event::AllowedSourcesUpdated(
-                    alice_account_id(),
+                    (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1),
                     registration_2,
                     updates_2
                 ))
@@ -224,6 +260,8 @@ fn test_update_allowed_sources_failure() {
         item: eve_account_id(),
     }];
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
         assert_ok!(Acurast::register(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration.clone(),
@@ -232,7 +270,7 @@ fn test_update_allowed_sources_failure() {
         assert_err!(
             Acurast::update_allowed_sources(
                 RuntimeOrigin::signed(alice_account_id()).into(),
-                registration.script.clone(),
+                initial_job_id + 1,
                 updates.clone()
             ),
             Error::<Test>::TooManyAllowedSources
@@ -240,14 +278,17 @@ fn test_update_allowed_sources_failure() {
 
         assert_eq!(
             Some(registration.clone()),
-            Acurast::stored_job_registration(alice_account_id(), &registration.script)
+            Acurast::stored_job_registration(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
         );
 
         assert_eq!(
             events(),
             [RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
                 registration.clone(),
-                alice_account_id()
+                (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1)
             )),]
         );
     });
@@ -455,6 +496,7 @@ fn test_update_revocation_list_submit_attestation() {
 #[test]
 fn test_update_revocation_list_assign_job() {
     ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
         let updates = vec![CertificateRevocationListUpdate {
             operation: ListUpdateOperation::Add,
             item: cert_serial_number(),
@@ -487,7 +529,7 @@ fn test_update_revocation_list_assign_job() {
                 )),
                 RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
                     registration.clone(),
-                    bob_account_id()
+                    (MultiOrigin::Acurast(bob_account_id()), initial_job_id + 1)
                 )),
                 RuntimeEvent::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),

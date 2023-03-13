@@ -25,7 +25,7 @@ use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chai
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
-use pallet_acurast::JobRegistration;
+use pallet_acurast::{JobRegistration, MultiOrigin};
 use pallet_acurast_marketplace::{
     types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
     SchedulingWindow,
@@ -496,6 +496,7 @@ mod network_tests {
 mod proxy_calls {
     use frame_support::assert_ok;
     use frame_support::dispatch::Dispatchable;
+    use pallet_acurast::LocalJobIdSequence;
     use xcm_simulator::TestExt;
 
     use super::*;
@@ -523,11 +524,11 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::JobRegistrationStored;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Runtime, RuntimeEvent, System};
-            use pallet_acurast::Script;
 
             let events = System::events();
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let multi_origin = MultiOrigin::Acurast(ALICE);
+            let chain_job_id = 1;
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
@@ -538,6 +539,8 @@ mod proxy_calls {
 
     #[test]
     fn deregister() {
+        use frame_support::dispatch::Dispatchable;
+
         Network::reset();
         register();
 
@@ -546,21 +549,18 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::Runtime;
 
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let multi_origin = MultiOrigin::Acurast(ALICE);
+            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
         });
-
-        use frame_support::dispatch::Dispatchable;
-        use pallet_acurast::Script;
 
         ProxyParachain::execute_with(|| {
             use crate::pallet::Call::deregister;
             use proxy_runtime::RuntimeCall::AcurastProxy;
 
-            let message_call = AcurastProxy(deregister {
-                script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
-            });
+            let job_id = 1;
+            let message_call = AcurastProxy(deregister { job_id });
 
             let alice_origin = proxy_runtime::RuntimeOrigin::signed(ALICE);
             let dispatch_status = message_call.dispatch(alice_origin);
@@ -572,9 +572,12 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Runtime, RuntimeEvent, System};
 
+            let multi_origin = MultiOrigin::Acurast(ALICE);
+            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
+            assert!(p_store.is_none());
+
             let events = System::events();
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let _p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
             assert!(events.iter().any(|event| matches!(
                 event.event,
                 RuntimeEvent::Acurast(JobRegistrationRemoved { .. })
@@ -592,10 +595,10 @@ mod proxy_calls {
         AcurastParachain::execute_with(|| {
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::Runtime;
-            use pallet_acurast::Script;
 
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let multi_origin = MultiOrigin::Acurast(ALICE);
+            let chain_job_id = 1;
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
         });
 
@@ -613,7 +616,7 @@ mod proxy_calls {
             };
 
             let message_call = AcurastProxy(update_allowed_sources {
-                script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+                job_id: 1,
                 updates: vec![update],
             });
 
@@ -626,11 +629,11 @@ mod proxy_calls {
             use acurast_runtime::pallet_acurast::Event::AllowedSourcesUpdated;
             use acurast_runtime::pallet_acurast::StoredJobRegistration;
             use acurast_runtime::{Runtime, RuntimeEvent, System};
-            use pallet_acurast::Script;
 
             let events = System::events();
-            let script: Script = SCRIPT_BYTES.to_vec().try_into().unwrap();
-            let p_store = StoredJobRegistration::<Runtime>::get(ALICE, script);
+            let multi_origin = MultiOrigin::Acurast(ALICE);
+            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
 
             // source in storage same as one submitted to proxy
             let found_source: &frame_support::sp_runtime::AccountId32 =
