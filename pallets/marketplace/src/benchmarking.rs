@@ -11,7 +11,7 @@ use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, Script};
+use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, Script, MultiOrigin};
 use pallet_acurast::{Pallet as Acurast, Schedule};
 
 pub use crate::stub::*;
@@ -216,23 +216,25 @@ benchmarks! {
     register {
         let _ = advertise_helper::<T>(true);
         let (caller, job) = register_helper::<T>(false);
+        let local_job_id = 1;
     }: {
          pallet_acurast::Pallet::<T>::register(RawOrigin::Signed(caller.clone()).into(), job.clone())?
     }
     verify {
         assert_last_acurast_event::<T>(AcurastEvent::<T>::JobRegistrationStored(
-            job, caller
+            job, (MultiOrigin::Acurast(caller), local_job_id)
         ).into());
     }
 
     deregister {
         let (caller, job) = register_helper::<T>(true);
+        let local_job_id = 1;
     }: {
-         pallet_acurast::Pallet::<T>::deregister(RawOrigin::Signed(caller.clone()).into(), job.script.clone())?
+         pallet_acurast::Pallet::<T>::deregister(RawOrigin::Signed(caller.clone()).into(), local_job_id)?
     }
     verify {
         assert_last_acurast_event::<T>(AcurastEvent::<T>::JobRegistrationRemoved(
-            job.script, caller
+            (MultiOrigin::Acurast(caller), local_job_id)
         ).into());
     }
 
