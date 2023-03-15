@@ -30,6 +30,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
+    use sp_std::prelude::*;
+    use sp_std::vec;
 
     use types::*;
 
