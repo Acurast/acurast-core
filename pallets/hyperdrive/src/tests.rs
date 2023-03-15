@@ -149,7 +149,17 @@ fn submit_outside_activity_window() {
         assert_err!(
             TezosHyperdrive::submit_state_merkle_root(
                 RuntimeOrigin::signed(alice_account_id()),
-                5,
+                1,
+                HASH
+            ),
+            Error::<Test, ()>::SubmitOutsideTransmitterActivityWindow
+        );
+
+        System::set_block_number(20);
+        assert_err!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(alice_account_id()),
+                1,
                 HASH
             ),
             Error::<Test, ()>::SubmitOutsideTransmitterActivityWindow
@@ -158,26 +168,9 @@ fn submit_outside_activity_window() {
         System::set_block_number(10);
         assert_ok!(TezosHyperdrive::submit_state_merkle_root(
             RuntimeOrigin::signed(alice_account_id()),
-            10,
+            1,
             HASH
         ));
-
-        System::set_block_number(19);
-        assert_ok!(TezosHyperdrive::submit_state_merkle_root(
-            RuntimeOrigin::signed(alice_account_id()),
-            10,
-            HASH
-        ));
-
-        System::set_block_number(20);
-        assert_err!(
-            TezosHyperdrive::submit_state_merkle_root(
-                RuntimeOrigin::signed(bob_account_id()),
-                5,
-                HASH
-            ),
-            Error::<Test, ()>::SubmitOutsideTransmitterActivityWindow
-        );
     });
 }
 
@@ -206,7 +199,7 @@ fn submit_outside_transmission_rate() {
                 6,
                 HASH
             ),
-            Error::<Test, ()>::SubmitOutsideTransmitterActivityWindow
+            Error::<Test, ()>::UnexpectedSnapshot
         );
     });
 }
@@ -240,30 +233,33 @@ fn submit_state_merkle_root() {
 
         System::set_block_number(10);
 
-        // first submission for target chain block 10
+        // first submission for target chain snapshot 1
         assert_ok!(TezosHyperdrive::submit_state_merkle_root(
             RuntimeOrigin::signed(alice_account_id()),
-            10,
+            1,
             HASH
         ));
         // does not validate until quorum reached
-        assert_eq!(TezosHyperdrive::validate_state_merkle_root(10, HASH), false);
+        assert_eq!(TezosHyperdrive::validate_state_merkle_root(1, HASH), false);
 
-        // intermitted submission for different block is allowed!
+        // intermitted submission for different snapshot is not allowed!
+        assert_err!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(bob_account_id()),
+                2,
+                HASH
+            ),
+            Error::<Test, ()>::UnexpectedSnapshot
+        );
+
+        // second submission for target chain snapshot 1
         assert_ok!(TezosHyperdrive::submit_state_merkle_root(
             RuntimeOrigin::signed(bob_account_id()),
-            15,
-            HASH
-        ));
-
-        // second submission for target chain block 10
-        assert_ok!(TezosHyperdrive::submit_state_merkle_root(
-            RuntimeOrigin::signed(bob_account_id()),
-            10,
+            1,
             HASH
         ));
         // does validate since quorum reached
-        assert_eq!(TezosHyperdrive::validate_state_merkle_root(10, HASH), true);
+        assert_eq!(TezosHyperdrive::validate_state_merkle_root(1, HASH), true);
 
         assert_eq!(
             events(),
@@ -289,19 +285,17 @@ fn submit_state_merkle_root() {
                     removed: vec![],
                 }),
                 RuntimeEvent::TezosHyperdrive(crate::Event::StateMerkleRootSubmitted {
-                    block: 10,
+                    source: alice_account_id(),
+                    snapshot: 1,
                     state_merkle_root: HASH
                 }),
                 RuntimeEvent::TezosHyperdrive(crate::Event::StateMerkleRootSubmitted {
-                    block: 15,
-                    state_merkle_root: HASH
-                }),
-                RuntimeEvent::TezosHyperdrive(crate::Event::StateMerkleRootSubmitted {
-                    block: 10,
+                    source: bob_account_id(),
+                    snapshot: 1,
                     state_merkle_root: HASH
                 }),
                 RuntimeEvent::TezosHyperdrive(crate::Event::StateMerkleRootAccepted {
-                    block: 10,
+                    snapshot: 1,
                     state_merkle_root: HASH
                 })
             ]
