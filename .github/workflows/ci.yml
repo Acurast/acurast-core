@@ -33,6 +33,12 @@ jobs:
       # - name: Check and Lint Code
       #   run: cargo clippy -- -D warnings
 
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check
+
       - name: Run cargo check for release
         uses: actions-rs/cargo@v1
         with:
