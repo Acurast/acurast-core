@@ -89,10 +89,11 @@ benchmarks_instance_pallet! {
     submit_state_merkle_root {
         // add the transmitters and submit before benchmarked extrinsic
         let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
-    }: _(RawOrigin::Signed(caller.clone()), 5.into(), HASH.into())
+    }: _(RawOrigin::Signed(caller.clone()), 1.into(), HASH.into())
     verify {
          assert_event::<T, I>(Event::StateMerkleRootSubmitted{
-                    block: 5.into(),
+                    source: caller.clone(),
+                    snapshot: 1.into(),
                     state_merkle_root: HASH.into()
                 }.into());
     }

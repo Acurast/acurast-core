@@ -30,6 +30,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
+    use sp_std::collections::btree_set::BTreeSet;
     use sp_std::prelude::*;
     use sp_std::vec;
 
@@ -81,6 +82,7 @@ pub mod pallet {
             + MaxEncodedLen
             + TypeInfo
             + Zero
+            + From<u8>
             + CheckedRem;
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -108,11 +110,12 @@ pub mod pallet {
             removed: Vec<T::AccountId>,
         },
         StateMerkleRootSubmitted {
-            block: T::TargetChainBlockNumber,
+            source: T::AccountId,
+            snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         },
         StateMerkleRootAccepted {
-            block: T::TargetChainBlockNumber,
+            snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         },
     }
@@ -131,6 +134,17 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    #[pallet::type_value]
+    pub fn FirstSnapshot<T: Config<I>, I: 'static>() -> T::TargetChainBlockNumber {
+        1u8.into()
+    }
+
+    /// This storage field contains the latest validated snapshot number.
+    #[pallet::storage]
+    #[pallet::getter(fn latest_snapshot)]
+    pub type CurrentSnapshot<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, T::TargetChainBlockNumber, ValueQuery, FirstSnapshot<T, I>>;
+
     #[pallet::storage]
     #[pallet::getter(fn state_merkle_root)]
     pub type StateMerkleRootCount<T: Config<I>, I: 'static = ()> = StorageDoubleMap<
@@ -139,15 +153,15 @@ pub mod pallet {
         T::TargetChainBlockNumber,
         Identity,
         T::TargetChainHash,
-        u8,
+        BTreeSet<T::AccountId>,
     >;
 
     #[pallet::error]
     pub enum Error<T, I = ()> {
         /// A known transmitter submits outside the window of activity he is permissioned to.
         SubmitOutsideTransmitterActivityWindow,
-        SubmitOutsideTransmissionRate,
         CalculationOverflow,
+        UnexpectedSnapshot,
     }
 
     #[pallet::call]
@@ -208,10 +222,17 @@ pub mod pallet {
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_state_merkle_root())]
         pub fn submit_state_merkle_root(
             origin: OriginFor<T>,
-            block: T::TargetChainBlockNumber,
+            snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            let expected_snapshot = Self::latest_snapshot();
+
+            // Ensure merkle roots are submitted sequentially
+            ensure!(
+                snapshot == expected_snapshot,
+                Error::<T, I>::UnexpectedSnapshot
+            );
 
             let activity_window = <StateTransmitter<T, I>>::get(&who);
             let current_block = <frame_system::Pallet<T>>::block_number();
@@ -221,32 +242,42 @@ pub mod pallet {
                     && current_block < activity_window.end_block,
                 Error::<T, I>::SubmitOutsideTransmitterActivityWindow
             );
-            ensure!(
-                block
-                    .checked_rem(&T::TransmissionRate::get())
-                    .ok_or(Error::<T, I>::CalculationOverflow)?
-                    .is_zero(),
-                Error::<T, I>::SubmitOutsideTransmissionRate
-            );
 
             // insert merkle root proposal since all checks passed
             // allows for constant-time validity checks
-            let accepted =
-                StateMerkleRootCount::<T, I>::mutate(&block, &state_merkle_root, |count| {
-                    let count_ = count.unwrap_or(0) + 1;
-                    *count = Some(count_);
-                    count_ >= <T as Config<I>>::TransmissionQuorum::get()
-                });
+            let accepted = StateMerkleRootCount::<T, I>::mutate(
+                &snapshot,
+                &state_merkle_root,
+                |submissions| {
+                    // This can be improved once [let chains feature](https://github.com/rust-lang/rust/issues/53667) lands
+                    if let Some(transmitters) = submissions {
+                        if !transmitters.contains(&who) {
+                            transmitters.insert(who.clone());
+                        }
+                    } else {
+                        let mut set = BTreeSet::<T::AccountId>::new();
+                        set.insert(who.clone());
+                        *submissions = Some(set);
+                    }
+
+                    let submissions_count = submissions
+                        .as_ref()
+                        .map_or(0usize, |transmitters| transmitters.len());
+                    return submissions_count >= T::TransmissionQuorum::get().into();
+                },
+            );
 
             // Emit event to inform that the state merkle root has been sumitted
             Self::deposit_event(Event::StateMerkleRootSubmitted {
-                block,
+                source: who,
+                snapshot,
                 state_merkle_root,
             });
 
             if accepted {
+                CurrentSnapshot::<T, I>::set(expected_snapshot + T::TransmissionRate::get());
                 Self::deposit_event(Event::StateMerkleRootAccepted {
-                    block,
+                    snapshot,
                     state_merkle_root,
                 });
             }
@@ -261,9 +292,10 @@ pub mod pallet {
             block: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         ) -> bool {
-            StateMerkleRootCount::<T, I>::get(&block, &state_merkle_root).map_or(false, |count| {
-                count >= <T as Config<I>>::TransmissionQuorum::get()
-            })
+            StateMerkleRootCount::<T, I>::get(&block, &state_merkle_root)
+                .map_or(false, |submissions| {
+                    submissions.len() >= T::TransmissionQuorum::get().into()
+                })
         }
     }
 }

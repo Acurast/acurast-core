@@ -11,7 +11,7 @@ use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, Script, MultiOrigin};
+use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, MultiOrigin, Script};
 use pallet_acurast::{Pallet as Acurast, Schedule};
 
 pub use crate::stub::*;
