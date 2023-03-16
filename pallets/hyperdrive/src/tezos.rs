@@ -44,7 +44,6 @@ where
         let (action, origin, payload) = parse_message(encoded)?;
 
         Ok(match action {
-            RawAction::OnlyStore => ParsedAction::OnlyStore,
             RawAction::RegisterJob => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, registration) = parse_job_registration_payload::<

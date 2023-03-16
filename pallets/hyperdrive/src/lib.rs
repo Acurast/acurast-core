@@ -346,7 +346,6 @@ pub mod pallet {
             );
 
             match T::MessageParser::parse(message_bytes).map_err(|_| Error::<T, I>::MessageParsingFailed)? {
-                ParsedAction::OnlyStore => {}
                 ParsedAction::RegisterJob(_, _) => {}
             }
 

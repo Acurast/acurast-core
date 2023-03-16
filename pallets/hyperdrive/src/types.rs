@@ -136,8 +136,6 @@ pub type Message = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
 pub enum RawAction {
-    #[strum(disabled)]
-    OnlyStore,
     #[strum(serialize = "REGISTER_JOB")]
     RegisterJob,
 }
@@ -148,7 +146,6 @@ where
     AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
     Extra: Parameter + Member,
 {
-    OnlyStore,
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
 }
 
