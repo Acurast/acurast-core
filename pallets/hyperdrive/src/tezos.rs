@@ -29,8 +29,7 @@ pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>(
     PhantomData<(Reward, Balance, ParsableAccountId, AccountId, Extra)>,
 );
 
-impl<Reward, Balance, ParsableAccountId, AccountId, Extra>
-    MessageParser<AccountId, Extra>
+impl<Reward, Balance, ParsableAccountId, AccountId, Extra> MessageParser<AccountId, Extra>
     for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
@@ -208,8 +207,7 @@ fn parse_job_registration_payload<Reward, Balance, ParsableAccountId, AccountId,
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
 where
-    ParsableAccountId: FromStr
-        + Into<AccountId>,
+    ParsableAccountId: FromStr + Into<AccountId>,
     AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
     Extra: Parameter + Member + From<RegistrationExtra<Reward, Balance, AccountId>>,
     Reward: Parameter + Member + TryFrom<Vec<u8>>,
