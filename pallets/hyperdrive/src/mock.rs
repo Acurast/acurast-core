@@ -139,8 +139,7 @@ impl Reward for MockAsset {
 }
 
 impl From<Vec<u8>> for MockAsset {
-    fn from(bytes: Vec<u8>) -> Self {
-        // TOOD parse
+    fn from(_: Vec<u8>) -> Self {
         MockAsset {
             id: 5,
             amount: 10000,

@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use derive_more::{Display, From};
 use frame_support::once_cell::race::OnceBox;
 use frame_support::Parameter;
-use pallet_acurast::{JobId, JobIdSequence, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
 use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 use sp_core::bounded::BoundedVec;
 use sp_core::ConstU32;
@@ -21,7 +21,7 @@ use tezos_michelson::michelson::types::{
 };
 use tezos_michelson::Error as TezosMichelineError;
 
-use crate::types::{JobRegistrationFor, MessageParser, RawAction};
+use crate::types::{MessageParser, RawAction};
 use crate::Error;
 use crate::{Config, ParsedAction};
 
@@ -500,7 +500,6 @@ mod tests {
     use hex_literal::hex;
 
     use pallet_acurast::{JobRegistration, Script};
-    use sp_runtime::AccountId32;
 
     use crate::mock::*;
 

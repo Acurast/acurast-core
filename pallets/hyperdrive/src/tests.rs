@@ -1,6 +1,5 @@
 #![cfg(test)]
 
-use frame_support::storage::child::root;
 use frame_support::traits::Len;
 use frame_support::{assert_err, assert_ok, error::BadOrigin};
 use hex_literal::hex;

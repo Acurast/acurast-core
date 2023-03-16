@@ -4,12 +4,11 @@ use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use scale_info::TypeInfo;
 use sp_core::ConstU32;
 use sp_runtime::traits::{Hash, MaybeDisplay};
-use sp_std::str::FromStr;
 use sp_std::prelude::*;
 use strum_macros::EnumString;
 use pallet_acurast::{JobId, JobRegistration};
 
-use crate::{Config, Error};
+use crate::{Config};
 
 pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
 pub type StateTransmitterUpdates<T> =

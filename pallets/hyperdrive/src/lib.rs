@@ -334,7 +334,7 @@ pub mod pallet {
             >,
             message: Message,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let _ = ensure_signed(origin)?;
 
             let message_bytes = &message.to_vec();
             let leaf_hash = T::TargetChainHashing::hash(&message_bytes);
