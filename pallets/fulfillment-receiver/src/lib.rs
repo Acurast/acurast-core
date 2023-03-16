@@ -5,6 +5,12 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod stub;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 pub mod traits;
 pub mod types;
 

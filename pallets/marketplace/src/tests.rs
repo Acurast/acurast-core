@@ -106,7 +106,7 @@ fn test_match() {
 
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
-            vec![job_match.clone()],
+            vec![job_match.clone()].try_into().unwrap(),
         ));
         assert_eq!(
             Some(JobStatus::Matched),
@@ -391,7 +391,7 @@ fn test_no_match_schedule_overlap() {
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
-            vec![m.clone()],
+            vec![m.clone()].try_into().unwrap(),
         ));
 
         // this one does not match anymore
@@ -405,7 +405,7 @@ fn test_no_match_schedule_overlap() {
         assert_err!(
             AcurastMarketplace::propose_matching(
                 RuntimeOrigin::signed(charlie_account_id()).into(),
-                vec![m.clone()],
+                vec![m.clone()].try_into().unwrap(),
             ),
             Error::<Test>::ScheduleOverlapInMatch
         );
@@ -504,7 +504,7 @@ fn test_no_match_insufficient_reputation() {
         assert_err!(
             AcurastMarketplace::propose_matching(
                 RuntimeOrigin::signed(charlie_account_id()).into(),
-                vec![m.clone()],
+                vec![m.clone()].try_into().unwrap(),
             ),
             Error::<Test>::InsufficientReputationInMatch
         );
@@ -592,7 +592,7 @@ fn test_more_reports_than_expected() {
         };
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
-            vec![m.clone()],
+            vec![m.clone()].try_into().unwrap(),
         ));
 
         assert_ok!(AcurastMarketplace::acknowledge_match(

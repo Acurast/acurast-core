@@ -39,7 +39,9 @@ pub mod pallet {
         type RegistrationExtra: Parameter + Member;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u16>;
+        type MaxAllowedSources: Get<u32>;
+        #[pallet::constant]
+        type MaxCertificateRevocationListUpdates: Get<u32>;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
@@ -225,12 +227,15 @@ pub mod pallet {
         AllowedSourcesUpdated(
             JobId<T::AccountId>,
             JobRegistrationFor<T>,
-            Vec<AllowedSourcesUpdate<T::AccountId>>,
+            BoundedVec<AllowedSourcesUpdate<T::AccountId>, <T as Config>::MaxAllowedSources>,
         ),
         /// An attestation was successfully stored. [attestation, who]
         AttestationStored(Attestation, T::AccountId),
         /// The certificate revocation list has been updated. [who, updates]
-        CertificateRecovationListUpdated(T::AccountId, Vec<CertificateRevocationListUpdate>),
+        CertificateRecovationListUpdated(
+            T::AccountId,
+            BoundedVec<CertificateRevocationListUpdate, T::MaxCertificateRevocationListUpdates>,
+        ),
     }
 
     #[pallet::error]
@@ -324,7 +329,10 @@ pub mod pallet {
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             local_job_id: JobIdSequence,
-            updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
+            updates: BoundedVec<
+                AllowedSourcesUpdate<T::AccountId>,
+                <T as Config>::MaxAllowedSources,
+            >,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
@@ -415,7 +423,10 @@ pub mod pallet {
         #[pallet::call_index(6)]
         pub fn update_certificate_revocation_list(
             origin: OriginFor<T>,
-            updates: Vec<CertificateRevocationListUpdate>,
+            updates: BoundedVec<
+                CertificateRevocationListUpdate,
+                T::MaxCertificateRevocationListUpdates,
+            >,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             if !T::RevocationListUpdateBarrier::can_update_revocation_list(&who, &updates) {

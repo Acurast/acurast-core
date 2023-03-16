@@ -5,10 +5,16 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+pub mod traits;
+
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
+pub use traits::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -24,6 +30,9 @@ pub mod pallet {
     };
     use xcm::v2::{OriginKind, SendError};
 
+    #[cfg(feature = "runtime-benchmarks")]
+    use crate::benchmarking::BenchmarkHelper;
+    use crate::WeightInfo;
     use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration};
     use pallet_acurast_marketplace::Advertisement;
 
@@ -33,17 +42,23 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member;
+        #[pallet::constant]
+        type MaxAllowedSources: Get<u32>;
         type AssetId: Parameter + Member;
         type AssetAmount: Parameter;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;
         type AcurastMarketplacePalletId: Get<u8>;
         type AcurastParachainId: Get<u32>;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self>;
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::error]
     pub enum Error<T> {
         XcmError,
+        AccountIdToBytesConversionFailed,
     }
 
     #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -59,7 +74,7 @@ pub mod pallet {
         #[codec(index = 2u8)]
         UpdateAllowedSources {
             job_id: JobIdSequence,
-            updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
+            updates: BoundedVec<AllowedSourcesUpdate<T::AccountId>, T::MaxAllowedSources>,
         },
 
         #[codec(index = 0u8)]
@@ -93,7 +108,10 @@ pub mod pallet {
         pallet_id: u8,
     ) -> DispatchResult {
         // extract bytes from struct
-        let account_bytes = caller.encode().try_into().unwrap();
+        let account_bytes: [u8; 32] = caller
+            .encode()
+            .try_into()
+            .map_err(|_| Error::<T>::AccountIdToBytesConversionFailed)?;
         let mut xcm_message = Vec::new();
         let extrinsic = proxy_call.get_name();
 
@@ -164,7 +182,7 @@ pub mod pallet {
         /// Registers a job by providing a [Registration]. If a job for the same script was previously registered, it will be overwritten.
         // TODO: Define proxy weight
         #[pallet::call_index(0)]
-        #[pallet::weight(10_000)]
+        #[pallet::weight(T::WeightInfo::register())]
         pub fn register(
             origin: OriginFor<T>,
             registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
@@ -176,7 +194,7 @@ pub mod pallet {
 
         /// Deregisters a job for the given script.
         #[pallet::call_index(1)]
-        #[pallet::weight(10_000)]
+        #[pallet::weight(T::WeightInfo::deregister())]
         pub fn deregister(origin: OriginFor<T>, job_id: JobIdSequence) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Deregister {
@@ -187,11 +205,11 @@ pub mod pallet {
 
         /// Updates the allowed sources list of a [Registration].
         #[pallet::call_index(2)]
-        #[pallet::weight(10_000)]
+        #[pallet::weight(T::WeightInfo::update_allowed_sources())]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             job_id: JobIdSequence,
-            updates: Vec<AllowedSourcesUpdate<T::AccountId>>,
+            updates: BoundedVec<AllowedSourcesUpdate<T::AccountId>, T::MaxAllowedSources>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::UpdateAllowedSources { job_id, updates };
@@ -200,7 +218,7 @@ pub mod pallet {
 
         /// Advertise resources by providing a [Advertisement]. If an advertisement for the same script was previously registered, it will be overwritten.
         #[pallet::call_index(4)]
-        #[pallet::weight(10_000)]
+        #[pallet::weight(T::WeightInfo::advertise())]
         pub fn advertise(
             origin: OriginFor<T>,
             advertisement: Advertisement<T::AccountId, T::AssetId, T::AssetAmount>,

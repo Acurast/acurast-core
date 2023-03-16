@@ -1,14 +1,14 @@
+use crate::stub::{bob_account_id, AccountId};
 use crate::types::Fulfillment;
 use acurast_common::Script;
 use frame_support::sp_runtime::DispatchError;
 use frame_support::{parameter_types, sp_runtime, traits::Everything, weights::Weight, PalletId};
 use hex_literal::hex;
+use sp_runtime::generic;
 use sp_runtime::traits::{AccountIdLookup, BlakeTwo256};
-use sp_runtime::{generic, AccountId32};
 
 use crate::traits::OnFulfillment;
 
-type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub type BlockNumber = u32;
@@ -84,14 +84,6 @@ impl OnFulfillment<Test> for FulfillmentHandler {
         }
         Ok(().into())
     }
-}
-
-pub fn alice_account_id() -> AccountId {
-    [0; 32].into()
-}
-
-pub fn bob_account_id() -> AccountId {
-    [1; 32].into()
 }
 
 pub struct ExtBuilder;

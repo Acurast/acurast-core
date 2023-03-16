@@ -166,6 +166,8 @@ impl pallet_assets::Config for Test {
     type Extra = ();
     type WeightInfo = ();
     type RemoveItemsLimit = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 impl parachain_info::Config for Test {}
@@ -173,7 +175,8 @@ impl parachain_info::Config for Test {}
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = ();
-    type MaxAllowedSources = frame_support::traits::ConstU16<4>;
+    type MaxAllowedSources = frame_support::traits::ConstU32<4>;
+    type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();

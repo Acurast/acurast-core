@@ -112,7 +112,7 @@ pub struct AssetRewardManager<Asset, Barrier, AssetSplit>(
 impl<T: Config, Asset, Barrier, AssetSplit> RewardManager<T>
     for AssetRewardManager<Asset, Barrier, AssetSplit>
 where
-    T: pallet_acurast_assets::Config,
+    T: pallet_acurast_assets_manager::Config,
     Asset: Parameter
         + Member
         + Reward<AssetId = AssetId, AssetAmount = <T as pallet_assets::Config>::Balance>,
@@ -141,7 +141,7 @@ where
         // this is a privileged operation, hence the force_transfer call.
         // we could do an approve_transfer first, but this would require the assets pallet being
         // public which we can't do at the moment due to our statemint assets 1 to 1 integration
-        pallet_acurast_assets::Pallet::<T>::force_transfer(
+        pallet_acurast_assets_manager::Pallet::<T>::force_transfer(
             pallet_origin,
             id.into(),
             owner,
@@ -172,7 +172,7 @@ where
 
         // Transfer fees to Acurast fees manager account
         let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
-        pallet_acurast_assets::Pallet::<T>::transfer(
+        pallet_acurast_assets_manager::Pallet::<T>::transfer(
             pallet_origin.clone(),
             id.clone().into(),
             T::Lookup::unlookup(fee_pallet_account),
@@ -180,7 +180,7 @@ where
         )?;
 
         // Transfer reward to the processor
-        pallet_acurast_assets::Pallet::<T>::transfer(
+        pallet_acurast_assets_manager::Pallet::<T>::transfer(
             pallet_origin,
             id.into(),
             target,

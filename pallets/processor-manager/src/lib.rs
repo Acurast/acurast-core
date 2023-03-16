@@ -24,6 +24,9 @@ pub type ProcessorPairingFor<T> =
 pub type ProcessorPairingUpdateFor<T> =
     ProcessorPairingUpdate<<T as frame_system::Config>::AccountId, <T as Config>::Proof>;
 
+pub type ProcessorUpdatesFor<T> =
+    frame_support::BoundedVec<ProcessorPairingUpdateFor<T>, <T as Config>::MaxPairingUpdates>;
+
 #[frame_support::pallet]
 pub mod pallet {
     use acurast_common::ListUpdateOperation;
@@ -38,7 +41,7 @@ pub mod pallet {
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
     use sp_std::prelude::*;
 
-    use crate::{traits::*, ProcessorPairingFor, ProcessorPairingUpdateFor};
+    use crate::{traits::*, ProcessorPairingFor, ProcessorUpdatesFor};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -135,7 +138,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         ManagerCreated(T::AccountId, T::ManagerId),
-        ProcessorPairingsUpdated(T::AccountId, Vec<ProcessorPairingUpdateFor<T>>),
+        ProcessorPairingsUpdated(T::AccountId, ProcessorUpdatesFor<T>),
         ProcessorFundsRecovered(T::AccountId, T::AccountId),
         ProcessorPaired(T::AccountId, ProcessorPairingFor<T>),
         ProcessorHeartbeat(T::AccountId),
@@ -149,7 +152,6 @@ pub mod pallet {
         ProcessorPairedWithAnotherManager,
         InvalidPairingProof,
         ProcessorHasNoManager,
-        TooManyPairingUpdates,
         CounterOverflow,
         PairingProofExpired,
     }
@@ -163,13 +165,9 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::update_processor_pairings())]
         pub fn update_processor_pairings(
             origin: OriginFor<T>,
-            pairing_updates: Vec<ProcessorPairingUpdateFor<T>>,
+            pairing_updates: ProcessorUpdatesFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-
-            if pairing_updates.len() > T::MaxPairingUpdates::get() as usize {
-                return Err(Error::<T>::TooManyPairingUpdates)?;
-            }
 
             let (manager_id, created) = Self::do_get_or_create_manager_id(&who)?;
             if created {

@@ -136,6 +136,19 @@ impl pallet_assets::Config for Test {
     type Extra = ();
     type WeightInfo = ();
     type RemoveItemsLimit = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = TestBenchmarkHelper;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TestBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_assets::BenchmarkHelper<<Test as pallet_assets::Config>::AssetIdParameter>
+    for TestBenchmarkHelper
+{
+    fn create_asset_id_parameter(id: u32) -> <Test as pallet_assets::Config>::AssetIdParameter {
+        codec::Compact(id.into())
+    }
 }
 
 impl pallet_uniques::Config for Test {

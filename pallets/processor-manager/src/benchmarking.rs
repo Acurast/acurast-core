@@ -47,7 +47,7 @@ benchmarks! {
         for i in 0..x {
             updates.push(generate_pairing_update::<T>(ListUpdateOperation::Add, &caller));
         }
-    }: _(RawOrigin::Signed(caller), updates)
+    }: _(RawOrigin::Signed(caller), updates.try_into().unwrap())
 
     update_processor_pairings_2 {
         let x in 1 .. T::MaxPairingUpdates::get();
@@ -57,12 +57,12 @@ benchmarks! {
         for i in 0..x {
             updates_add.push(generate_pairing_update::<T>(ListUpdateOperation::Add, &caller));
         }
-        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), updates_add.clone())?;
+        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), updates_add.clone().try_into().unwrap())?;
         let updates_remove = updates_add.into_iter().map(|update| ProcessorPairingUpdateFor::<T> {
             operation: ListUpdateOperation::Remove,
             item: ProcessorPairingFor::<T>::new(update.item.account),
         }).collect::<Vec<_>>();
-    }: update_processor_pairings(RawOrigin::Signed(caller), updates_remove)
+    }: update_processor_pairings(RawOrigin::Signed(caller), updates_remove.try_into().unwrap())
 
     pair_with_manager {
         let (signer, manager_account) = generate_account();
@@ -77,7 +77,7 @@ benchmarks! {
         let caller: T::AccountId = alice_account_id().into();
         whitelist_account!(caller);
         let update = generate_pairing_update::<T>(ListUpdateOperation::Add, &caller);
-        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()])?;
+        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()].try_into().unwrap())?;
     }: _(RawOrigin::Signed(caller.clone()), update.item.account.into(), caller.clone().into())
 
     heartbeat {

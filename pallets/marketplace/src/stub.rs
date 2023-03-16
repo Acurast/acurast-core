@@ -7,7 +7,7 @@ use sp_runtime::AccountId32;
 use sp_std::prelude::*;
 
 use pallet_acurast::{AttestationChain, Script, SerialNumber};
-use pallet_acurast_assets::traits::AssetValidator;
+use pallet_acurast_assets_manager::traits::AssetValidator;
 
 use crate::*;
 
