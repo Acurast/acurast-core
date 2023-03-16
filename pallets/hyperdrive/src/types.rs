@@ -1,12 +1,13 @@
 use codec::{Decode, Encode};
-use frame_support::RuntimeDebug;
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
-use pallet_acurast::{JobId, JobRegistration};
+use frame_support::RuntimeDebug;
 use scale_info::TypeInfo;
 use sp_core::ConstU32;
-use sp_runtime::traits::{Hash, MaybeDisplay};
+use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
 use strum_macros::EnumString;
+
+use pallet_acurast::{JobId, JobRegistration};
 
 use crate::Config;
 
@@ -141,9 +142,6 @@ pub enum RawAction {
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ParsedAction<AccountId, Extra>
-where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member,
 {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
 }
@@ -152,9 +150,6 @@ pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
 pub trait MessageParser<AccountId, Extra>
-where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member,
 {
     type Error;
 
@@ -162,17 +157,11 @@ where
 }
 
 pub trait ActionExecutor<AccountId, Extra>
-where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member,
 {
     fn execute(action: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo;
 }
 
 impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for ()
-where
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member,
 {
     fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())

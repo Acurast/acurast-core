@@ -103,9 +103,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type RegistrationExtra: Parameter
-            + Member
-            + From<RegistrationExtra<Self::Reward, Self::Balance, Self::AccountId>>;
+        type RegistrationExtra: From<RegistrationExtra<Self::Reward, Self::Balance, Self::AccountId>>;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;

@@ -1,29 +1,30 @@
-use sp_std::prelude::*;
 use std::marker::PhantomData;
 
 use derive_more::{Display, From};
 use frame_support::once_cell::race::OnceBox;
 use frame_support::Parameter;
-use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
-use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 use sp_core::bounded::BoundedVec;
 use sp_core::ConstU32;
-use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
+use sp_runtime::traits::Member;
+use sp_std::prelude::*;
 use sp_std::str::FromStr;
-use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
-use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
+use tezos_core::types::encoded::Address as TezosAddress;
+use tezos_michelson::Error as TezosMichelineError;
 use tezos_michelson::micheline::Micheline;
+use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
 use tezos_michelson::michelson::data;
-use tezos_michelson::michelson::data::{try_int, try_string, Bytes, Data, Int, Pair, Sequence};
+use tezos_michelson::michelson::data::{Bytes, Data, Int, Pair, Sequence, try_int, try_string};
 use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
-use tezos_michelson::Error as TezosMichelineError;
 
-use crate::types::{MessageParser, RawAction};
-use crate::Error;
+use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
+
 use crate::{Config, ParsedAction};
+use crate::Error;
+use crate::types::{MessageParser, RawAction};
 
 pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>(
     PhantomData<(Reward, Balance, ParsableAccountId, AccountId, Extra)>,
@@ -33,8 +34,7 @@ impl<Reward, Balance, ParsableAccountId, AccountId, Extra> MessageParser<Account
     for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member + From<RegistrationExtra<Reward, Balance, AccountId>>,
+    Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
     Reward: Parameter + Member + TryFrom<Vec<u8>>,
     Balance: From<u128>,
 {
@@ -208,8 +208,7 @@ fn parse_job_registration_payload<Reward, Balance, ParsableAccountId, AccountId,
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
-    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
-    Extra: Parameter + Member + From<RegistrationExtra<Reward, Balance, AccountId>>,
+    Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
     Reward: Parameter + Member + TryFrom<Vec<u8>>,
     Balance: From<u128>,
 {
