@@ -3,19 +3,17 @@
 use frame_support::traits::Len;
 use frame_support::{assert_err, assert_ok, error::BadOrigin};
 use hex_literal::hex;
-use sp_core::bounded::BoundedVec;
-use sp_core::{ConstU32, H256};
+use sp_core::H256;
 use sp_runtime::bounded_vec;
 use sp_runtime::traits::{Hash, Keccak256};
 
+use crate::stub::*;
+use crate::types::*;
 use crate::{
     mock::*,
     types::{ActivityWindow, StateTransmitterUpdate},
     Error,
 };
-
-use crate::types::*;
-use crate::{stub::*, Config};
 
 #[test]
 fn update_single_state_transmitters() {
@@ -324,7 +322,7 @@ fn test_verify_proof() {
     let leaf = Keccak256::hash(&combined);
 
     test.execute_with(|| {
-        let proof_items: BoundedVec<StateProofNode<H256>, ConstU32<256>> = bounded_vec![
+        let proof: StateProof<H256> = bounded_vec![
             StateProofNode::Left(H256(hex!(
                 "19520b9dd118ede4c96c2f12718d43e22e9c0412b39cd15a36b40bce2121ddff"
             ))),
@@ -356,24 +354,10 @@ fn test_verify_proof() {
                 "abce2c418c92ca64a98baf9b20a3fcf7b5e9441e1166feedf4533b57c4bfa6a4"
             ))),
         ];
-        // just instantiate the proof to get the types of Config checked by compiler
-        let _proof = StateProofFor::<
-            <Test as Config>::TargetChainBlockNumber,
-            <Test as Config>::TargetChainHash,
-            <Test as Config>::TargetChainStateKey,
-            <Test as Config>::TargetChainStateValue,
-        > {
-            block: 0,
-            proof: proof_items.clone(),
-            leaf: StateLeaf {
-                key: "action".into(),
-                value: "register".into(),
-            },
-        };
 
         let root_hash: H256 = H256(hex!(
             "fd5f82b627a0b2c5ac0022a95422d435b204c4c1071d5dbda84ae8708d0110fd"
         ));
-        assert_eq!(derive_proof::<Keccak256, _>(proof_items, leaf), root_hash);
+        assert_eq!(derive_proof::<Keccak256, _>(proof, leaf), root_hash);
     });
 }

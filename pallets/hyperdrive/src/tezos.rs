@@ -8,23 +8,23 @@ use sp_core::ConstU32;
 use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
-use tezos_core::Error as TezosCoreError;
 use tezos_core::types::encoded::Address as TezosAddress;
-use tezos_michelson::Error as TezosMichelineError;
-use tezos_michelson::micheline::Micheline;
+use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
+use tezos_michelson::micheline::Micheline;
 use tezos_michelson::michelson::data;
-use tezos_michelson::michelson::data::{Bytes, Data, Int, Pair, Sequence, try_int, try_string};
+use tezos_michelson::michelson::data::{try_int, try_string, Bytes, Data, Int, Pair, Sequence};
 use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
+use tezos_michelson::Error as TezosMichelineError;
 
 use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
 use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 
-use crate::{Config, ParsedAction};
-use crate::Error;
 use crate::types::{MessageParser, RawAction};
+use crate::Error;
+use crate::{Config, ParsedAction};
 
 pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>(
     PhantomData<(Reward, Balance, ParsableAccountId, AccountId, Extra)>,

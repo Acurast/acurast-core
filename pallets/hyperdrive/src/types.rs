@@ -1,6 +1,6 @@
 use codec::{Decode, Encode};
-use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use frame_support::RuntimeDebug;
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use scale_info::TypeInfo;
 use sp_core::ConstU32;
 use sp_runtime::traits::Hash;
@@ -44,35 +44,11 @@ pub enum StateTransmitterUpdate<AccountId, BlockNumber> {
     Update(AccountId, ActivityWindow<BlockNumber>),
 }
 
-/// Defines the state proof.
+/// Defines the state proof as a path of blinded nodes. Does not contain the leaf hash, nor the root.
 ///
-/// The structure contains all necessary data to verify the proof and the leaf itself.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct StateProof<BlockNumber, Hash, Leaf> {
-    /// The block number at which the state proof was generated.
-    pub block: BlockNumber,
-    /// Proof's path blinded nodes. Does not contain the leaf hash, nor the root.
-    ///
-    /// This vec contains all inner node hashes necessary to reconstruct the root hash given the
-    /// leaf hash.
-    pub proof: BoundedVec<StateProofNode<Hash>, ConstU32<256>>,
-    /// Leaf content.
-    pub leaf: Leaf,
-}
-
-pub type StateProofFor<BlockNumber, Hash, Key, Value> =
-    StateProof<BlockNumber, Hash, StateLeaf<Key, Value>>;
-
-/// A leaf node of state tree consisting of a (key, value) pair.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct StateLeaf<Key, Value> {
-    /// The key used to store the state by key after proof is valid.
-    pub key: Key,
-    /// The value.
-    ///
-    /// Could be any target chain state or something understood like an encoded [`RawAction`].
-    pub value: Value,
-}
+/// This vec contains all inner node hashes necessary to reconstruct the root hash given the
+/// leaf hash.
+pub type StateProof<Hash> = BoundedVec<StateProofNode<Hash>, ConstU32<256>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum StateProofNode<Hash> {
@@ -141,28 +117,24 @@ pub enum RawAction {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<AccountId, Extra>
-{
+pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
 }
 
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<AccountId, Extra>
-{
+pub trait MessageParser<AccountId, Extra> {
     type Error;
 
     fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
 }
 
-pub trait ActionExecutor<AccountId, Extra>
-{
+pub trait ActionExecutor<AccountId, Extra> {
     fn execute(action: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo;
 }
 
-impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for ()
-{
+impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
     fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
     }

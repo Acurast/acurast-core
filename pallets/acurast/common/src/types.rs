@@ -4,9 +4,7 @@ mod bounded_attestation;
 #[cfg(feature = "attestation")]
 pub use bounded_attestation::*;
 
-use frame_support::{
-    pallet_prelude::*, storage::bounded_vec::BoundedVec,
-};
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
 pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
@@ -64,8 +62,7 @@ pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct JobRegistration<AccountId, Extra>
-{
+pub struct JobRegistration<AccountId, Extra> {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.

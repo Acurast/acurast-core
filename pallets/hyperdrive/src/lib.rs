@@ -103,7 +103,9 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type RegistrationExtra: From<RegistrationExtra<Self::Reward, Self::Balance, Self::AccountId>>;
+        type RegistrationExtra: From<
+            RegistrationExtra<Self::Reward, Self::Balance, Self::AccountId>,
+        >;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -317,22 +319,20 @@ pub mod pallet {
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
         pub fn submit_message(
             origin: OriginFor<T>,
-            proof: StateProofFor<
-                T::TargetChainBlockNumber,
-                T::TargetChainHash,
-                T::TargetChainStateKey,
-                T::TargetChainStateValue,
-            >,
+            // The block number at which the state proof was generated.
+            block: T::TargetChainBlockNumber,
+            // The state proof.
+            proof: StateProof<T::TargetChainHash>,
             message: Message,
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
             let message_bytes = &message.to_vec();
             let leaf_hash = T::TargetChainHashing::hash(&message_bytes);
-            let derived_root = derive_proof::<T::TargetChainHashing, _>(proof.proof, leaf_hash);
+            let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             ensure!(
-                Self::validate_state_merkle_root(proof.block, derived_root),
+                Self::validate_state_merkle_root(block, derived_root),
                 Error::<T, I>::ProofInvalid
             );
 
