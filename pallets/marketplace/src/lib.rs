@@ -693,8 +693,8 @@ pub mod pallet {
 
         /// Updates the allowed sources list of a [JobRegistration].
         fn update_allowed_sources_hook(
-            _who: &<T as frame_system::Config>::AccountId,
-            job_id: &JobId<<T as frame_system::Config>::AccountId>,
+            _who: &T::AccountId,
+            job_id: &JobId<T::AccountId>,
             _updates: &Vec<AllowedSourcesUpdate<T::AccountId>>,
         ) -> Result<(), DispatchError> {
             let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)

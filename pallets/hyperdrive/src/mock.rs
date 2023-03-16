@@ -1,10 +1,7 @@
 #![allow(unused_imports)]
-use crate::types::Action;
+use crate::types::RawAction;
 use frame_support::pallet_prelude::*;
-use frame_support::{
-    parameter_types,
-    traits::{ConstU16, ConstU64},
-};
+use frame_support::{Deserialize, parameter_types, Serialize, traits::{ConstU16, ConstU64}};
 use frame_system as system;
 use hex_literal::hex;
 use pallet_acurast_marketplace::{RegistrationExtra, Reward};
@@ -16,7 +13,9 @@ use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     AccountId32,
 };
+use sp_std::str::FromStr;
 use sp_std::prelude::*;
+use crate::tezos::TezosParser;
 
 use crate::weights;
 
@@ -70,19 +69,20 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type AccountId = AccountId32;
+    type ParsableAccountId = AccountId32;
     type TargetChainId = TargetChainId;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type TargetChainStateKey = String;
     type TargetChainStateValue = String;
     type Reward = MockAsset;
-    type Balance = u128;
+    type Balance = AssetAmount;
     type RegistrationExtra =
         RegistrationExtra<MockAsset, AssetAmount, <Self as frame_system::Config>::AccountId>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
+    type MessageParser = TezosParser<Self::Reward, Self::Balance, AccountId32, <Self as frame_system::Config>::AccountId, Self::RegistrationExtra>;
     type WeightInfo = weights::Weights<Test>;
 }
 

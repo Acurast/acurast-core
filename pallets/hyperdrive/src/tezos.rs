@@ -1,57 +1,72 @@
-use std::str::FromStr;
+use sp_std::prelude::*;
+use std::marker::PhantomData;
 
 use derive_more::{Display, From};
 use frame_support::once_cell::race::OnceBox;
-use sp_core::ConstU32;
-use sp_core::bounded::BoundedVec;
-use sp_core::crypto::{PublicError, Ss58Codec};
-use tezos_core::Error as TezosCoreError;
-use tezos_core::types::encoded::Address as TezosAddress;
-use tezos_michelson::Error as TezosMichelineError;
-use tezos_michelson::micheline::Micheline;
-use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
-use tezos_michelson::michelson::data;
-use tezos_michelson::michelson::data::{
-    Bytes, Data, Int, Pair, Sequence, try_int, try_string,
-};
-use tezos_michelson::michelson::types::{
-    address, bool as bool_type, bytes, nat, option, pair, set,
-    string,
-};
-
-use pallet_acurast::{JobId, JobIdSequence, MultiOrigin, Schedule};
+use frame_support::Parameter;
+use pallet_acurast::{JobId, JobIdSequence, JobRegistration, MultiOrigin, Schedule};
 use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
+use sp_core::bounded::BoundedVec;
+use sp_core::ConstU32;
+use sp_runtime::traits::{MaybeDisplay, MaybeSerializeDeserialize, Member};
+use sp_std::str::FromStr;
+use tezos_core::types::encoded::Address as TezosAddress;
+use tezos_core::Error as TezosCoreError;
+use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
+use tezos_michelson::micheline::Micheline;
+use tezos_michelson::michelson::data;
+use tezos_michelson::michelson::data::{try_int, try_string, Bytes, Data, Int, Pair, Sequence};
+use tezos_michelson::michelson::types::{
+    address, bool as bool_type, bytes, nat, option, pair, set, string,
+};
+use tezos_michelson::Error as TezosMichelineError;
 
-use crate::Config;
+use crate::types::{JobRegistrationFor, MessageParser, RawAction};
 use crate::Error;
-use crate::types::{Action, JobRegistrationFor, MessageParser};
+use crate::{Config, ParsedAction};
 
-pub struct TezosParser;
+pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>(
+    PhantomData<(Reward, Balance, ParsableAccountId, AccountId, Extra)>,
+);
 
-impl<T: Config> MessageParser<T> for TezosParser {
+impl<Reward, Balance, ParsableAccountId, AccountId, Extra>
+    MessageParser<AccountId, Extra>
+    for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>
+where
+    ParsableAccountId: FromStr + Into<AccountId>,
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
+    Extra: Parameter + Member + From<RegistrationExtra<Reward, Balance, AccountId>>,
+    Reward: Parameter + Member + TryFrom<Vec<u8>>,
+    Balance: From<u128>,
+{
     type Error = ValidationError;
-    fn parse(
-        encoded: &[u8],
-    ) -> Result<
-        (
-            JobId<<T as frame_system::Config>::AccountId>,
-            JobRegistrationFor<T>,
-        ),
-        ValidationError,
-    > {
+    fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, ValidationError> {
         let (action, origin, payload) = parse_message(encoded)?;
 
-        let payload: Vec<u8> = (&payload).into();
-        let (job_id_sequence, registration) =
-            parse_job_registration_payload::<T>(payload.as_slice())?;
+        Ok(match action {
+            RawAction::OnlyStore => ParsedAction::OnlyStore,
+            RawAction::RegisterJob => {
+                let payload: Vec<u8> = (&payload).into();
+                let (job_id_sequence, registration) = parse_job_registration_payload::<
+                    Reward,
+                    Balance,
+                    ParsableAccountId,
+                    AccountId,
+                    Extra,
+                >(payload.as_slice())?;
 
-        Ok(((to_multi_origin(&origin)?, job_id_sequence), registration))
+                ParsedAction::RegisterJob(
+                    (to_multi_origin(&origin)?, job_id_sequence),
+                    registration,
+                )
+            }
+        })
     }
 }
 
-impl<T: Config> From<ValidationError> for Error<T> {
+impl<T: Config, I> From<ValidationError> for Error<T, I> {
     fn from(_: ValidationError) -> Self {
-        Error::<T>::MessageParsingFailed
+        Error::<T, I>::MessageParsingFailed
     }
 }
 
@@ -76,7 +91,7 @@ fn message_schema() -> &'static Micheline {
 /// ```txt
 /// PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(String(String("REGISTER_JOB"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x00008a8584be3718453e78923713a6966202b05f99c6"))), Literal(Bytes(Bytes("0x050707030a0707030607070a0000001601000000000000000000000000000000000000000000070707070000070703060707030607070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f3741445832636444656100010707000207070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001")))]), annots: None })]), annots: None })
 /// ```
-fn parse_message(encoded: &[u8]) -> Result<(Action, TezosAddress, Bytes), ValidationError> {
+fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), ValidationError> {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(message_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
 
@@ -94,7 +109,7 @@ fn parse_message(encoded: &[u8]) -> Result<(Action, TezosAddress, Bytes), Valida
             .next()
             .ok_or(ValidationError::MissingField("ACTION".to_string()))?
             .try_into()?;
-        Action::from_str(action.to_str()).map_err(|_| ValidationError::InvalidAction)?
+        RawAction::from_str(action.to_str()).map_err(|_| ValidationError::InvalidAction)?
     };
     let origin: TezosAddress = try_address(
         iter.next()
@@ -108,7 +123,7 @@ fn parse_message(encoded: &[u8]) -> Result<(Action, TezosAddress, Bytes), Valida
     Ok((action, origin, body))
 }
 
-/// The structure of a [`Action::RegisterJob`] action before flattening:
+/// The structure of a [`RawAction::RegisterJob`] action before flattening:
 ///
 /// ```txt
 /// sp.TRecord(
@@ -182,7 +197,7 @@ fn registration_payload_schema() -> &'static Micheline {
     })
 }
 
-/// Parses an encoded [`Action::RegisterJob`] action's payload into [`JobRegistration`].
+/// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
 ///
 /// # Example
 /// A message's payload to register a job could look like:
@@ -190,9 +205,17 @@ fn registration_payload_schema() -> &'static Micheline {
 /// ```txt
 /// PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "True", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M")))]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x01000000000000000000000000000000000000000000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M"))), Literal(Int(Int("0")))]), annots: None })]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "None", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0xff"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("4"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("30000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1678266546623"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("31000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), Literal(Int(Int("1678266066623")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f37414458326364446561"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })
 /// ```
-fn parse_job_registration_payload<T: Config>(
+fn parse_job_registration_payload<Reward, Balance, ParsableAccountId, AccountId, Extra>(
     encoded: &[u8],
-) -> Result<(JobIdSequence, JobRegistrationFor<T>), ValidationError> {
+) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
+where
+    ParsableAccountId: FromStr
+        + Into<AccountId>,
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
+    Extra: Parameter + Member + From<RegistrationExtra<Reward, Balance, AccountId>>,
+    Reward: Parameter + Member + TryFrom<Vec<u8>>,
+    Balance: From<u128>,
+{
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
 
@@ -214,7 +237,9 @@ fn parse_job_registration_payload<T: Config>(
         |value| {
             try_sequence(value, |source| {
                 let s: data::String = source.try_into()?;
-                Ok(<T as Config>::AccountId::from_string(s.to_str())?.into())
+                Ok(ParsableAccountId::from_str(s.to_str())
+                    .map_err(|_| ValidationError::AddressParsing)?
+                    .into())
             })
         },
     )?;
@@ -250,8 +275,10 @@ fn parse_job_registration_payload<T: Config>(
                         .next()
                         .ok_or(ValidationError::MissingField("source".to_string()))?
                         .try_into()?;
-                    Ok::<<T as frame_system::Config>::AccountId, ValidationError>(
-                        <T as Config>::AccountId::from_string(s.to_str())?.into(),
+                    Ok::<AccountId, ValidationError>(
+                        ParsableAccountId::from_str(s.to_str())
+                            .map_err(|_| ValidationError::AddressParsing)?
+                            .into(),
                     )
                 }?;
 
@@ -372,7 +399,7 @@ fn parse_job_registration_payload<T: Config>(
         v.to_integer()?
     };
 
-    let extra: T::RegistrationExtra = RegistrationExtra {
+    let extra: Extra = RegistrationExtra {
         destination,
         parameters: None,
         requirements: JobRequirements {
@@ -386,7 +413,7 @@ fn parse_job_registration_payload<T: Config>(
     .into();
     Ok((
         job_id,
-        JobRegistrationFor::<T> {
+        JobRegistration {
             script,
             allowed_sources,
             allow_only_verified_sources,
@@ -429,7 +456,7 @@ pub enum ValidationError {
     MissingField(String),
     InvalidBool,
     InvalidOption,
-    AddressParsing(PublicError),
+    AddressParsing,
 }
 
 /// Utility function to parse a tezos [`Bool`] into a Rust bool.
@@ -474,6 +501,7 @@ mod tests {
     use hex_literal::hex;
 
     use pallet_acurast::{JobRegistration, Script};
+    use sp_runtime::AccountId32;
 
     use crate::mock::*;
 
@@ -483,13 +511,19 @@ mod tests {
     fn test_unpack() -> Result<(), ValidationError> {
         let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a00000122050707030a07070509020000003501000000303544786254574534466b536443513144366d4a444e326e7163615677374d614b71776a766a4447526459656e4b6b324d07070a0000001601000000000000000000000000000000000000000000070707070000070705090200000039070701000000303544786254574534466b536443513144366d4a444e326e7163615677374d614b71776a766a4447526459656e4b6b324d00000707030607070a00000001ff00010707000407070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
-        assert_eq!(Action::RegisterJob, action);
+        assert_eq!(RawAction::RegisterJob, action);
         let exp: TezosAddress = "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap();
         assert_eq!(exp, origin);
 
         let payload: Vec<u8> = (&payload).into();
-        let (job_id, registration) = parse_job_registration_payload::<Test>(payload.as_slice())?;
-        let expected = JobRegistration::<<Test as Config>::AccountId, _> {
+        let (job_id, registration) = parse_job_registration_payload::<
+            _,
+            _,
+            <Test as Config>::ParsableAccountId,
+            <Test as frame_system::Config>::AccountId,
+            _,
+        >(payload.as_slice())?;
+        let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
             script: Script::try_from(vec![
                 105, 112, 102, 115, 58, 47, 47, 81, 109, 100, 72, 76, 105, 66, 89, 97, 116, 98,
                 110, 97, 80, 100, 85, 115, 84, 77, 77, 71, 70, 87, 69, 52, 50, 99, 83, 65, 74, 67,

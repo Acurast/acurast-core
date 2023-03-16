@@ -31,7 +31,6 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_arithmetic::traits::{CheckedRem, Zero};
-    use sp_core::crypto::Ss58Codec;
     use sp_runtime::traits::Hash;
     use sp_std::collections::btree_set::BTreeSet;
     use sp_std::prelude::*;
@@ -56,7 +55,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        type AccountId: IsType<<Self as frame_system::Config>::AccountId> + Ss58Codec;
+        type ParsableAccountId: IsType<<Self as frame_system::Config>::AccountId> + FromStr;
         /// The parachain ID used in [`MultiLocation`].
         type TargetChainId: Get<u32>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
@@ -110,7 +109,7 @@ pub mod pallet {
                 RegistrationExtra<
                     Self::Reward,
                     Self::Balance,
-                    <Self as frame_system::Config>::AccountId,
+                    Self::AccountId,
                 >,
             >;
 
@@ -122,6 +121,11 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
+        type MessageParser: MessageParser<
+            Self::AccountId,
+            Self::RegistrationExtra,
+        >;
+
         type WeightInfo: WeightInfo;
     }
 
@@ -130,17 +134,17 @@ pub mod pallet {
     pub enum Event<T: Config<I>, I: 'static = ()> {
         StateTransmittersUpdate {
             added: Vec<(
-                <T as frame_system::Config>::AccountId,
+                T::AccountId,
                 types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
             )>,
             updated: Vec<(
-                <T as frame_system::Config>::AccountId,
+                T::AccountId,
                 types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
             )>,
-            removed: Vec<<T as frame_system::Config>::AccountId>,
+            removed: Vec<T::AccountId>,
         },
         StateMerkleRootSubmitted {
-            source: <T as frame_system::Config>::AccountId,
+            source: T::AccountId,
             snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         },
@@ -159,7 +163,7 @@ pub mod pallet {
     pub type StateTransmitter<T: Config<I>, I: 'static = ()> = StorageMap<
         _,
         Blake2_128,
-        <T as frame_system::Config>::AccountId,
+        T::AccountId,
         ActivityWindow<<T as frame_system::Config>::BlockNumber>,
         ValueQuery,
     >;
@@ -183,7 +187,7 @@ pub mod pallet {
         T::TargetChainBlockNumber,
         Identity,
         T::TargetChainHash,
-        BTreeSet<<T as frame_system::Config>::AccountId>,
+        BTreeSet<T::AccountId>,
     >;
 
     #[pallet::error]
@@ -192,6 +196,7 @@ pub mod pallet {
         SubmitOutsideTransmitterActivityWindow,
         CalculationOverflow,
         UnexpectedSnapshot,
+        ProofInvalid,
         MessageParsingFailed,
     }
 
@@ -286,7 +291,7 @@ pub mod pallet {
                             transmitters.insert(who.clone());
                         }
                     } else {
-                        let mut set = BTreeSet::<<T as frame_system::Config>::AccountId>::new();
+                        let mut set = BTreeSet::<T::AccountId>::new();
                         set.insert(who.clone());
                         *submissions = Some(set);
                     }
@@ -330,6 +335,20 @@ pub mod pallet {
             message: Message,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+
+            let message_bytes = &message.to_vec();
+            let leaf_hash = T::TargetChainHashing::hash(&message_bytes);
+            let derived_root = derive_proof::<T::TargetChainHashing, _>(proof.proof, leaf_hash);
+
+            ensure!(
+                Self::validate_state_merkle_root(proof.block, derived_root),
+                Error::<T, I>::ProofInvalid
+            );
+
+            match T::MessageParser::parse(message_bytes).map_err(|_| Error::<T, I>::MessageParsingFailed)? {
+                ParsedAction::OnlyStore => {}
+                ParsedAction::RegisterJob(_, _) => {}
+            }
 
             Ok(())
         }

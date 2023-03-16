@@ -3,10 +3,10 @@ use frame_support::RuntimeDebug;
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use scale_info::TypeInfo;
 use sp_core::ConstU32;
-use sp_runtime::traits::Hash;
+use sp_runtime::traits::{Hash, MaybeDisplay};
+use sp_std::str::FromStr;
 use sp_std::prelude::*;
 use strum_macros::EnumString;
-
 use pallet_acurast::{JobId, JobRegistration};
 
 use crate::{Config, Error};
@@ -70,7 +70,7 @@ pub struct StateLeaf<Key, Value> {
     pub key: Key,
     /// The value.
     ///
-    /// Could be any target chain state or something understood like an encoded [`Action`].
+    /// Could be any target chain state or something understood like an encoded [`RawAction`].
     pub value: Value,
 }
 
@@ -135,26 +135,32 @@ pub const MESSAGE_MAX_LENGTH: u32 = 5;
 pub type Message = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
-pub enum Action {
+pub enum RawAction {
     #[strum(disabled)]
     OnlyStore,
     #[strum(serialize = "REGISTER_JOB")]
     RegisterJob,
 }
 
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub enum ParsedAction<AccountId, Extra>
+where
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
+    Extra: Parameter + Member,
+{
+    OnlyStore,
+    RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
+}
+
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<T: Config> {
-    type Error: Into<Error<T>>;
+pub trait MessageParser<AccountId, Extra>
+where
+    AccountId: Parameter + Member + MaybeSerializeDeserialize + MaybeDisplay + Ord,
+    Extra: Parameter + Member,
+{
+    type Error;
 
-    fn parse(
-        encoded: &[u8],
-    ) -> Result<
-        (
-            JobId<<T as frame_system::Config>::AccountId>,
-            JobRegistrationFor<T>,
-        ),
-        Self::Error,
-    >;
+    fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
 }
