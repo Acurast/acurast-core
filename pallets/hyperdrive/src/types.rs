@@ -5,6 +5,7 @@ use scale_info::TypeInfo;
 use sp_core::ConstU32;
 use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
+use sp_std::vec;
 use strum_macros::EnumString;
 
 use pallet_acurast::{JobId, JobRegistration};

@@ -1,6 +1,9 @@
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
+#[cfg(feature = "std")]
+use derive_more::Error as DError;
 use derive_more::{Display, From};
+
 use frame_support::once_cell::race::OnceBox;
 use frame_support::Parameter;
 use sp_core::bounded::BoundedVec;
@@ -8,6 +11,10 @@ use sp_core::ConstU32;
 use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
+use sp_std::vec;
+
+use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
@@ -18,9 +25,6 @@ use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
 use tezos_michelson::Error as TezosMichelineError;
-
-use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
-use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 
 use crate::types::{MessageParser, RawAction};
 use crate::Error;
@@ -105,17 +109,17 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
     let action = {
         let action: data::String = iter
             .next()
-            .ok_or(ValidationError::MissingField("ACTION".to_string()))?
+            .ok_or(ValidationError::MissingField(FieldError::ACTION))?
             .try_into()?;
         RawAction::from_str(action.to_str()).map_err(|_| ValidationError::InvalidAction)?
     };
     let origin: TezosAddress = try_address(
         iter.next()
-            .ok_or(ValidationError::MissingField("ORIGIN".to_string()))?,
+            .ok_or(ValidationError::MissingField(FieldError::ORIGIN))?,
     )?;
     let body: Bytes = iter
         .next()
-        .ok_or(ValidationError::MissingField("PAYLOAD".to_string()))?
+        .ok_or(ValidationError::MissingField(FieldError::PAYLOAD))?
         .try_into()?;
 
     Ok((action, origin, body))
@@ -225,11 +229,11 @@ where
     let mut iter = values.into_iter();
 
     let allow_only_verified_sources: bool = try_bool(iter.next().ok_or(
-        ValidationError::MissingField("allowOnlyVerifiedSources".to_string()),
+        ValidationError::MissingField(FieldError::AllowOnlyVerifiedSources),
     )?)?;
     let allowed_sources = try_option(
         iter.next()
-            .ok_or(ValidationError::MissingField("allowedSources".to_string()))?,
+            .ok_or(ValidationError::MissingField(FieldError::AllowedSources))?,
         |value| {
             try_sequence(value, |source| {
                 let s: data::String = source.try_into()?;
@@ -243,20 +247,20 @@ where
     let destination = {
         let address = try_address(
             iter.next()
-                .ok_or(ValidationError::MissingField("destination".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Destination))?,
         )?;
         to_multi_origin(&address)?
     };
     let expected_fulfillment_fee = {
         let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
-            "expectedFulfillmentFee".to_string(),
+            FieldError::ExpectedFulfillmentFee,
         ))?)?;
         let v: u128 = v.to_integer()?;
         v.into()
     };
     let instant_match = try_option(
         iter.next()
-            .ok_or(ValidationError::MissingField("instantMatch".to_string()))?,
+            .ok_or(ValidationError::MissingField(FieldError::InstantMatch))?,
         |value| {
             let sources = try_sequence(value, |planned_execution| {
                 let pair: Pair = planned_execution.try_into()?;
@@ -269,7 +273,7 @@ where
                 let source = {
                     let s: data::String = iter
                         .next()
-                        .ok_or(ValidationError::MissingField("source".to_string()))?
+                        .ok_or(ValidationError::MissingField(FieldError::Source))?
                         .try_into()?;
                     Ok::<AccountId, ValidationError>(
                         ParsableAccountId::from_str(s.to_str())
@@ -281,7 +285,7 @@ where
                 let start_delay = {
                     let v: Int = try_int(
                         iter.next()
-                            .ok_or(ValidationError::MissingField("startDelay".to_string()))?,
+                            .ok_or(ValidationError::MissingField(FieldError::StartDelay))?,
                     )?;
                     v.to_integer()?
                 };
@@ -297,7 +301,7 @@ where
     )?;
     let min_reputation = try_option(
         iter.next()
-            .ok_or(ValidationError::MissingField("minReputation".to_string()))?,
+            .ok_or(ValidationError::MissingField(FieldError::MinReputation))?,
         |value| {
             let v: Int = try_int(value)?;
             Ok(v.to_integer()?)
@@ -306,7 +310,7 @@ where
     let reward = {
         let reward: Bytes = iter
             .next()
-            .ok_or(ValidationError::MissingField("reward".to_string()))?
+            .ok_or(ValidationError::MissingField(FieldError::Reward))?
             .try_into()?;
         let reward: Vec<u8> = (&reward).into();
         reward
@@ -316,63 +320,63 @@ where
     let slots = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("slots".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Slots))?,
         )?;
         v.to_integer()?
     };
     let job_id = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("jobId".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::JobId))?,
         )?;
         v.to_integer()?
     };
     let memory = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("memory".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Memory))?,
         )?;
         v.to_integer()?
     };
     let network_requests = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("networkRequests".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::NetworkRequests))?,
         )?;
         v.to_integer()?
     };
     let duration = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("duration".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Duration))?,
         )?;
         v.to_integer()?
     };
     let end_time = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("endTime".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::EndTime))?,
         )?;
         v.to_integer()?
     };
     let interval = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("interval".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Interval))?,
         )?;
         v.to_integer()?
     };
     let max_start_delay = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("maxStartDelay".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::MaxStartDelay))?,
         )?;
         v.to_integer()?
     };
     let start_time = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("startTime".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::StartTime))?,
         )?;
         v.to_integer()?
     };
@@ -380,7 +384,7 @@ where
     let script = {
         let script: Bytes = iter
             .next()
-            .ok_or(ValidationError::MissingField("script".to_string()))?
+            .ok_or(ValidationError::MissingField(FieldError::Script))?
             .try_into()?;
         let script: Vec<u8> = (&script).into();
         script
@@ -390,7 +394,7 @@ where
     let storage = {
         let v: Int = try_int(
             iter.next()
-                .ok_or(ValidationError::MissingField("storage".to_string()))?,
+                .ok_or(ValidationError::MissingField(FieldError::Storage))?,
         )?;
         v.to_integer()?
     };
@@ -440,7 +444,9 @@ fn to_multi_origin<AccountId>(
     Ok(MultiOrigin::Tezos(v))
 }
 
+/// Errors returned by this crate.
 #[derive(Display, Debug, From)]
+#[cfg_attr(feature = "std", derive(DError))]
 pub enum ValidationError {
     TezosMicheline(TezosMichelineError),
     TezosCore(TezosCoreError),
@@ -449,10 +455,38 @@ pub enum ValidationError {
     ScriptOutOfBounds,
     TezosAddressOutOfBounds,
     InvalidReward,
-    MissingField(String),
+    MissingField(FieldError),
     InvalidBool,
     InvalidOption,
     AddressParsing,
+}
+
+#[derive(Display, Debug, From)]
+#[cfg_attr(feature = "std", derive(DError))]
+pub enum FieldError {
+    ACTION,
+    ORIGIN,
+    PAYLOAD,
+    AllowOnlyVerifiedSources,
+    AllowedSources,
+    Destination,
+    ExpectedFulfillmentFee,
+    InstantMatch,
+    Source,
+    StartDelay,
+    MinReputation,
+    Reward,
+    Slots,
+    JobId,
+    Memory,
+    NetworkRequests,
+    Duration,
+    EndTime,
+    Interval,
+    MaxStartDelay,
+    StartTime,
+    Script,
+    Storage,
 }
 
 /// Utility function to parse a tezos [`Bool`] into a Rust bool.
