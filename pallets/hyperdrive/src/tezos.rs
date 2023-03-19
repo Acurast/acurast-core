@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use derive_more::Error as DError;
 use derive_more::{Display, From};
 
-use frame_support::once_cell::race::OnceBox;
+use once_cell::race::OnceBox;
 use frame_support::Parameter;
 use sp_core::bounded::BoundedVec;
 use sp_core::ConstU32;
