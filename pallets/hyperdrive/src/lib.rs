@@ -148,6 +148,9 @@ pub mod pallet {
             snapshot: T::TargetChainBlockNumber,
             state_merkle_root: T::TargetChainHash,
         },
+        TargetChainOwnerUpdated {
+            owner: StateOwner,
+        },
     }
 
     /// This storage field maps the state transmitters to their respective activity window.
@@ -185,6 +188,17 @@ pub mod pallet {
         T::TargetChainHash,
         BTreeSet<T::AccountId>,
     >;
+
+    #[pallet::type_value]
+    pub fn FirstTargetChainOwner<T: Config<I>, I: 'static>() -> StateOwner {
+        T::TargetChainOwner::get()
+    }
+
+    /// This storage field contains the latest validated snapshot number.
+    #[pallet::storage]
+    #[pallet::getter(fn current_target_chain_owner)]
+    pub type CurrentTargetChainOwner<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, StateOwner, ValueQuery, FirstTargetChainOwner<T, I>>;
 
     #[pallet::error]
     pub enum Error<T, I = ()> {
@@ -349,6 +363,19 @@ pub mod pallet {
                 .map_err(|_| Error::<T, I>::MessageParsingFailed)?;
             T::ActionExecutor::execute(action)
         }
+
+        /// Updates the target chain owner (contract address) in storage. Can only be called by a privileged/root account.
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 0)))]
+        pub fn update_target_chain_owner(
+            origin: OriginFor<T>,
+            owner: StateOwner,
+        ) -> DispatchResult {
+            ensure_root(origin)?;
+            Self::set_target_chain_owner(owner.clone());
+            Self::deposit_event(Event::TargetChainOwnerUpdated { owner });
+            Ok(())
+        }
     }
 
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
@@ -374,6 +401,11 @@ pub mod pallet {
                 .map_or(false, |submissions| {
                     submissions.len() >= T::TransmissionQuorum::get().into()
                 })
+        }
+
+        /// Sets the target chain owner (contract address) in storage.
+        pub fn set_target_chain_owner(owner: StateOwner) {
+            <CurrentTargetChainOwner<T, I>>::set(owner);
         }
     }
 }
