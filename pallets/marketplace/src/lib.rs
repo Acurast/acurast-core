@@ -601,7 +601,7 @@ pub mod pallet {
         /// Registers a job in the marketplace by providing a [JobRegistration].
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
-            who: &T::AccountId,
+            who: &MultiOrigin<T::AccountId>,
             job_id: &JobId<T::AccountId>,
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
@@ -661,8 +661,9 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::RewardConversionFailed)?;
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
-            // TODO(RODRIGO): This is not compatible with multi chain job registrations
-            T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
+            if let MultiOrigin::Acurast(who) = who {
+                T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
+            }
 
             Ok(().into())
         }

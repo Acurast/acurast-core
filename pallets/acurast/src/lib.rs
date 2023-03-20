@@ -297,26 +297,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
-            ensure!(
-                is_valid_script(&registration.script),
-                Error::<T>::InvalidScriptValue
-            );
-            if let Some(allowed_sources) = &registration.allowed_sources {
-                let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
-                ensure!(allowed_sources.len() > 0, Error::<T>::TooFewAllowedSources);
-                ensure!(
-                    allowed_sources.len() <= max_allowed_sources_len,
-                    Error::<T>::TooManyAllowedSources
-                );
-            }
-
-            let job_id = (multi_origin.clone(), Self::next_job_id());
-            <StoredJobRegistration<T>>::insert(&job_id.0, &job_id.1, registration.clone());
-
-            <T as Config>::JobHooks::register_hook(&who, &job_id, &registration)?;
-
-            Self::deposit_event(Event::JobRegistrationStored(registration, job_id));
-            Ok(().into())
+            Self::register_for(&multi_origin, registration)
         }
 
         /// Deregisters a job for the given script.
@@ -462,6 +443,37 @@ pub mod pallet {
                 job_id_seq.add_assign(1);
                 *job_id_seq
             })
+        }
+
+        /// Registers a job for the given [`multi_origin`].
+        ///
+        /// It assumes the caller was already authorized and is intended to be used from
+        /// * The [`Self::register`] extrinsic of this pallet
+        /// * A inter-chain communication protocol like Hyperdrive
+        pub fn register_for(
+            who: &MultiOrigin<T::AccountId>,
+            registration: JobRegistrationFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            ensure!(
+                is_valid_script(&registration.script),
+                Error::<T>::InvalidScriptValue
+            );
+            if let Some(allowed_sources) = &registration.allowed_sources {
+                let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
+                ensure!(allowed_sources.len() > 0, Error::<T>::TooFewAllowedSources);
+                ensure!(
+                    allowed_sources.len() <= max_allowed_sources_len,
+                    Error::<T>::TooManyAllowedSources
+                );
+            }
+
+            let job_id = (who.clone(), Self::next_job_id());
+            <StoredJobRegistration<T>>::insert(&job_id.0, &job_id.1, registration.clone());
+
+            <T as Config>::JobHooks::register_hook(&who, &job_id, &registration)?;
+
+            Self::deposit_event(Event::JobRegistrationStored(registration, job_id));
+            Ok(().into())
         }
     }
 }
