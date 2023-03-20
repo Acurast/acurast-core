@@ -108,8 +108,14 @@ where
     computed
 }
 
-pub const MESSAGE_MAX_LENGTH: u32 = 5;
-pub type Message = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
+pub const OWNER_MAX_LENGTH: u32 = 64;
+pub type Owner = BoundedVec<u8, ConstU32<OWNER_MAX_LENGTH>>;
+
+pub const KEY_MAX_LENGTH: u32 = 64;
+pub type StateKey = BoundedVec<u8, ConstU32<KEY_MAX_LENGTH>>;
+
+pub const MESSAGE_MAX_LENGTH: u32 = 4096;
+pub type StateValue = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
 pub enum RawAction {
@@ -122,14 +128,17 @@ pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
 }
 
+pub type MessageCounter = u128;
+
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<Reward, AccountId, Extra> {
+pub trait MessageParser<StateKey, Reward, AccountId, Extra> {
     type Error;
     type AssetParser: RewardParser<Reward>;
 
-    fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
+    fn parse_key(encoded: &[u8]) -> Result<StateKey, Self::Error>;
+    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
 }
 
 pub trait RewardParser<Reward> {

@@ -56,6 +56,8 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type ParsableAccountId: Into<<Self as frame_system::Config>::AccountId> + FromStr;
+        type TargetChainOwner: Get<Owner>;
+        type StateKey: Parameter + Member + Debug + Into<MessageCounter>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
             + Member
@@ -111,7 +113,12 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<Self::Reward, Self::AccountId, Self::RegistrationExtra>;
+        type MessageParser: MessageParser<
+            Self::StateKey,
+            Self::Reward,
+            Self::AccountId,
+            Self::RegistrationExtra,
+        >;
 
         type ActionExecutor: ActionExecutor<Self::AccountId, Self::RegistrationExtra>;
 
@@ -311,6 +318,7 @@ pub mod pallet {
         }
 
         /// Used by any transmitter to submit a `state` that is at the specified `block` on the target chain.
+        // TODO: while we fail for invalid proofs above, we don't want to fail hard for any parsing or execution errors, making sure the message counter get's updated
         #[pallet::call_index(2)]
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
         pub fn submit_message(
@@ -319,12 +327,13 @@ pub mod pallet {
             block: T::TargetChainBlockNumber,
             // The state proof.
             proof: StateProof<T::TargetChainHash>,
-            message: Message,
+            key: StateKey,
+            value: StateValue,
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
-            let message_bytes = &message.to_vec();
-            let leaf_hash = T::TargetChainHashing::hash(&message_bytes);
+            let message_bytes = &value.to_vec();
+            let leaf_hash = Self::leaf_hash(T::TargetChainOwner::get(), key, value);
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             ensure!(
@@ -332,13 +341,26 @@ pub mod pallet {
                 Error::<T, I>::ProofInvalid
             );
 
-            let action = T::MessageParser::parse(message_bytes)
+            let _message_counter = T::MessageParser::parse_key(message_bytes)
+                .map_err(|_| Error::<T, I>::MessageParsingFailed)?;
+            // TOOD(Rodrigo): update message counter
+
+            let action = T::MessageParser::parse_value(message_bytes)
                 .map_err(|_| Error::<T, I>::MessageParsingFailed)?;
             T::ActionExecutor::execute(action)
         }
     }
 
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
+        /// Hashes `(owner, key, value)` to derive the leaf hash for the merkle proof.
+        pub fn leaf_hash(owner: Owner, key: StateKey, message: StateValue) -> T::TargetChainHash {
+            let mut combined = vec![0_u8; owner.len() + key.len() + message.len()];
+            combined[..owner.len()].copy_from_slice(&owner.as_ref());
+            combined[owner.len()..owner.len() + key.len()].copy_from_slice(&key.as_ref());
+            combined[owner.len() + key.len()..].copy_from_slice(&message.as_ref());
+            T::TargetChainHashing::hash(&combined)
+        }
+
         /// Validates a state merkle root with respect to roots submitted by a quorum of transmitters.
         pub fn validate_state_merkle_root(
             block: T::TargetChainBlockNumber,
