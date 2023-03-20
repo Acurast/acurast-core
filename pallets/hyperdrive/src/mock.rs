@@ -27,7 +27,6 @@ type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 parameter_types! {
-    pub const TargetChainId: u32 = 5000;
     pub const TransmissionRate: u64 = 5;
     pub const TransmissionQuorum: u8 = 2;
 }
@@ -74,7 +73,6 @@ impl system::Config for Test {
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AccountId32;
-    type TargetChainId = TargetChainId;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Reward = MockAsset;

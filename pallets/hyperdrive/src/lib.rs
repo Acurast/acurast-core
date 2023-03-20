@@ -56,8 +56,6 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type ParsableAccountId: IsType<<Self as frame_system::Config>::AccountId> + FromStr;
-        /// The parachain ID used in [`MultiLocation`].
-        type TargetChainId: Get<u32>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
             + Member
