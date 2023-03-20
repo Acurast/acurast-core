@@ -90,9 +90,7 @@ pub mod pallet {
             + Zero
             + From<u8>
             + CheckedRem;
-        type TargetChainStateKey: Parameter + Member + Debug;
-        type TargetChainStateValue: Parameter + Member + Debug;
-        type Reward: Parameter + Member + Reward + TryFrom<Vec<u8>>;
+        type Reward: Parameter + Member + Reward;
         type Balance: Member
             + Parameter
             + AtLeast32BitUnsigned
@@ -115,7 +113,7 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<Self::AccountId, Self::RegistrationExtra>;
+        type MessageParser: MessageParser<Self::Reward, Self::AccountId, Self::RegistrationExtra>;
 
         type ActionExecutor: ActionExecutor<Self::AccountId, Self::RegistrationExtra>;
 

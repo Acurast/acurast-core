@@ -4,8 +4,8 @@ use core::marker::PhantomData;
 use derive_more::Error as DError;
 use derive_more::{Display, From};
 
-use once_cell::race::OnceBox;
 use frame_support::Parameter;
+use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
 use sp_core::ConstU32;
 use sp_runtime::traits::Member;
@@ -27,22 +27,33 @@ use tezos_michelson::michelson::types::{
 use tezos_michelson::Error as TezosMichelineError;
 
 use crate::types::{MessageParser, RawAction};
-use crate::Error;
 use crate::{Config, ParsedAction};
+use crate::{Error, RewardParser};
 
-pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>(
-    PhantomData<(Reward, Balance, ParsableAccountId, AccountId, Extra)>,
+pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
+    PhantomData<(
+        Reward,
+        Balance,
+        ParsableAccountId,
+        AccountId,
+        Extra,
+        AssetParser,
+    )>,
 );
 
-impl<Reward, Balance, ParsableAccountId, AccountId, Extra> MessageParser<AccountId, Extra>
-    for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra>
+impl<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
+    MessageParser<Reward, AccountId, Extra>
+    for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
     Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
-    Reward: Parameter + Member + TryFrom<Vec<u8>>,
+    Reward: Parameter + Member,
     Balance: From<u128>,
+    AssetParser: RewardParser<Reward>,
 {
     type Error = ValidationError;
+    type AssetParser = AssetParser;
+
     fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, ValidationError> {
         let (action, origin, payload) = parse_message(encoded)?;
 
@@ -55,6 +66,7 @@ where
                     ParsableAccountId,
                     AccountId,
                     Extra,
+                    AssetParser,
                 >(payload.as_slice())?;
 
                 ParsedAction::RegisterJob(
@@ -207,14 +219,22 @@ fn registration_payload_schema() -> &'static Micheline {
 /// ```txt
 /// PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "True", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M")))]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x01000000000000000000000000000000000000000000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M"))), Literal(Int(Int("0")))]), annots: None })]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "None", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0xff"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("4"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("30000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1678266546623"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("31000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), Literal(Int(Int("1678266066623")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f37414458326364446561"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })
 /// ```
-fn parse_job_registration_payload<Reward, Balance, ParsableAccountId, AccountId, Extra>(
+fn parse_job_registration_payload<
+    Reward,
+    Balance,
+    ParsableAccountId,
+    AccountId,
+    Extra,
+    AssetParser,
+>(
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
     Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
-    Reward: Parameter + Member + TryFrom<Vec<u8>>,
+    Reward: Parameter + Member,
     Balance: From<u128>,
+    AssetParser: RewardParser<Reward>,
 {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
@@ -313,9 +333,7 @@ where
             .ok_or(ValidationError::MissingField(FieldError::Reward))?
             .try_into()?;
         let reward: Vec<u8> = (&reward).into();
-        reward
-            .try_into()
-            .map_err(|_| ValidationError::InvalidReward)?
+        AssetParser::parse(reward.to_vec()).map_err(|_| ValidationError::InvalidReward)?
     };
     let slots = {
         let v: Int = try_int(
@@ -551,6 +569,7 @@ mod tests {
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
             _,
+            SimpleAssetParser,
         >(payload.as_slice())?;
         let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
             script: Script::try_from(vec![
@@ -581,10 +600,7 @@ mod tests {
                 parameters: None,
                 requirements: JobRequirements {
                     slots: 1,
-                    reward: MockAsset {
-                        id: 5,
-                        amount: 10000,
-                    },
+                    reward: MockAsset { id: 5, amount: 255 },
                     min_reputation: None,
                     instant_match: Some(vec![PlannedExecution {
                         source: hex![

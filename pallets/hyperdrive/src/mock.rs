@@ -21,7 +21,7 @@ use sp_runtime::{
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 
-use crate::{weights, ActionExecutor, ParsedAction};
+use crate::{weights, ActionExecutor, ParsedAction, RewardParser};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -77,8 +77,6 @@ impl crate::Config for Test {
     type TargetChainId = TargetChainId;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
-    type TargetChainStateKey = String;
-    type TargetChainStateValue = String;
     type Reward = MockAsset;
     type Balance = AssetAmount;
     type RegistrationExtra =
@@ -92,6 +90,7 @@ impl crate::Config for Test {
         AccountId32,
         <Self as frame_system::Config>::AccountId,
         Self::RegistrationExtra,
+        SimpleAssetParser,
     >;
     type ActionExecutor = ();
     type WeightInfo = weights::Weights<Test>;
@@ -149,11 +148,14 @@ impl Reward for MockAsset {
     }
 }
 
-impl From<Vec<u8>> for MockAsset {
-    fn from(_: Vec<u8>) -> Self {
-        MockAsset {
-            id: 5,
-            amount: 10000,
-        }
+pub struct SimpleAssetParser;
+impl RewardParser<MockAsset> for SimpleAssetParser {
+    type Error = ();
+
+    fn parse(encoded: Vec<u8>) -> Result<MockAsset, Self::Error> {
+        let mut combined = vec![0u8; 16];
+        combined[16 - encoded.len()..].copy_from_slice(&encoded.as_ref());
+        let amount: u128 = u128::from_be_bytes(combined.as_slice().try_into().map_err(|_| ())?);
+        Ok(MockAsset { id: 5, amount })
     }
 }

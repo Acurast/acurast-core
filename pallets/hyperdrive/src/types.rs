@@ -125,10 +125,16 @@ pub enum ParsedAction<AccountId, Extra> {
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<AccountId, Extra> {
+pub trait MessageParser<Reward, AccountId, Extra> {
     type Error;
+    type AssetParser: RewardParser<Reward>;
 
     fn parse(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
+}
+
+pub trait RewardParser<Reward> {
+    type Error;
+    fn parse(encoded: Vec<u8>) -> Result<Reward, Self::Error>;
 }
 
 pub trait ActionExecutor<AccountId, Extra> {
