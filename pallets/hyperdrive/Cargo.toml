@@ -21,8 +21,8 @@ pallet-acurast = { path = "../acurast", default-features = false }
 pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 
 # SDKs
-tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "main" }
-tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "main" }
+tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
+tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
 derive_more = { version = "0.99.17", default-features = false }
 strum = { version = "0.24.1", default-features = false }
 strum_macros = { version = "0.24.1", default-features = false }
