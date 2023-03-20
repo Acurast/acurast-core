@@ -56,7 +56,7 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type ParsableAccountId: Into<<Self as frame_system::Config>::AccountId> + FromStr;
-        type TargetChainOwner: Get<Owner>;
+        type TargetChainOwner: Get<StateOwner>;
         type StateKey: Parameter + Member + Debug + Into<MessageCounter>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
@@ -353,11 +353,15 @@ pub mod pallet {
 
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Hashes `(owner, key, value)` to derive the leaf hash for the merkle proof.
-        pub fn leaf_hash(owner: Owner, key: StateKey, message: StateValue) -> T::TargetChainHash {
-            let mut combined = vec![0_u8; owner.len() + key.len() + message.len()];
+        pub fn leaf_hash(
+            owner: StateOwner,
+            key: StateKey,
+            value: StateValue,
+        ) -> T::TargetChainHash {
+            let mut combined = vec![0_u8; owner.len() + key.len() + value.len()];
             combined[..owner.len()].copy_from_slice(&owner.as_ref());
             combined[owner.len()..owner.len() + key.len()].copy_from_slice(&key.as_ref());
-            combined[owner.len() + key.len()..].copy_from_slice(&message.as_ref());
+            combined[owner.len() + key.len()..].copy_from_slice(&value.as_ref());
             T::TargetChainHashing::hash(&combined)
         }
 

@@ -32,9 +32,8 @@ use crate::types::{MessageParser, RawAction};
 use crate::{Config, MessageCounter, ParsedAction};
 use crate::{Error, RewardParser};
 
-pub struct TezosParser<StateKey, Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
+pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
     PhantomData<(
-        StateKey,
         Reward,
         Balance,
         ParsableAccountId,
@@ -46,15 +45,7 @@ pub struct TezosParser<StateKey, Reward, Balance, ParsableAccountId, AccountId, 
 
 impl<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
     MessageParser<MessageCounter, Reward, AccountId, Extra>
-    for TezosParser<
-        MessageCounter,
-        Reward,
-        Balance,
-        ParsableAccountId,
-        AccountId,
-        Extra,
-        AssetParser,
-    >
+    for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
     Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,

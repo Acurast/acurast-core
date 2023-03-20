@@ -21,13 +21,13 @@ use sp_runtime::{
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 
-use crate::{weights, ActionExecutor, MessageCounter, Owner, ParsedAction, RewardParser};
+use crate::{weights, ActionExecutor, MessageCounter, ParsedAction, RewardParser, StateOwner};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 parameter_types! {
-    pub TargetChainStateOwner: Owner = Owner::try_from(hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec()).unwrap();
+    pub TargetChainStateOwner: StateOwner = StateOwner::try_from(hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec()).unwrap();
     pub const TransmissionRate: u64 = 5;
     pub const TransmissionQuorum: u8 = 2;
 }
@@ -86,7 +86,6 @@ impl crate::Config for Test {
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
     type MessageParser = TezosParser<
-        MessageCounter,
         Self::Reward,
         Self::Balance,
         AccountId32,

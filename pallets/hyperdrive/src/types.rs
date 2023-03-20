@@ -108,14 +108,14 @@ where
     computed
 }
 
-pub const OWNER_MAX_LENGTH: u32 = 64;
-pub type Owner = BoundedVec<u8, ConstU32<OWNER_MAX_LENGTH>>;
+pub const STATE_OWNER_MAX_LENGTH: u32 = 64;
+pub type StateOwner = BoundedVec<u8, ConstU32<STATE_OWNER_MAX_LENGTH>>;
 
 pub const KEY_MAX_LENGTH: u32 = 64;
 pub type StateKey = BoundedVec<u8, ConstU32<KEY_MAX_LENGTH>>;
 
-pub const MESSAGE_MAX_LENGTH: u32 = 4096;
-pub type StateValue = BoundedVec<u8, ConstU32<MESSAGE_MAX_LENGTH>>;
+pub const VALUE_MAX_LENGTH: u32 = 4096;
+pub type StateValue = BoundedVec<u8, ConstU32<VALUE_MAX_LENGTH>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
 pub enum RawAction {
