@@ -158,12 +158,6 @@ pub trait ActionExecutor<AccountId, Extra> {
     fn execute(action: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo;
 }
 
-impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
-    fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
-        Ok(().into())
-    }
-}
-
 /// Tracks the progress during `submit_message`, intended to be included in events.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ProcessMessageResult {

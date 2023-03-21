@@ -160,3 +160,9 @@ impl RewardParser<MockAsset> for SimpleAssetParser {
         Ok(MockAsset { id: 5, amount })
     }
 }
+
+impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
+    fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
+        Ok(().into())
+    }
+}

@@ -106,8 +106,11 @@ fn message_schema() -> &'static Micheline {
     static MESSAGE_SCHEMA: OnceBox<Micheline> = OnceBox::new();
     MESSAGE_SCHEMA.get_or_init(|| {
         let schema: Micheline = pair(vec![
+            // ACTION NAME
             string(),
+            // TEZOS ORIGIN
             address(),
+            // ACTION PAYLOAD
             bytes(),
         ]);
         Box::new(schema)
