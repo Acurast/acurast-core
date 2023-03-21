@@ -1,11 +1,10 @@
 #![cfg(test)]
 
-use frame_support::traits::Len;
 use frame_support::{assert_err, assert_ok, error::BadOrigin};
 use hex_literal::hex;
 use sp_core::H256;
 use sp_runtime::bounded_vec;
-use sp_runtime::traits::{Hash, Keccak256};
+use sp_runtime::traits::Keccak256;
 
 use crate::stub::*;
 use crate::types::*;
@@ -311,17 +310,15 @@ fn submit_state_merkle_root() {
 fn test_verify_proof() {
     let mut test = new_test_ext();
 
-    const OWNER: [u8; 28] = hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9");
-    const KEY: [u8; 15] = hex!("0000000000000000000000000003e7");
-    const VALUE: [u8; 15] = hex!("0000000000000000000000000003e7");
-
-    let mut combined = vec![0_u8; OWNER.len() + KEY.len() + VALUE.len()];
-    combined[..OWNER.len()].copy_from_slice(&OWNER.as_ref());
-    combined[OWNER.len()..OWNER.len() + KEY.len()].copy_from_slice(&KEY.as_ref());
-    combined[OWNER.len() + KEY.len()..].copy_from_slice(&VALUE.as_ref());
-    let leaf = Keccak256::hash(&combined);
+    let owner = StateOwner::try_from(
+        hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec(),
+    )
+    .unwrap();
+    let key = StateKey::try_from(hex!("0000000000000000000000000003e7").to_vec()).unwrap();
+    let value = StateValue::try_from(hex!("0000000000000000000000000003e7").to_vec()).unwrap();
 
     test.execute_with(|| {
+        let leaf = TezosHyperdrive::leaf_hash(owner, key, value);
         let proof: StateProof<H256> = bounded_vec![
             StateProofNode::Left(H256(hex!(
                 "19520b9dd118ede4c96c2f12718d43e22e9c0412b39cd15a36b40bce2121ddff"
