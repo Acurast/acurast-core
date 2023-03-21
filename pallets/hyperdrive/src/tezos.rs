@@ -3,7 +3,6 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use derive_more::Error as DError;
 use derive_more::{Display, From};
-
 use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
@@ -12,11 +11,6 @@ use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 use sp_std::vec;
-
-use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
-use pallet_acurast_marketplace::{
-    JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
-};
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
@@ -30,9 +24,14 @@ use tezos_michelson::michelson::types::{
 };
 use tezos_michelson::Error as TezosMichelineError;
 
+use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast_marketplace::{
+    JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
+};
+
 use crate::types::{MessageParser, RawAction};
-use crate::{Config, MessageCounter, ParsedAction};
-use crate::{Error, RewardParser};
+use crate::RewardParser;
+use crate::{MessageCounter, ParsedAction};
 
 pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
     PhantomData<(
@@ -86,12 +85,6 @@ where
                 )
             }
         })
-    }
-}
-
-impl<T: Config, I> From<ValidationError> for Error<T, I> {
-    fn from(_: ValidationError) -> Self {
-        Error::<T, I>::MessageParsingFailed
     }
 }
 
@@ -575,6 +568,7 @@ mod tests {
     use pallet_acurast::{JobRegistration, Script};
 
     use crate::mock::*;
+    use crate::Config;
 
     use super::*;
 

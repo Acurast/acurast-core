@@ -151,6 +151,7 @@ pub mod pallet {
         TargetChainOwnerUpdated {
             owner: StateOwner,
         },
+        MessageProcessed(ProcessMessageResult),
     }
 
     /// This storage field maps the state transmitters to their respective activity window.
@@ -207,7 +208,6 @@ pub mod pallet {
         CalculationOverflow,
         UnexpectedSnapshot,
         ProofInvalid,
-        MessageParsingFailed,
     }
 
     #[pallet::call]
@@ -332,7 +332,12 @@ pub mod pallet {
         }
 
         /// Used by any transmitter to submit a `state` that is at the specified `block` on the target chain.
-        // TODO: while we fail for invalid proofs above, we don't want to fail hard for any parsing or execution errors, making sure the message counter get's updated
+        ///
+        /// # Error behaviour
+        ///
+        /// We fail with a [`DispatchError`] if the given `proof` is invalid.
+        /// Any error happening afterwards, while decoding the payload and triggering actions, emits an event informing about the error but does not fail the extrinsic.
+        /// This is necessary to make the `message_counter` update in any case.
         #[pallet::call_index(2)]
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
         pub fn submit_message(
@@ -350,18 +355,18 @@ pub mod pallet {
             let leaf_hash = Self::leaf_hash(T::TargetChainOwner::get(), key, value);
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
-            ensure!(
-                Self::validate_state_merkle_root(block, derived_root),
-                Error::<T, I>::ProofInvalid
-            );
+            if !Self::validate_state_merkle_root(block, derived_root) {
+                Err(Error::<T, I>::ProofInvalid)?
+            }
 
-            let _message_counter = T::MessageParser::parse_key(message_bytes)
-                .map_err(|_| Error::<T, I>::MessageParsingFailed)?;
             // TOOD(Rodrigo): update message counter
 
-            let action = T::MessageParser::parse_value(message_bytes)
-                .map_err(|_| Error::<T, I>::MessageParsingFailed)?;
-            T::ActionExecutor::execute(action)
+            // don't fail extrinsic from here onwards
+            if let Err(e) = Self::process_message(message_bytes) {
+                Self::deposit_event(Event::MessageProcessed(e));
+            }
+
+            Ok(().into())
         }
 
         /// Updates the target chain owner (contract address) in storage. Can only be called by a privileged/root account.
@@ -406,6 +411,19 @@ pub mod pallet {
         /// Sets the target chain owner (contract address) in storage.
         pub fn set_target_chain_owner(owner: StateOwner) {
             <CurrentTargetChainOwner<T, I>>::set(owner);
+        }
+
+        fn process_message(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
+            let _message_counter = T::MessageParser::parse_key(message_bytes)
+                .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
+
+            let action = T::MessageParser::parse_value(message_bytes)
+                .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
+            let raw_action: RawAction = (&action).into();
+            T::ActionExecutor::execute(action)
+                .map_err(|_| ProcessMessageResult::ActionFailed(raw_action.clone()))?;
+
+            Ok(())
         }
     }
 }

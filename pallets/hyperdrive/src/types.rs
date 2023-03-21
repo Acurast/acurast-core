@@ -123,6 +123,14 @@ pub enum RawAction {
     RegisterJob,
 }
 
+impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
+    fn from(action: &ParsedAction<AccountId, Extra>) -> Self {
+        match action {
+            ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
+        }
+    }
+}
+
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
@@ -154,4 +162,13 @@ impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
     fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
+}
+
+/// Tracks the progress during `submit_message`, intended to be included in events.
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub enum ProcessMessageResult {
+    ParsingKeyFailed,
+    ParsingValueFailed,
+    ActionFailed(RawAction),
+    ActionSuccess,
 }
