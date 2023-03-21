@@ -14,7 +14,9 @@ use sp_std::str::FromStr;
 use sp_std::vec;
 
 use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
-use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
+use pallet_acurast_marketplace::{
+    JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
+};
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
@@ -76,7 +78,10 @@ where
                 >(payload.as_slice())?;
 
                 ParsedAction::RegisterJob(
-                    (to_multi_origin(&origin)?, job_id_sequence),
+                    (
+                        MultiOrigin::Tezos(bounded_address(&origin)?),
+                        job_id_sequence,
+                    ),
                     registration,
                 )
             }
@@ -288,7 +293,7 @@ where
             iter.next()
                 .ok_or(ValidationError::MissingField(FieldError::Destination))?,
         )?;
-        to_multi_origin(&address)?
+        MultiDestination::Tezos(bounded_address(&address)?)
     };
     let expected_fulfillment_fee = {
         let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
@@ -469,16 +474,15 @@ where
     ))
 }
 
-fn to_multi_origin<AccountId>(
+fn bounded_address(
     address: &TezosAddress,
-) -> Result<MultiOrigin<AccountId>, ValidationError> {
+) -> Result<BoundedVec<u8, ConstU32<36>>, ValidationError> {
     let v: Vec<u8> = match &address {
         TezosAddress::Implicit(a) => a.try_into()?,
         TezosAddress::Originated(a) => a.try_into()?,
     };
-    let v = BoundedVec::<u8, ConstU32<36>>::try_from(v.to_owned())
-        .map_err(|_| ValidationError::TezosAddressOutOfBounds)?;
-    Ok(MultiOrigin::Tezos(v))
+    Ok(BoundedVec::<u8, ConstU32<36>>::try_from(v.to_owned())
+        .map_err(|_| ValidationError::TezosAddressOutOfBounds)?)
 }
 
 /// Errors returned by this crate.
@@ -614,7 +618,7 @@ mod tests {
             network_requests: 1,
             storage: 1,
             extra: RegistrationExtra {
-                destination: MultiOrigin::Tezos(
+                destination: MultiDestination::Tezos(
                     BoundedVec::<u8, ConstU32<36>>::try_from([0; 21].to_vec()).unwrap(),
                 ),
                 parameters: None,
