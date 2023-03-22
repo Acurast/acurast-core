@@ -587,7 +587,6 @@ fn try_sequence<R, O: Fn(Data) -> Result<R, ValidationError>>(
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
-    use sp_core::crypto::AccountId32;
 
     use pallet_acurast::{JobRegistration, Script};
 
