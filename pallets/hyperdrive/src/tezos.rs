@@ -6,7 +6,6 @@ use derive_more::{Display, From};
 use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
-use sp_core::ConstU32;
 use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
@@ -14,7 +13,7 @@ use sp_std::vec;
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
-use tezos_michelson::michelson::data;
+use tezos_michelson::michelson::data::{self, try_nat};
 use tezos_michelson::michelson::data::{
     try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
@@ -27,7 +26,9 @@ use tezos_michelson::{
     michelson::ComparableTypePrimitive,
 };
 
-use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast::{
+    JobIdSequence, JobModule, JobModules, JobRegistration, MultiOrigin, Schedule, CU32,
+};
 use pallet_acurast_marketplace::{
     JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
 };
@@ -457,6 +458,22 @@ where
         v.to_integer()?
     };
 
+    let mut required_modules: JobModules = vec![]
+        .try_into()
+        .map_err(|_| ValidationError::RequiredModulesParsing)?;
+    if let Some(value) = iter.next() {
+        required_modules = try_sequence::<JobModule, _>(value, |module| {
+            Ok(try_nat::<_, Nat, _>(module)
+                .map_err(|_| ValidationError::RequiredModulesParsing)?
+                .to_integer::<u32>()
+                .map_err(|_| ValidationError::RequiredModulesParsing)?
+                .try_into()
+                .map_err(|_| ValidationError::RequiredModulesParsing)?)
+        })?
+        .try_into()
+        .map_err(|_| ValidationError::RequiredModulesParsing)?;
+    }
+
     let extra: Extra = RegistrationExtra {
         destination,
         parameters: None,
@@ -464,7 +481,7 @@ where
             slots,
             reward,
             min_reputation,
-            instant_match: instant_match,
+            instant_match,
         },
         expected_fulfillment_fee,
     }
@@ -485,19 +502,18 @@ where
             memory,
             network_requests,
             storage,
-            extra: extra,
+            required_modules,
+            extra,
         },
     ))
 }
 
-fn bounded_address(
-    address: &TezosAddress,
-) -> Result<BoundedVec<u8, ConstU32<36>>, ValidationError> {
+fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, ValidationError> {
     let v: Vec<u8> = match &address {
         TezosAddress::Implicit(a) => a.try_into()?,
         TezosAddress::Originated(a) => a.try_into()?,
     };
-    Ok(BoundedVec::<u8, ConstU32<36>>::try_from(v.to_owned())
+    Ok(BoundedVec::<u8, CU32<36>>::try_from(v.to_owned())
         .map_err(|_| ValidationError::TezosAddressOutOfBounds)?)
 }
 
@@ -517,6 +533,7 @@ pub enum ValidationError {
     InvalidBool,
     InvalidOption,
     AddressParsing,
+    RequiredModulesParsing,
 }
 
 #[derive(Display, Debug, From)]
@@ -644,9 +661,10 @@ mod tests {
             memory: 1,
             network_requests: 1,
             storage: 1,
+            required_modules: JobModules::default(),
             extra: RegistrationExtra {
                 destination: MultiDestination::Tezos(
-                    BoundedVec::<u8, ConstU32<36>>::try_from([0; 21].to_vec()).unwrap(),
+                    BoundedVec::<u8, CU32<36>>::try_from([0; 21].to_vec()).unwrap(),
                 ),
                 parameters: None,
                 requirements: JobRequirements {

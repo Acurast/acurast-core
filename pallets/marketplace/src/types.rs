@@ -2,7 +2,7 @@ use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 use xcm::prelude::MultiLocation;
 
-use pallet_acurast::{JobId, JobRegistration, MultiOrigin};
+use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, CU32};
 
 use crate::payments::RewardFor;
 use crate::Config;
@@ -45,12 +45,12 @@ where
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub enum MultiDestination {
     Acurast(MultiLocation),
-    Tezos(BoundedVec<u8, ConstU32<36>>),
+    Tezos(BoundedVec<u8, CU32<36>>),
 }
 
 /// The resource advertisement by a source containing pricing and capacity announcements.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct Advertisement<AccountId, AssetId, AssetAmount> {
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct Advertisement<AccountId, AssetId, AssetAmount, MaxAllowedConsumers: Get<u32>> {
     /// The reward token accepted. Understood as one-of per job assigned.
     pub pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>>,
     /// Maximum memory in bytes not to be exceeded during any job's execution.
@@ -60,13 +60,16 @@ pub struct Advertisement<AccountId, AssetId, AssetAmount> {
     /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
     pub storage_capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-    pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
+    pub allowed_consumers: Option<BoundedVec<MultiOrigin<AccountId>, MaxAllowedConsumers>>,
+    /// The modules available to the job on processor.
+    pub available_modules: JobModules,
 }
 
 pub type AdvertisementFor<T> = Advertisement<
     <T as frame_system::Config>::AccountId,
     <T as Config>::AssetId,
     <T as Config>::AssetAmount,
+    <T as Config>::MaxAllowedConsumers,
 >;
 
 /// The resource advertisement by a source containing the base restrictions.
@@ -80,12 +83,14 @@ pub struct AdvertisementRestriction<AccountId> {
     pub storage_capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
     pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
+    /// The modules available to the job on processor.
+    pub available_modules: JobModules,
 }
 
 /// Defines the scheduling window in which to accept matches for this pricing,
 /// either as an absolute end time (in milliseconds since Unix Epoch)
 /// or as a time delta (in milliseconds) added to the current time.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq, Copy)]
 pub enum SchedulingWindow {
     /// Latest accepted end time of any matched job in milliseconds since Unix Epoch.
     End(u64),
@@ -97,7 +102,7 @@ pub enum SchedulingWindow {
 
 /// Pricing variant listing cost per resource unit and slash on SLA violation.
 /// Specified in specific asset that is payed out or deducted from stake on complete fulfillment.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct PricingVariant<AssetId, AssetAmount> {
     /// The rewarded asset. Only one per [PricingVariant].
     pub reward_asset: AssetId,

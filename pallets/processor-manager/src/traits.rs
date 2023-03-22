@@ -15,12 +15,26 @@ pub trait ProcessorAssetRecovery<T: Config> {
     ) -> DispatchResult;
 }
 
+pub trait AdvertisementHandler<T: Config> {
+    fn advertise_for(processor: &T::AccountId, advertisement: &T::Advertisement) -> DispatchResult;
+}
+
+impl<T: Config> AdvertisementHandler<T> for () {
+    fn advertise_for(
+        _processor: &T::AccountId,
+        _advertisement: &T::Advertisement,
+    ) -> DispatchResult {
+        Ok(())
+    }
+}
+
 pub trait WeightInfo {
     fn create_manager() -> Weight;
     fn update_processor_pairings() -> Weight;
     fn pair_with_manager() -> Weight;
     fn recover_funds() -> Weight;
     fn heartbeat() -> Weight;
+    fn advertise_for() -> Weight;
 }
 
 impl WeightInfo for () {
@@ -41,6 +55,10 @@ impl WeightInfo for () {
     }
 
     fn heartbeat() -> Weight {
+        Weight::from_ref_time(10_000)
+    }
+
+    fn advertise_for() -> Weight {
         Weight::from_ref_time(10_000)
     }
 }

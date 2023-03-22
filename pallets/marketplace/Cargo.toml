@@ -27,6 +27,7 @@ frame-system = { git = "https://github.com/paritytech/substrate", default-featur
 sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
+sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
 
@@ -39,7 +40,6 @@ xcm-builder = { git = "https://github.com/paritytech/polkadot", default-features
 hex-literal = { version = "0.3", optional = true }
 parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
-sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
 parachains-common = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
 
 pallet-acurast = { path = "../acurast", default-features = false}
@@ -63,7 +63,6 @@ runtime-benchmarks = [
 	"hex-literal",
 	"parachain-info",
 	"pallet-balances",
-	"sp-core",
 	"parachains-common",
 	"pallet-acurast/runtime-benchmarks",
 	"pallet-acurast-assets-manager/runtime-benchmarks",
@@ -76,7 +75,6 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-assets/std",
-	"pallet-balances/std",
 	"pallet-timestamp/std",
 	"parachain-info/std",
 	"parachains-common/std",

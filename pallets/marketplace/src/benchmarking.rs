@@ -11,8 +11,10 @@ use sp_runtime::BoundedVec;
 use sp_std::prelude::*;
 
 pub use pallet::Config;
-use pallet_acurast::{Event as AcurastEvent, JobRegistrationFor, MultiOrigin, Script};
-use pallet_acurast::{Pallet as Acurast, Schedule};
+use pallet_acurast::{
+    Event as AcurastEvent, JobModules, JobRegistrationFor, MultiOrigin, Pallet as Acurast,
+    Schedule, Script,
+};
 
 pub use crate::stub::*;
 use crate::Pallet as AcurastMarketplace;
@@ -61,6 +63,7 @@ where
         storage_capacity,
         max_memory: 80_000,
         network_request_quota: 5,
+        available_modules: JobModules::default(),
     }
 }
 
@@ -94,6 +97,7 @@ where
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: r,
     }
 }

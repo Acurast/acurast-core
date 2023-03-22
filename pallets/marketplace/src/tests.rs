@@ -4,9 +4,9 @@ use frame_support::{assert_err, assert_ok, traits::Hooks};
 use pallet_acurast::MultiOrigin;
 use sp_runtime::Permill;
 
-use pallet_acurast::utils::validate_and_extract_attestation;
-use pallet_acurast::JobRegistrationFor;
-use pallet_acurast::Schedule;
+use pallet_acurast::{
+    utils::validate_and_extract_attestation, JobModules, JobRegistrationFor, Schedule,
+};
 use reputation::{BetaReputation, ReputationEngine};
 
 use crate::stub::*;
@@ -36,6 +36,7 @@ fn test_match() {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
@@ -67,7 +68,8 @@ fn test_match() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone()
+                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
@@ -320,6 +322,7 @@ fn test_no_match_schedule_overlap() {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
@@ -342,6 +345,7 @@ fn test_no_match_schedule_overlap() {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
@@ -464,6 +468,7 @@ fn test_no_match_insufficient_reputation() {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
@@ -550,6 +555,7 @@ fn test_more_reports_than_expected() {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: asset(3_000_000 * 2),
@@ -573,7 +579,8 @@ fn test_more_reports_than_expected() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone()
+                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );

@@ -15,7 +15,7 @@ pub type InternalAssetId = u32;
 pub type AcurastAssetAmount = u128;
 
 use acurast_runtime::AccountId as AcurastAccountId;
-use pallet_acurast::JobRegistration;
+use pallet_acurast::{JobModules, JobRegistration, CU32};
 use pallet_acurast_marketplace::{
     types::MAX_PRICING_VARIANTS, Advertisement, JobRequirements, PricingVariant, SchedulingWindow,
 };
@@ -53,6 +53,7 @@ pub fn registration(
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
             reward: owned_asset(20000),
@@ -73,7 +74,7 @@ pub fn asset(id: u32) -> AssetId {
 }
 pub fn advertisement(
     fee_per_millisecond: u128,
-) -> Advertisement<AcurastAccountId, AcurastAssetId, AcurastAssetAmount> {
+) -> Advertisement<AcurastAccountId, AcurastAssetId, AcurastAssetAmount, CU32<10>> {
     let pricing: frame_support::BoundedVec<
         PricingVariant<AcurastAssetId, AcurastAssetAmount>,
         ConstU32<MAX_PRICING_VARIANTS>,
@@ -90,6 +91,7 @@ pub fn advertisement(
         storage_capacity: 5,
         max_memory: 5000,
         network_request_quota: 8,
+        available_modules: JobModules::default(),
     }
 }
 
@@ -142,7 +144,7 @@ pub mod acurast_runtime {
     };
     use xcm_executor::XcmExecutor;
 
-    pub use pallet_acurast;
+    pub use pallet_acurast::{self, CU32};
     use pallet_acurast_assets_manager::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
@@ -379,11 +381,28 @@ pub mod acurast_runtime {
         type UnixTime = pallet_timestamp::Pallet<Runtime>;
         type JobHooks = pallet_acurast_marketplace::Pallet<Runtime>;
         type WeightInfo = pallet_acurast::weights::WeightInfo<Runtime>;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = TestBenchmarkHelper;
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    impl pallet_acurast::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+        fn registration_extra() -> <Runtime as pallet_acurast::Config>::RegistrationExtra {
+            JobRequirements {
+                slots: 1,
+                reward: AcurastAsset(MultiAsset {
+                    id: super::asset(1),
+                    fun: Fungible(1),
+                }),
+                min_reputation: None,
+                instant_match: None,
+            }
+        }
     }
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type MaxAllowedConsumers = frame_support::traits::ConstU32<4>;
+        type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
@@ -393,6 +412,17 @@ pub mod acurast_runtime {
         type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
         type AssetValidator = PassAllAssets;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = TestBenchmarkHelper;
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    impl pallet_acurast_marketplace::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+        fn registration_extra(
+            r: pallet_acurast_marketplace::JobRequirementsFor<Runtime>,
+        ) -> <Runtime as pallet_acurast_marketplace::Config>::RegistrationExtra {
+            r
+        }
     }
 
     impl pallet_xcm::Config for Runtime {
@@ -437,6 +467,7 @@ pub mod proxy_runtime {
     };
     use xcm_executor::{Config, XcmExecutor};
 
+    use pallet_acurast::CU32;
     use pallet_acurast_marketplace::JobRequirements;
 
     use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
@@ -595,6 +626,7 @@ pub mod proxy_runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type MaxAllowedSources = ConstU32<10>;
+        type MaxAllowedConsumers = CU32<10>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;
@@ -631,6 +663,7 @@ pub mod proxy_runtime {
             <Runtime as frame_system::Config>::AccountId,
             <Runtime as crate::Config>::AssetId,
             <Runtime as crate::Config>::AssetAmount,
+            <Runtime as crate::Config>::MaxAllowedConsumers,
         > {
             advertisement(10)
         }

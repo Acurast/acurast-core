@@ -28,7 +28,7 @@ pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub enum MultiOrigin<AcurastAccountId> {
     Acurast(AcurastAccountId),
-    Tezos(BoundedVec<u8, ConstU32<36>>),
+    Tezos(BoundedVec<u8, CU32<36>>),
 }
 
 /// The type of a job identifier sequence.
@@ -77,9 +77,31 @@ pub struct JobRegistration<AccountId, Extra> {
     pub network_requests: u32,
     /// Maximum storage bytes used during the whole period of the job's executions.
     pub storage: u32,
+    /// The modules required for the job.
+    pub required_modules: JobModules,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: Extra,
 }
+
+pub const MAX_JOB_MODULES: u32 = 1;
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq, Eq)]
+pub enum JobModule {
+    DataEncryption,
+}
+
+impl TryFrom<u32> for JobModule {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(JobModule::DataEncryption),
+            _ => Err(()),
+        }
+    }
+}
+
+pub type JobModules = BoundedVec<JobModule, ConstU32<MAX_JOB_MODULES>>;
 
 /// The desired schedule with some planning flexibility offered through `max_start_delay`.
 ///
@@ -218,5 +240,24 @@ impl<'a> Iterator for ScheduleIter {
             }
         };
         self.current
+    }
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+pub struct CU32<const T: u32>;
+impl<const T: u32> Get<u32> for CU32<T> {
+    fn get() -> u32 {
+        T
+    }
+}
+impl<const T: u32> Get<Option<u32>> for CU32<T> {
+    fn get() -> Option<u32> {
+        Some(T)
+    }
+}
+impl<const T: u32> TypedGet for CU32<T> {
+    type Type = u32;
+    fn get() -> u32 {
+        T
     }
 }
