@@ -302,7 +302,8 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
-            Self::register_for(&multi_origin, registration)
+            let job_id = (multi_origin, Self::next_job_id());
+            Self::register_for(job_id, registration)
         }
 
         /// Deregisters a job for the given script.
@@ -462,7 +463,7 @@ pub mod pallet {
         /// * The [`Self::register`] extrinsic of this pallet
         /// * A inter-chain communication protocol like Hyperdrive
         pub fn register_for(
-            who: &MultiOrigin<T::AccountId>,
+            job_id: JobId<T::AccountId>,
             registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             ensure!(
@@ -478,12 +479,11 @@ pub mod pallet {
                 );
             }
 
-            let job_id = (who.clone(), Self::next_job_id());
             <StoredJobRegistration<T>>::insert(&job_id.0, &job_id.1, registration.clone());
 
-            <T as Config>::JobHooks::register_hook(&who, &job_id, &registration)?;
+            <T as Config>::JobHooks::register_hook(&job_id.0, &job_id, &registration)?;
 
-            Self::deposit_event(Event::JobRegistrationStored(registration, job_id));
+            Self::deposit_event(Event::JobRegistrationStored(registration, job_id.clone()));
             Ok(().into())
         }
     }
