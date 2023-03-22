@@ -88,7 +88,7 @@ pub mod pallet {
                         T::ManagerIdProvider::create_manager_id(id, &manager)
                             .expect("Could not create manager id.");
 
-                        // Update sequencial manager identifier
+                        // Update sequential manager identifier
                         <LastManagerId<T>>::set(Some(id));
 
                         id
