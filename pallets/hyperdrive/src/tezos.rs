@@ -51,7 +51,7 @@ impl<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
     MessageParser<Reward, AccountId, Extra>
     for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
 where
-    ParsableAccountId: FromStr + Into<AccountId>,
+    ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
     Reward: Parameter + Member,
     Balance: From<u128>,
@@ -271,7 +271,7 @@ fn parse_job_registration_payload<
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
 where
-    ParsableAccountId: FromStr + Into<AccountId>,
+    ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
     Reward: Parameter + Member,
     Balance: From<u128>,
@@ -297,10 +297,10 @@ where
             .ok_or(ValidationError::MissingField(FieldError::AllowedSources))?,
         |value| {
             try_sequence(value, |source| {
-                let s: data::String = source.try_into()?;
-                Ok(ParsableAccountId::from_str(s.to_str())
-                    .map_err(|_| ValidationError::AddressParsing)?
-                    .into())
+                let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(source)?).into();
+                let parsed: ParsableAccountId =
+                    s.try_into().map_err(|_| ValidationError::AddressParsing)?;
+                Ok(parsed.into())
             })
         },
     )?;
@@ -332,15 +332,14 @@ where
                 let mut iter = values.into_iter();
 
                 let source = {
-                    let s: data::String = iter
-                        .next()
-                        .ok_or(ValidationError::MissingField(FieldError::Source))?
-                        .try_into()?;
-                    Ok::<AccountId, ValidationError>(
-                        ParsableAccountId::from_str(s.to_str())
-                            .map_err(|_| ValidationError::AddressParsing)?
-                            .into(),
-                    )
+                    let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(
+                        iter.next()
+                            .ok_or(ValidationError::MissingField(FieldError::Source))?,
+                    )?)
+                        .into();
+                    let parsed: ParsableAccountId =
+                        s.try_into().map_err(|_| ValidationError::AddressParsing)?;
+                    Ok::<AccountId, ValidationError>(parsed.into())
                 }?;
 
                 let start_delay = {
@@ -441,11 +440,11 @@ where
     };
 
     let script = {
-        let script: Bytes = try_bytes(
+        let script: Vec<u8> = (&try_bytes::<_, Bytes, _>(
             iter.next()
                 .ok_or(ValidationError::MissingField(FieldError::Script))?,
-        )?;
-        let script: Vec<u8> = (&script).into();
+        )?)
+            .into();
         script
             .try_into()
             .map_err(|_| ValidationError::ScriptOutOfBounds)?
@@ -588,6 +587,7 @@ fn try_sequence<R, O: Fn(Data) -> Result<R, ValidationError>>(
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use sp_core::crypto::AccountId32;
 
     use pallet_acurast::{JobRegistration, Script};
 
@@ -598,14 +598,24 @@ mod tests {
 
     #[test]
     fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a00000122050707030a07070509020000003501000000303544786254574534466b536443513144366d4a444e326e7163615677374d614b71776a766a4447526459656e4b6b324d07070a0000001601000000000000000000000000000000000000000000070707070000070705090200000039070701000000303544786254574534466b536443513144366d4a444e326e7163615677374d614b71776a766a4447526459656e4b6b324d00000707030607070a00000001ff00010707000407070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000edaa0fa299565241bd285414579f88705568c6b00a00000102050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070a000000160100000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000207070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
-        let exp: TezosAddress = "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap();
+        let exp: TezosAddress = "tz1hJgZdhnRGvg5XD6pYxRCsbWh4jg5HQ476".try_into().unwrap();
         assert_eq!(exp, origin);
 
         let payload: Vec<u8> = (&payload).into();
-        let (job_id, registration) = parse_job_registration_payload::<
+        let (job_id, registration): (
+            JobIdSequence,
+            JobRegistration<
+                <Test as frame_system::Config>::AccountId,
+                RegistrationExtra<
+                    MockAsset,
+                    AssetAmount,
+                    <Test as frame_system::Config>::AccountId,
+                >,
+            >,
+        ) = parse_job_registration_payload::<
             _,
             _,
             <Test as Config>::ParsableAccountId,
@@ -620,9 +630,9 @@ mod tests {
                 72, 89, 55, 66, 111, 55, 65, 68, 88, 50, 99, 100, 68, 101, 97,
             ])
             .unwrap(),
-            allowed_sources: Some(vec![hex![
-                "53cf73c65e36ec0bf3d7539780e83febd2d1b01de0df4f6bb7a95157715f2196"
-            ]
+            allowed_sources: Some(vec![hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )
             .into()]),
             allow_only_verified_sources: true,
             schedule: Schedule {
@@ -646,7 +656,7 @@ mod tests {
                     min_reputation: None,
                     instant_match: Some(vec![PlannedExecution {
                         source: hex![
-                            "53cf73c65e36ec0bf3d7539780e83febd2d1b01de0df4f6bb7a95157715f2196"
+                            "1111111111111111111111111111111111111111111111111111111111111111"
                         ]
                         .into(),
                         start_delay: 0,
@@ -655,8 +665,9 @@ mod tests {
                 expected_fulfillment_fee: 0,
             },
         };
+
         assert_eq!(expected, registration);
-        assert_eq!(4, job_id);
+        assert_eq!(2, job_id);
         Ok(())
     }
 }

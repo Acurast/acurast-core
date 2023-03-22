@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use crate::tezos::TezosParser;
-use crate::types::RawAction;
+
+use derive_more::{Display, From, Into};
 use frame_support::pallet_prelude::*;
 use frame_support::{
     parameter_types,
@@ -9,7 +9,6 @@ use frame_support::{
 };
 use frame_system as system;
 use hex_literal::hex;
-use pallet_acurast_marketplace::{RegistrationExtra, Reward};
 use sp_core::H256;
 use sp_core::*;
 use sp_runtime::traits::Keccak256;
@@ -19,12 +18,26 @@ use sp_runtime::{
     AccountId32,
 };
 use sp_std::prelude::*;
-use sp_std::str::FromStr;
 
+use pallet_acurast_marketplace::{RegistrationExtra, Reward};
+
+use crate::tezos::TezosParser;
+use crate::types::RawAction;
 use crate::{weights, ActionExecutor, ParsedAction, RewardParser, StateOwner};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+
+#[derive(Display, Debug, From, Into)]
+pub struct AcurastAccountId(AccountId32);
+impl TryFrom<Vec<u8>> for AcurastAccountId {
+    type Error = ();
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let a: [u8; 32] = value.try_into().map_err(|_| ())?;
+        Ok(AcurastAccountId(AccountId32::new(a)))
+    }
+}
 
 parameter_types! {
     pub TargetChainStateOwner: StateOwner = StateOwner::try_from(hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec()).unwrap();
@@ -73,7 +86,7 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type ParsableAccountId = AccountId32;
+    type ParsableAccountId = AcurastAccountId;
     type TargetChainOwner = TargetChainStateOwner;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
@@ -87,7 +100,7 @@ impl crate::Config for Test {
     type MessageParser = TezosParser<
         Self::Reward,
         Self::Balance,
-        AccountId32,
+        AcurastAccountId,
         <Self as frame_system::Config>::AccountId,
         Self::RegistrationExtra,
         SimpleAssetParser,

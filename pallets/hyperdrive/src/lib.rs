@@ -55,7 +55,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        type ParsableAccountId: Into<<Self as frame_system::Config>::AccountId> + FromStr;
+        type ParsableAccountId: Into<<Self as frame_system::Config>::AccountId> + TryFrom<Vec<u8>>;
         type TargetChainOwner: Get<StateOwner>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
