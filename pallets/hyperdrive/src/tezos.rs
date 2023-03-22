@@ -14,7 +14,6 @@ use sp_std::vec;
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
-use tezos_michelson::micheline::Micheline;
 use tezos_michelson::michelson::data;
 use tezos_michelson::michelson::data::{
     try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
@@ -23,6 +22,10 @@ use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
 use tezos_michelson::Error as TezosMichelineError;
+use tezos_michelson::{
+    micheline::{primitive_application, Micheline},
+    michelson::ComparableTypePrimitive,
+};
 
 use pallet_acurast::{JobIdSequence, JobRegistration, MultiOrigin, Schedule};
 use pallet_acurast_marketplace::{
@@ -31,7 +34,7 @@ use pallet_acurast_marketplace::{
 
 use crate::types::{MessageParser, RawAction};
 use crate::RewardParser;
-use crate::{MessageCounter, ParsedAction};
+use crate::{MessageIdentifier, ParsedAction};
 
 pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
     PhantomData<(
@@ -45,7 +48,7 @@ pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, Ass
 );
 
 impl<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
-    MessageParser<MessageCounter, Reward, AccountId, Extra>
+    MessageParser<Reward, AccountId, Extra>
     for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
 where
     ParsableAccountId: FromStr + Into<AccountId>,
@@ -57,8 +60,14 @@ where
     type Error = ValidationError;
     type AssetParser = AssetParser;
 
-    fn parse_key(encoded: &[u8]) -> Result<MessageCounter, Self::Error> {
-        parse_key(encoded)
+    /// Parses an encoded key from Tezos representing a message identifier.
+    fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error> {
+        let schema = primitive_application(ComparableTypePrimitive::Nat).into();
+        let micheline: Micheline = Micheline::unpack(encoded, Some(&schema))
+            .map_err(|e| ValidationError::TezosMicheline(e))?;
+
+        let value: Nat = micheline.try_into()?;
+        value.to_integer().map_err(|_| ValidationError::InvalidKey)
     }
 
     fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, ValidationError> {
@@ -86,19 +95,6 @@ where
             }
         })
     }
-}
-
-/// Parses an encoded key from Tezos representing a message counter.
-fn parse_key(encoded: &[u8]) -> Result<u128, ValidationError> {
-    let unpacked: Micheline =
-        Micheline::from_bytes(encoded).map_err(|e| ValidationError::TezosMicheline(e))?;
-
-    let p: Nat = unpacked.try_into()?;
-
-    let message_counter: Int = try_int(p).map_err(|_| ValidationError::InvalidKey)?;
-    message_counter
-        .to_integer()
-        .map_err(|_| ValidationError::InvalidKey)
 }
 
 #[cfg_attr(rustfmt, rustfmt::skip)]

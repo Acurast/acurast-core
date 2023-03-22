@@ -136,16 +136,16 @@ pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
 }
 
-pub type MessageCounter = u128;
+pub type MessageIdentifier = u128;
 
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<StateKey, Reward, AccountId, Extra> {
+pub trait MessageParser<Reward, AccountId, Extra> {
     type Error;
     type AssetParser: RewardParser<Reward>;
 
-    fn parse_key(encoded: &[u8]) -> Result<StateKey, Self::Error>;
+    fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
     fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
 }
 
@@ -165,4 +165,5 @@ pub enum ProcessMessageResult {
     ParsingValueFailed,
     ActionFailed(RawAction),
     ActionSuccess,
+    InvalidSequenceId,
 }

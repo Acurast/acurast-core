@@ -21,7 +21,7 @@ use sp_runtime::{
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 
-use crate::{weights, ActionExecutor, MessageCounter, ParsedAction, RewardParser, StateOwner};
+use crate::{weights, ActionExecutor, ParsedAction, RewardParser, StateOwner};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -75,7 +75,6 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AccountId32;
     type TargetChainOwner = TargetChainStateOwner;
-    type StateKey = u128;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Reward = MockAsset;

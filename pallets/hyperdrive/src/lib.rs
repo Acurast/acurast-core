@@ -57,7 +57,6 @@ pub mod pallet {
 
         type ParsableAccountId: Into<<Self as frame_system::Config>::AccountId> + FromStr;
         type TargetChainOwner: Get<StateOwner>;
-        type StateKey: Parameter + Member + Debug + Into<MessageCounter>;
         /// The output of the `Hashing` function used to derive hashes of target chain state.
         type TargetChainHash: Parameter
             + Member
@@ -113,12 +112,7 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<
-            Self::StateKey,
-            Self::Reward,
-            Self::AccountId,
-            Self::RegistrationExtra,
-        >;
+        type MessageParser: MessageParser<Self::Reward, Self::AccountId, Self::RegistrationExtra>;
 
         type ActionExecutor: ActionExecutor<Self::AccountId, Self::RegistrationExtra>;
 
@@ -178,6 +172,12 @@ pub mod pallet {
     #[pallet::getter(fn latest_snapshot)]
     pub type CurrentSnapshot<T: Config<I>, I: 'static = ()> =
         StorageValue<_, T::TargetChainBlockNumber, ValueQuery, FirstSnapshot<T, I>>;
+
+    /// This storage field contains the latest message identifier to have been transmitted.
+    #[pallet::storage]
+    #[pallet::getter(fn message_seq_id)]
+    pub type MessageSequenceId<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, MessageIdentifier, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn state_merkle_root)]
@@ -359,8 +359,6 @@ pub mod pallet {
                 Err(Error::<T, I>::ProofInvalid)?
             }
 
-            // TOOD(Rodrigo): update message counter
-
             // don't fail extrinsic from here onwards
             if let Err(e) = Self::process_message(message_bytes) {
                 Self::deposit_event(Event::MessageProcessed(e));
@@ -414,8 +412,14 @@ pub mod pallet {
         }
 
         fn process_message(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
-            let _message_counter = T::MessageParser::parse_key(message_bytes)
+            let message_id = T::MessageParser::parse_key(message_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
+
+            ensure!(
+                Self::message_seq_id() + 1 == message_id.into(),
+                ProcessMessageResult::InvalidSequenceId
+            );
+            <MessageSequenceId<T, I>>::set(message_id);
 
             let action = T::MessageParser::parse_value(message_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
