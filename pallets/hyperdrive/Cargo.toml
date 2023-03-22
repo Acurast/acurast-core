@@ -17,6 +17,16 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 	"derive",
 ] }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.36" }
+pallet-acurast = { path = "../acurast", default-features = false }
+pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
+
+# SDKs
+tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
+tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
+derive_more = { version = "0.99.17", default-features = false }
+strum = { version = "0.24.1", default-features = false }
+strum_macros = { version = "0.24.1", default-features = false }
+once_cell = { version = "1.17.1", default-features = false }
 
 # Benchmarks
 hex-literal = { version = "0.3", optional = true }
@@ -45,12 +55,19 @@ log = "0.4.17"
 default = ["std"]
 std = [
 	"codec/std",
-	"scale-info/std",
+	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
-	"frame-benchmarking/std",
-	"sp-std/std",
+	"pallet-acurast/std",
+	"pallet-acurast-marketplace/std",
+	"scale-info/std",
+	"sp-core/std",
+	"sp-io/std",
 	"sp-runtime/std",
+	"sp-std/std",
+	"strum/std",
+	"tezos-core/std",
+	"tezos-michelson/std"
 ]
 
 runtime-benchmarks = [
