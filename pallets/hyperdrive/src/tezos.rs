@@ -195,32 +195,57 @@ fn registration_payload_schema() -> &'static Micheline {
     static REGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
     REGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
         let schema: Micheline = pair(vec![
+            // allow_only_verified_sources
             bool_type(),
+            // allowed_sources
             option(set(string())),
+            // destination
             address(),
+            // RegistrationExtra
             pair(vec![
+                // expected_fulfillment_fee
                 nat(),
+                // instant_match
                 pair(vec![
-                    option(set(pair(vec![
+                    option(
+                        // PlannedExecutions
+                        set(pair(vec![
+                        // source
                         string(),
+                        // start_delay
                         nat()
                     ]))),
+                    // min_reputation
                     option(nat()),
+                    // reward
                     bytes(),
+                    // slots
                     nat(),
                 ])
             ]),
+            // job_id
             nat(),
+            // memory
             nat(),
+            // network_requests
             nat(),
-            pair(vec![
+            pair(
+                // Schedules
+                vec![
+                // duration
                 nat(),
+                // end_time
                 nat(),
+                // interval
                 nat(),
+                // max_start_delay
                 nat(),
+                // start_time
                 nat(),
             ]),
+            // script
             bytes(),
+            // storage
             nat(),
         ]);
         Box::new(schema)

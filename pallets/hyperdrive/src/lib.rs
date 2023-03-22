@@ -337,7 +337,7 @@ pub mod pallet {
         ///
         /// We fail with a [`DispatchError`] if the given `proof` is invalid.
         /// Any error happening afterwards, while decoding the payload and triggering actions, emits an event informing about the error but does not fail the extrinsic.
-        /// This is necessary to make the `message_counter` update in any case.
+        /// This is necessary to make [`MessageSequenceId`] update in any case.
         #[pallet::call_index(2)]
         #[pallet::weight(< T as Config<I>>::WeightInfo::submit_message())]
         pub fn submit_message(
