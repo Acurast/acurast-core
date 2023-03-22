@@ -16,7 +16,7 @@ use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
 use tezos_michelson::michelson::data;
 use tezos_michelson::michelson::data::{
-    try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
+    try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
 use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
@@ -145,10 +145,10 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
         iter.next()
             .ok_or(ValidationError::MissingField(FieldError::ORIGIN))?,
     )?;
-    let body: Bytes = iter
-        .next()
-        .ok_or(ValidationError::MissingField(FieldError::PAYLOAD))?
-        .try_into()?;
+    let body: Bytes = try_bytes(
+        iter.next()
+            .ok_or(ValidationError::MissingField(FieldError::PAYLOAD))?,
+    )?;
 
     Ok((action, origin, body))
 }
@@ -198,7 +198,7 @@ fn registration_payload_schema() -> &'static Micheline {
             // allow_only_verified_sources
             bool_type(),
             // allowed_sources
-            option(set(string())),
+            option(set(bytes())),
             // destination
             address(),
             // RegistrationExtra
@@ -211,7 +211,7 @@ fn registration_payload_schema() -> &'static Micheline {
                         // PlannedExecutions
                         set(pair(vec![
                         // source
-                        string(),
+                        bytes(),
                         // start_delay
                         nat()
                     ]))),
@@ -369,10 +369,10 @@ where
         },
     )?;
     let reward = {
-        let reward: Bytes = iter
-            .next()
-            .ok_or(ValidationError::MissingField(FieldError::Reward))?
-            .try_into()?;
+        let reward: Bytes = try_bytes(
+            iter.next()
+                .ok_or(ValidationError::MissingField(FieldError::Reward))?,
+        )?;
         let reward: Vec<u8> = (&reward).into();
         AssetParser::parse(reward.to_vec()).map_err(|_| ValidationError::InvalidReward)?
     };
@@ -441,10 +441,10 @@ where
     };
 
     let script = {
-        let script: Bytes = iter
-            .next()
-            .ok_or(ValidationError::MissingField(FieldError::Script))?
-            .try_into()?;
+        let script: Bytes = try_bytes(
+            iter.next()
+                .ok_or(ValidationError::MissingField(FieldError::Script))?,
+        )?;
         let script: Vec<u8> = (&script).into();
         script
             .try_into()
