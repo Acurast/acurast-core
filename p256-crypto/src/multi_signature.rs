@@ -244,16 +244,13 @@ impl Verify for MultiSignature {
                 msig.verify(msg, signer)
             }
             (Self::P256(ref sig), who) => {
-                match p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
-                    .unwrap()
-                    .recover_verifying_key(msg.get())
-                {
-                    Ok(pubkey) => {
+                p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
+                    .and_then(|signature| signature.recover_verifying_key(msg.get()))
+                    .map(|pubkey| {
                         &sp_io::hashing::blake2_256(pubkey.to_bytes().as_slice())
                             == <dyn AsRef<[u8; 32]>>::as_ref(who)
-                    }
-                    _ => false,
-                }
+                    })
+                    .unwrap_or(false)
             }
         }
     }

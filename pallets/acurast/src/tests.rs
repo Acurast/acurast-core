@@ -197,7 +197,7 @@ fn test_update_allowed_sources() {
         assert_ok!(Acurast::update_allowed_sources(
             RuntimeOrigin::signed(alice_account_id()).into(),
             Acurast::job_id_sequence(),
-            updates_1.clone()
+            updates_1.clone().try_into().unwrap()
         ));
 
         assert_eq!(
@@ -211,7 +211,7 @@ fn test_update_allowed_sources() {
         assert_ok!(Acurast::update_allowed_sources(
             RuntimeOrigin::signed(alice_account_id()).into(),
             Acurast::job_id_sequence(),
-            updates_2.clone()
+            updates_2.clone().try_into().unwrap()
         ));
 
         assert_eq!(
@@ -232,12 +232,12 @@ fn test_update_allowed_sources() {
                 RuntimeEvent::Acurast(crate::Event::AllowedSourcesUpdated(
                     (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1),
                     registration_1,
-                    updates_1
+                    updates_1.try_into().unwrap()
                 )),
                 RuntimeEvent::Acurast(crate::Event::AllowedSourcesUpdated(
                     (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1),
                     registration_2,
-                    updates_2
+                    updates_2.try_into().unwrap()
                 ))
             ]
         );
@@ -271,7 +271,7 @@ fn test_update_allowed_sources_failure() {
             Acurast::update_allowed_sources(
                 RuntimeOrigin::signed(alice_account_id()).into(),
                 initial_job_id + 1,
-                updates.clone()
+                updates.clone().try_into().unwrap()
             ),
             Error::<Test>::TooManyAllowedSources
         );
@@ -414,7 +414,7 @@ fn test_update_revocation_list() {
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            updates_1.clone(),
+            updates_1.clone().try_into().unwrap(),
         ));
         assert_eq!(
             Some(()),
@@ -427,7 +427,7 @@ fn test_update_revocation_list() {
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            updates_2.clone(),
+            updates_2.clone().try_into().unwrap(),
         ));
         assert_eq!(
             None,
@@ -437,7 +437,7 @@ fn test_update_revocation_list() {
         assert_err!(
             Acurast::update_certificate_revocation_list(
                 RuntimeOrigin::signed(bob_account_id()).into(),
-                updates_1.clone(),
+                updates_1.clone().try_into().unwrap(),
             ),
             Error::<Test>::CertificateRevocationListUpdateNotAllowed
         );
@@ -451,11 +451,11 @@ fn test_update_revocation_list() {
             [
                 RuntimeEvent::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),
-                    updates_1
+                    updates_1.try_into().unwrap()
                 )),
                 RuntimeEvent::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),
-                    updates_2
+                    updates_2.try_into().unwrap()
                 ))
             ]
         );
@@ -471,7 +471,7 @@ fn test_update_revocation_list_submit_attestation() {
         }];
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
 
         let chain = attestation_chain();
@@ -487,7 +487,10 @@ fn test_update_revocation_list_submit_attestation() {
         assert_eq!(
             events(),
             [RuntimeEvent::Acurast(
-                crate::Event::CertificateRecovationListUpdated(alice_account_id(), updates)
+                crate::Event::CertificateRecovationListUpdated(
+                    alice_account_id(),
+                    updates.try_into().unwrap()
+                )
             ),]
         );
     });
@@ -514,7 +517,7 @@ fn test_update_revocation_list_assign_job() {
         ));
         assert_ok!(Acurast::update_certificate_revocation_list(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
 
         let attestation =
@@ -533,7 +536,7 @@ fn test_update_revocation_list_assign_job() {
                 )),
                 RuntimeEvent::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),
-                    updates
+                    updates.try_into().unwrap()
                 )),
             ]
         );

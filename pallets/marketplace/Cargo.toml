@@ -43,7 +43,7 @@ sp-core = { git = "https://github.com/paritytech/substrate", default-features = 
 parachains-common = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.36" }
 
 pallet-acurast = { path = "../acurast", default-features = false}
-pallet-acurast-assets = { path = "../assets", default-features = false }
+pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
 acurast-reputation = { path = "./reputation", default-features = false }
 
 [dev-dependencies]
@@ -66,7 +66,7 @@ runtime-benchmarks = [
 	"sp-core",
 	"parachains-common",
 	"pallet-acurast/runtime-benchmarks",
-	"pallet-acurast-assets/runtime-benchmarks",
+	"pallet-acurast-assets-manager/runtime-benchmarks",
 ]
 
 std = [
@@ -90,7 +90,7 @@ std = [
 	"xcm-executor/std",
 	"xcm/std",
 	"pallet-acurast/std",
-	"pallet-acurast-assets/std",
+	"pallet-acurast-assets-manager/std",
 	"acurast-reputation/std",
 ]
 try-runtime = ["frame-support/try-runtime"]

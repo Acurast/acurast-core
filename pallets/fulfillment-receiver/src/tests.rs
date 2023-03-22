@@ -2,9 +2,12 @@
 
 use frame_support::{assert_err, assert_ok, sp_runtime::DispatchError};
 
-use crate::mock::{
-    alice_account_id, bob_account_id, events, fulfillment_for, script, AcurastFulfillmentReceiver,
-    ExtBuilder, RuntimeEvent, RuntimeOrigin,
+use crate::{
+    mock::{
+        events, fulfillment_for, script, AcurastFulfillmentReceiver, ExtBuilder, RuntimeEvent,
+        RuntimeOrigin,
+    },
+    stub::{alice_account_id, bob_account_id},
 };
 
 #[test]

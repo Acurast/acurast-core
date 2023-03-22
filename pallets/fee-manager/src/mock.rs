@@ -9,6 +9,7 @@ use sp_runtime::{
     testing::Header,
     traits::{BlakeTwo256, IdentityLookup},
 };
+use system::EnsureRoot;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -59,6 +60,7 @@ parameter_types! {
 impl fee_manager::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type DefaultFeePercentage = DefaultFeePercentage;
+    type UpdateOrigin = EnsureRoot<Self::AccountId>;
 }
 
 // Build genesis storage according to the mock runtime.

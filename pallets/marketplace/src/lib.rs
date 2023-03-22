@@ -39,7 +39,7 @@ pub mod pallet {
         AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
         Schedule, StoredJobRegistration,
     };
-    use pallet_acurast_assets::traits::AssetValidator;
+    use pallet_acurast_assets_manager::traits::AssetValidator;
 
     use crate::payments::{Reward, RewardFor};
     use crate::types::*;
@@ -54,7 +54,8 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedConsumers: Get<u16>;
+        type MaxAllowedConsumers: Get<u32>;
+        type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirementsFor<Self>>;
@@ -374,7 +375,7 @@ pub mod pallet {
         #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
         pub fn propose_matching(
             origin: OriginFor<T>,
-            matches: Vec<Match<T::AccountId>>,
+            matches: BoundedVec<Match<T::AccountId>, <T as Config>::MaxProposedMatches>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -654,15 +655,14 @@ pub mod pallet {
                 None => {}
             }
 
-            // reward is understood per slot and execution
-            let mut reward = requirements.reward.clone();
-            reward
-                .with_amount(Self::total_reward_amount(registration)?.into())
-                .map_err(|_| Error::<T>::RewardConversionFailed)?;
-
             // lock only after all other steps succeeded without errors because locking reward is not revertable
             if let MultiOrigin::Acurast(who) = who {
-                T::RewardManager::lock_reward(reward.clone(), T::Lookup::unlookup(who.clone()))?;
+                // reward is understood per slot and execution
+                let mut reward = requirements.reward.clone();
+                reward
+                    .with_amount(Self::total_reward_amount(registration)?.into())
+                    .map_err(|_| Error::<T>::RewardConversionFailed)?;
+                T::RewardManager::lock_reward(reward, T::Lookup::unlookup(who.clone()))?;
             }
 
             Ok(().into())

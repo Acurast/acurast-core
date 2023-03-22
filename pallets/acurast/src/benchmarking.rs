@@ -4,6 +4,7 @@ use frame_support::{
     assert_ok,
     sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
     traits::{Currency, OriginTrait},
+    BoundedVec,
 };
 use frame_system::RawOrigin;
 use hex_literal::hex;
@@ -159,10 +160,10 @@ benchmarks! {
 
     update_allowed_sources {
         let (caller, job) = register_job::<T>(true);
-        let sources_update = vec![AllowedSourcesUpdate {
+        let sources_update: BoundedVec<AllowedSourcesUpdate<T::AccountId>, <T as Config>::MaxAllowedSources> = vec![AllowedSourcesUpdate {
             operation: ListUpdateOperation::Add,
             item: account("processor", 0, SEED),
-        }];
+        }].try_into().unwrap();
         let local_job_id = 1;
     }: _(RawOrigin::Signed(caller.clone()), local_job_id, sources_update.clone())
     verify {
@@ -194,11 +195,11 @@ benchmarks! {
 
         let pallet_account: T::AccountId = T::PalletId::get().into_account_truncating();
 
-    }: _(RawOrigin::Signed(pallet_account.clone()), updates.clone())
+    }: _(RawOrigin::Signed(pallet_account.clone()), updates.clone().try_into().unwrap())
     verify {
         assert_last_event::<T>(Event::CertificateRecovationListUpdated(
             pallet_account,
-            updates
+            updates.try_into().unwrap()
         ).into());
     }
 

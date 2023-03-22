@@ -21,7 +21,7 @@ fn test_update_processor_pairings_succeed_1() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_ok!(call);
         assert_eq!(Some(1), AcurastProcessorManager::last_manager_id());
@@ -41,7 +41,7 @@ fn test_update_processor_pairings_succeed_1() {
                 RuntimeEvent::AcurastProcessorManager(Event::ManagerCreated(alice_account_id(), 1)),
                 RuntimeEvent::AcurastProcessorManager(Event::ProcessorPairingsUpdated(
                     alice_account_id(),
-                    updates
+                    updates.try_into().unwrap()
                 )),
             ]
         );
@@ -52,7 +52,7 @@ fn test_update_processor_pairings_succeed_1() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_ok!(call);
         assert_eq!(
@@ -66,7 +66,7 @@ fn test_update_processor_pairings_succeed_1() {
         assert_eq!(
             events(),
             vec![RuntimeEvent::AcurastProcessorManager(
-                Event::ProcessorPairingsUpdated(alice_account_id(), updates)
+                Event::ProcessorPairingsUpdated(alice_account_id(), updates.try_into().unwrap())
             ),]
         );
     });
@@ -89,7 +89,7 @@ fn test_update_processor_pairings_succeed_2() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_ok!(call);
         _ = events();
@@ -106,7 +106,7 @@ fn test_update_processor_pairings_succeed_2() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(bob_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_ok!(call);
 
@@ -127,7 +127,7 @@ fn test_update_processor_pairings_succeed_2() {
                 RuntimeEvent::AcurastProcessorManager(Event::ManagerCreated(bob_account_id(), 2)),
                 RuntimeEvent::AcurastProcessorManager(Event::ProcessorPairingsUpdated(
                     bob_account_id(),
-                    updates
+                    updates.try_into().unwrap()
                 )),
             ]
         );
@@ -151,7 +151,7 @@ fn test_update_processor_pairings_failure_1() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_err!(call, Error::<Test>::InvalidPairingProof);
     });
@@ -185,7 +185,7 @@ fn test_update_processor_pairings_failure_2() {
         ];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_err!(call, Error::<Test>::ProcessorAlreadyPaired);
     });
@@ -209,7 +209,7 @@ fn test_update_processor_pairings_failure_3() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_ok!(call);
 
@@ -223,74 +223,9 @@ fn test_update_processor_pairings_failure_3() {
         }];
         let call = AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(bob_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         );
         assert_err!(call, Error::<Test>::ProcessorPairedWithAnotherManager);
-    });
-}
-
-#[test]
-fn test_update_processor_pairings_failure_4() {
-    ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
-        let updates = vec![
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature.clone(),
-                ),
-            },
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature.clone(),
-                ),
-            },
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature.clone(),
-                ),
-            },
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature.clone(),
-                ),
-            },
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature.clone(),
-                ),
-            },
-            ProcessorPairingUpdateFor::<Test> {
-                operation: ListUpdateOperation::Add,
-                item: ProcessorPairingFor::<Test>::new_with_proof(
-                    processor_account.clone(),
-                    timestamp,
-                    signature,
-                ),
-            },
-        ];
-        let call = AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
-        );
-        assert_err!(call, Error::<Test>::TooManyPairingUpdates);
     });
 }
 
@@ -311,7 +246,7 @@ fn test_recover_funds_succeed_1() {
         }];
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
         assert_ok!(Balances::transfer(
             RuntimeOrigin::signed(alice_account_id()),
@@ -364,7 +299,7 @@ fn test_recover_funds_succeed_2() {
         }];
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
 
         let call = AcurastProcessorManager::recover_funds(
@@ -402,7 +337,7 @@ fn test_recover_funds_failure_1() {
         }];
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
 
         let (_, processor_account) = generate_account();
@@ -434,12 +369,12 @@ fn test_recover_funds_failure_2() {
         }];
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(alice_account_id()),
-            updates.clone(),
+            updates.clone().try_into().unwrap(),
         ));
 
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(bob_account_id()),
-            vec![],
+            vec![].try_into().unwrap(),
         ));
 
         let call = AcurastProcessorManager::recover_funds(

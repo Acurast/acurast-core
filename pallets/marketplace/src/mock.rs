@@ -209,6 +209,8 @@ impl pallet_assets::Config for Test {
     type Extra = ();
     type WeightInfo = ();
     type RemoveItemsLimit = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 impl parachain_info::Config for Test {}
@@ -216,7 +218,8 @@ impl parachain_info::Config for Test {}
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
-    type MaxAllowedSources = frame_support::traits::ConstU16<4>;
+    type MaxAllowedSources = frame_support::traits::ConstU32<4>;
+    type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();
@@ -284,7 +287,8 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type MaxAllowedConsumers = frame_support::traits::ConstU16<4>;
+    type MaxAllowedConsumers = frame_support::traits::ConstU32<4>;
+    type MaxProposedMatches = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type ReportTolerance = ReportTolerance;

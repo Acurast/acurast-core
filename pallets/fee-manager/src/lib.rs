@@ -33,6 +33,7 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         #[pallet::constant]
         type DefaultFeePercentage: Get<Percent>;
+        type UpdateOrigin: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
     #[pallet::type_value]
@@ -61,7 +62,7 @@ pub mod pallet {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
-            ensure_root(origin)?;
+            T::UpdateOrigin::ensure_origin(origin)?;
             let (new_version, _) = Self::set_fee_percentage(fee);
             Self::deposit_event(Event::FeeUpdated {
                 version: new_version,

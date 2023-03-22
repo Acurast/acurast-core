@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use acurast_common::Schedule;
 use frame_support::traits::OriginTrait;
 use pallet_acurast_marketplace::Reward;
 use scale_info::TypeInfo;
@@ -12,6 +13,85 @@ use xcm_executor::traits::ConvertOrigin;
 pub type AcurastAssetId = AssetId;
 pub type InternalAssetId = u32;
 pub type AcurastAssetAmount = u128;
+
+use acurast_runtime::AccountId as AcurastAccountId;
+use pallet_acurast::JobRegistration;
+use pallet_acurast_marketplace::{
+    types::MAX_PRICING_VARIANTS, Advertisement, JobRequirements, PricingVariant, SchedulingWindow,
+};
+
+pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+
+pub fn alice_account_id() -> AcurastAccountId {
+    [0; 32].into()
+}
+pub fn bob_account_id() -> AcurastAccountId {
+    [1; 32].into()
+}
+pub fn owned_asset(amount: u128) -> AcurastAsset {
+    AcurastAsset(MultiAsset {
+        id: Concrete(MultiLocation {
+            parents: 1,
+            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
+        }),
+        fun: Fungible(amount),
+    })
+}
+pub fn registration(
+) -> JobRegistration<AcurastAccountId, JobRequirements<AcurastAsset, AcurastAccountId>> {
+    JobRegistration {
+        script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        extra: JobRequirements {
+            slots: 1,
+            reward: owned_asset(20000),
+            min_reputation: None,
+            instant_match: None,
+        },
+    }
+}
+pub fn asset(id: u32) -> AssetId {
+    AssetId::Concrete(MultiLocation::new(
+        1,
+        X3(
+            Parachain(1000),
+            PalletInstance(50),
+            GeneralIndex(id as u128),
+        ),
+    ))
+}
+pub fn advertisement(
+    fee_per_millisecond: u128,
+) -> Advertisement<AcurastAccountId, AcurastAssetId, AcurastAssetAmount> {
+    let pricing: frame_support::BoundedVec<
+        PricingVariant<AcurastAssetId, AcurastAssetAmount>,
+        ConstU32<MAX_PRICING_VARIANTS>,
+    > = bounded_vec![PricingVariant {
+        reward_asset: asset(22),
+        fee_per_millisecond,
+        fee_per_storage_byte: 0,
+        base_fee_per_execution: 0,
+        scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
+    }];
+    Advertisement {
+        pricing,
+        allowed_consumers: None,
+        storage_capacity: 5,
+        max_memory: 5000,
+        network_request_quota: 8,
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
 pub struct AcurastAsset(pub MultiAsset);
@@ -63,7 +143,7 @@ pub mod acurast_runtime {
     use xcm_executor::XcmExecutor;
 
     pub use pallet_acurast;
-    use pallet_acurast_assets::traits::AssetValidator;
+    use pallet_acurast_assets_manager::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
 
@@ -122,7 +202,7 @@ pub mod acurast_runtime {
             Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
             Assets: pallet_assets::{Pallet, Storage, Event<T>, Config<T>}, // hide calls since they get proxied by `pallet_acurast_assets`
-            AcurastAssets: pallet_acurast_assets::{Pallet, Storage, Event<T>, Config<T>, Call},
+            AcurastAssets: pallet_acurast_assets_manager::{Pallet, Storage, Event<T>, Config<T>, Call},
             ParachainInfo: parachain_info::{Pallet, Storage, Config},
             MsgQueue: super::mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
@@ -241,11 +321,35 @@ pub mod acurast_runtime {
         type Extra = ();
         type WeightInfo = ();
         type RemoveItemsLimit = ();
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = TestBenchmarkHelper;
     }
 
-    impl pallet_acurast_assets::Config for Runtime {
+    impl pallet_acurast_assets_manager::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
+        type ManagerOrigin = frame_system::EnsureRoot<Self::AccountId>;
         type WeightInfo = ();
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = TestBenchmarkHelper;
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    pub struct TestBenchmarkHelper;
+    #[cfg(feature = "runtime-benchmarks")]
+    impl pallet_assets::BenchmarkHelper<<Runtime as pallet_assets::Config>::AssetIdParameter>
+        for TestBenchmarkHelper
+    {
+        fn create_asset_id_parameter(
+            id: u32,
+        ) -> <Runtime as pallet_assets::Config>::AssetIdParameter {
+            codec::Compact(id.into())
+        }
+    }
+    #[cfg(feature = "runtime-benchmarks")]
+    impl pallet_acurast_assets_manager::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+        fn manager_account() -> <Runtime as frame_system::Config>::AccountId {
+            [0; 32].into()
+        }
     }
 
     pub struct FeeManagerImpl;
@@ -267,7 +371,8 @@ pub mod acurast_runtime {
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
-        type MaxAllowedSources = frame_support::traits::ConstU16<1000>;
+        type MaxAllowedSources = frame_support::traits::ConstU32<1000>;
+        type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
         type KeyAttestationBarrier = ();
@@ -278,7 +383,8 @@ pub mod acurast_runtime {
 
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type MaxAllowedConsumers = frame_support::traits::ConstU16<4>;
+        type MaxAllowedConsumers = frame_support::traits::ConstU32<4>;
+        type MaxProposedMatches = frame_support::traits::ConstU32<10>;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
@@ -319,7 +425,7 @@ pub mod proxy_runtime {
     };
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
-    use sp_core::H256;
+    use sp_core::{ConstU32, H256};
     use sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32};
     use sp_std::prelude::*;
     use xcm::latest::prelude::*;
@@ -334,6 +440,9 @@ pub mod proxy_runtime {
     use pallet_acurast_marketplace::JobRequirements;
 
     use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
+
+    #[cfg(feature = "runtime-benchmarks")]
+    use super::{advertisement, alice_account_id, registration};
 
     pub type AccountId = AccountId32;
     pub type LocationToAccountId = (
@@ -485,12 +594,46 @@ pub mod proxy_runtime {
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
+        type MaxAllowedSources = ConstU32<10>;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
         type XcmSender = XcmRouter;
         type AcurastPalletId = AcurastPalletId;
         type AcurastMarketplacePalletId = AcurastMarketplacePalletId;
         type AcurastParachainId = AcurastParachainId;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper = BenchmarkHelper;
+        type WeightInfo = ();
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    pub struct BenchmarkHelper;
+    #[cfg(feature = "runtime-benchmarks")]
+    impl crate::benchmarking::BenchmarkHelper<Runtime> for BenchmarkHelper {
+        fn create_job_registration() -> acurast_common::JobRegistration<
+            <Runtime as frame_system::Config>::AccountId,
+            <Runtime as crate::Config>::RegistrationExtra,
+        > {
+            registration()
+        }
+
+        fn create_allowed_sources_update(
+            _index: u32,
+        ) -> acurast_common::AllowedSourcesUpdate<<Runtime as frame_system::Config>::AccountId>
+        {
+            acurast_common::AllowedSourcesUpdate {
+                operation: acurast_common::ListUpdateOperation::Add,
+                item: alice_account_id(),
+            }
+        }
+
+        fn create_advertisement() -> pallet_acurast_marketplace::Advertisement<
+            <Runtime as frame_system::Config>::AccountId,
+            <Runtime as crate::Config>::AssetId,
+            <Runtime as crate::Config>::AssetAmount,
+        > {
+            advertisement(10)
+        }
     }
 
     impl pallet_timestamp::Config for Runtime {

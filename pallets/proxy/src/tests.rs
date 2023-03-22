@@ -14,25 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use acurast_common::Schedule;
 use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
-use sp_runtime::traits::ConstU32;
-use sp_runtime::{bounded_vec, BoundedVec};
-use xcm::prelude::*;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use acurast_runtime::Runtime as AcurastRuntime;
-use pallet_acurast::{JobRegistration, MultiOrigin};
-use pallet_acurast_marketplace::{
-    types::MAX_PRICING_VARIANTS, Advertisement, FeeManager, JobRequirements, PricingVariant,
-    SchedulingWindow,
-};
+use pallet_acurast::MultiOrigin;
+use pallet_acurast_marketplace::FeeManager;
 
+use crate::mock::acurast_runtime::FeeManagerImpl;
 use crate::mock::*;
-use crate::mock::{acurast_runtime::FeeManagerImpl, proxy_runtime::AccountId};
 
 pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
 pub type AcurastPalletXcm = pallet_xcm::Pallet<acurast_runtime::Runtime>;
@@ -42,7 +35,6 @@ pub const ALICE: frame_support::sp_runtime::AccountId32 =
 pub const BOB: frame_support::sp_runtime::AccountId32 =
     frame_support::sp_runtime::AccountId32::new([1u8; 32]);
 pub const INITIAL_BALANCE: u128 = 1_000_000_000;
-const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
 decl_test_parachain! {
     pub struct AcurastParachain {
@@ -113,7 +105,7 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
     .unwrap();
 
     // make asset 22 a valid asset via Genesis
-    pallet_acurast_assets::GenesisConfig::<Runtime> {
+    pallet_acurast_assets_manager::GenesisConfig::<Runtime> {
         assets: vec![(22, 1000, 50, 22)],
     }
     .assimilate_storage(&mut t)
@@ -180,75 +172,6 @@ pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::Acco
 }
 pub fn pallet_fees_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
-}
-pub fn alice_account_id() -> AcurastAccountId {
-    [0; 32].into()
-}
-pub fn bob_account_id() -> AcurastAccountId {
-    [1; 32].into()
-}
-pub fn owned_asset(amount: u128) -> AcurastAsset {
-    AcurastAsset(MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(amount),
-    })
-}
-pub fn registration() -> JobRegistration<AccountId, JobRequirements<AcurastAsset, AccountId>> {
-    JobRegistration {
-        script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
-        allowed_sources: None,
-        allow_only_verified_sources: false,
-        schedule: Schedule {
-            duration: 5000,
-            start_time: 1_671_800_400_000, // 23.12.2022 13:00
-            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
-            interval: 1_800_000,           // 30min
-            max_start_delay: 5000,
-        },
-        memory: 5_000u32,
-        network_requests: 5,
-        storage: 20_000u32,
-        extra: JobRequirements {
-            slots: 1,
-            reward: owned_asset(20000),
-            min_reputation: None,
-            instant_match: None,
-        },
-    }
-}
-pub fn asset(id: u32) -> AssetId {
-    AssetId::Concrete(MultiLocation::new(
-        1,
-        X3(
-            Parachain(1000),
-            PalletInstance(50),
-            GeneralIndex(id as u128),
-        ),
-    ))
-}
-pub fn advertisement(
-    fee_per_millisecond: u128,
-) -> Advertisement<AccountId, AcurastAssetId, AcurastAssetAmount> {
-    let pricing: BoundedVec<
-        PricingVariant<AcurastAssetId, AcurastAssetAmount>,
-        ConstU32<MAX_PRICING_VARIANTS>,
-    > = bounded_vec![PricingVariant {
-        reward_asset: asset(22),
-        fee_per_millisecond,
-        fee_per_storage_byte: 0,
-        base_fee_per_execution: 0,
-        scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
-    }];
-    Advertisement {
-        pricing,
-        allowed_consumers: None,
-        storage_capacity: 5,
-        max_memory: 5000,
-        network_request_quota: 8,
-    }
 }
 
 #[cfg(test)]
@@ -617,7 +540,7 @@ mod proxy_calls {
 
             let message_call = AcurastProxy(update_allowed_sources {
                 job_id: 1,
-                updates: vec![update],
+                updates: vec![update].try_into().unwrap(),
             });
 
             let alice_origin = proxy_runtime::RuntimeOrigin::signed(ALICE);

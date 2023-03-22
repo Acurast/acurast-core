@@ -1,14 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(dead_code)]
 
-// #[cfg(test)]
-// mod mock;
-//
-// #[cfg(test)]
-// mod tests;
-//
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+#[cfg(test)]
+pub mod mock;
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod stub;
+#[cfg(test)]
+mod tests;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
+
 pub mod weights;
 
 pub mod traits;
@@ -32,6 +34,9 @@ pub mod pallet {
     use xcm::prelude::{Abstract, AssetId, Concrete, GeneralIndex, PalletInstance, Parachain, X3};
     use xcm_executor::traits::Convert;
 
+    #[cfg(feature = "runtime-benchmarks")]
+    use crate::benchmarking::BenchmarkHelper;
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
@@ -42,8 +47,11 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as pallet_assets::Config<I>>::RuntimeEvent>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type ManagerOrigin: EnsureOrigin<Self::RuntimeOrigin>;
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]
@@ -124,6 +132,7 @@ pub mod pallet {
             admin: AccountIdLookupOf<T>,
             min_balance: T::Balance,
         ) -> DispatchResult {
+            T::ManagerOrigin::ensure_origin(origin.clone())?;
             let new = Self::update_index(id, asset)?;
 
             if new {
@@ -147,6 +156,7 @@ pub mod pallet {
             is_sufficient: bool,
             min_balance: T::Balance,
         ) -> DispatchResult {
+            T::ManagerOrigin::ensure_origin(origin.clone())?;
             let new = Self::update_index(id, asset)?;
 
             if new {
@@ -168,12 +178,18 @@ pub mod pallet {
         pub fn set_metadata(
             origin: OriginFor<T>,
             id: AssetId,
-            name: Vec<u8>,
-            symbol: Vec<u8>,
+            name: BoundedVec<u8, T::StringLimit>,
+            symbol: BoundedVec<u8, T::StringLimit>,
             decimals: u8,
         ) -> DispatchResult {
             let id = <ReverseAssetIndex<T, I>>::get(&id).ok_or(Error::<T, I>::AssetNotIndexed)?;
-            <pallet_assets::Pallet<T, I>>::set_metadata(origin, id.into(), name, symbol, decimals)
+            <pallet_assets::Pallet<T, I>>::set_metadata(
+                origin,
+                id.into(),
+                name.into(),
+                symbol.into(),
+                decimals,
+            )
         }
 
         #[pallet::call_index(8)]

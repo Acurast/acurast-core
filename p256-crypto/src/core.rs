@@ -174,13 +174,17 @@ pub mod p256 {
         }
     }
 
+    const SEED_LENGTH: usize = 32;
+    const SIGNATURE_LENGTH: usize = 65;
+    const PUBLIC_KEY_LENGTH: usize = 33;
+
     #[cfg(feature = "full_crypto")]
-    type Seed = [u8; 32];
+    type Seed = [u8; SEED_LENGTH];
 
     /// A signature (a 512-bit value, plus 8 bits for recovery ID).
     #[cfg_attr(any(feature = "std", feature = "full_crypto"), derive(Hash))]
     #[derive(Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
-    pub struct Signature(pub [u8; 65]);
+    pub struct Signature(pub [u8; SIGNATURE_LENGTH]);
 
     impl TryFrom<recoverable::Signature> for Signature {
         type Error = ();
@@ -195,8 +199,8 @@ pub mod p256 {
         type Error = ();
 
         fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-            if data.len() == 65 {
-                let mut inner = [0u8; 65];
+            if data.len() == SIGNATURE_LENGTH {
+                let mut inner = [0u8; SIGNATURE_LENGTH];
                 inner.copy_from_slice(data);
                 Ok(Signature(inner))
             } else {
@@ -230,7 +234,7 @@ pub mod p256 {
 
     impl Clone for Signature {
         fn clone(&self) -> Self {
-            let mut r = [0u8; 65];
+            let mut r = [0u8; SIGNATURE_LENGTH];
             r.copy_from_slice(&self.0[..]);
             Signature(r)
         }
@@ -238,18 +242,18 @@ pub mod p256 {
 
     impl Default for Signature {
         fn default() -> Self {
-            Signature([0u8; 65])
+            Signature([0u8; SIGNATURE_LENGTH])
         }
     }
 
-    impl From<Signature> for [u8; 65] {
-        fn from(v: Signature) -> [u8; 65] {
+    impl From<Signature> for [u8; SIGNATURE_LENGTH] {
+        fn from(v: Signature) -> [u8; SIGNATURE_LENGTH] {
             v.0
         }
     }
 
-    impl AsRef<[u8; 65]> for Signature {
-        fn as_ref(&self) -> &[u8; 65] {
+    impl AsRef<[u8; SIGNATURE_LENGTH]> for Signature {
+        fn as_ref(&self) -> &[u8; SIGNATURE_LENGTH] {
             &self.0
         }
     }
@@ -272,8 +276,8 @@ pub mod p256 {
         }
     }
 
-    impl UncheckedFrom<[u8; 65]> for Signature {
-        fn unchecked_from(data: [u8; 65]) -> Signature {
+    impl UncheckedFrom<[u8; SIGNATURE_LENGTH]> for Signature {
+        fn unchecked_from(data: [u8; SIGNATURE_LENGTH]) -> Signature {
             Signature(data)
         }
     }
@@ -292,13 +296,13 @@ pub mod p256 {
                     let message = msg.get();
                     let signature_bytes: &[u8] = self.as_ref();
                     let verifying_key = VerifyingKey::from(public_key);
-                    let verifying_key_from_signature =
-                        recoverable::Signature::try_from(signature_bytes)
-                            .unwrap()
-                            .recover_verifying_key(message)
-                            .unwrap();
 
-                    verifying_key == verifying_key_from_signature
+                    recoverable::Signature::try_from(signature_bytes)
+                        .and_then(|signature| signature.recover_verifying_key(message))
+                        .map(|verifying_key_from_signature| {
+                            verifying_key == verifying_key_from_signature
+                        })
+                        .unwrap_or(false)
                 }
                 Err(_) => false,
             }
@@ -317,7 +321,7 @@ pub mod p256 {
         pub fn generate_from_seed_bytes(bytes: &[u8]) -> Result<Self, elliptic_curve::Error> {
             let secret = SecretKey::from_be_bytes(bytes)?;
             let public = secret.public_key();
-            let pub_bytes = public.to_bytes();
+            let pub_bytes = public.to_bytes().map_err(|_| elliptic_curve::Error)?;
             Ok(Pair {
                 public: Public(pub_bytes),
                 #[cfg(feature = "full_crypto")]
@@ -344,19 +348,19 @@ pub mod p256 {
 
     /// Derive a single hard junction.
     #[cfg(feature = "full_crypto")]
-    fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; 32]) -> Seed {
+    fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; SEED_LENGTH]) -> Seed {
         ("Secp256r1", secret_seed, cc).using_encoded(blake2_256)
     }
 
     trait ToBytes33 {
-        fn to_bytes(&self) -> [u8; 33];
+        fn to_bytes(&self) -> Result<[u8; PUBLIC_KEY_LENGTH], ()>;
     }
 
     impl ToBytes33 for p256::PublicKey {
-        fn to_bytes(&self) -> [u8; 33] {
+        fn to_bytes(&self) -> Result<[u8; PUBLIC_KEY_LENGTH], ()> {
             let encoded_point = EncodedPoint::from(self);
             let compressed_point = encoded_point.compress();
-            compressed_point.as_bytes().try_into().unwrap()
+            compressed_point.as_bytes().try_into().map_err(|_| ())
         }
     }
 
