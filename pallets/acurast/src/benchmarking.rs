@@ -28,6 +28,10 @@ pub const INITIAL_BALANCE: u128 = UNIT * 10;
 pub const UNIT: Balance = 1_000_000;
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
+pub trait BenchmarkHelper<T: Config> {
+    fn registration_extra() -> T::RegistrationExtra;
+}
+
 pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
@@ -113,12 +117,11 @@ where
     T: pallet_assets::Config,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: Default,
 {
     let caller: T::AccountId = token_22_funded_account::<T>();
     whitelist_account!(caller);
 
-    let job = job_registration::<T>(Default::default());
+    let job = job_registration::<T>(<T as Config>::BenchmarkHelper::registration_extra());
 
     if submit {
         let register_call =
@@ -134,7 +137,6 @@ benchmarks! {
         T: pallet_assets::Config + pallet_timestamp::Config,
         <T as pallet_assets::Config>::AssetId: From<u32>,
         <T as pallet_assets::Config>::Balance: From<u128>,
-        <T as Config>::RegistrationExtra: Default,
         <T as frame_system::Config>::AccountId: From<[u8; 32]>,
         <T as pallet_timestamp::Config>::Moment: From<u64>,
     }
