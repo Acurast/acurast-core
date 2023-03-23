@@ -34,9 +34,6 @@ pub mod pallet {
     use xcm::prelude::{Abstract, AssetId, Concrete, GeneralIndex, PalletInstance, Parachain, X3};
     use xcm_executor::traits::Convert;
 
-    #[cfg(feature = "runtime-benchmarks")]
-    use crate::benchmarking::BenchmarkHelper;
-
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
@@ -50,8 +47,9 @@ pub mod pallet {
         type ManagerOrigin: EnsureOrigin<Self::RuntimeOrigin>;
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
+
         #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper: BenchmarkHelper<Self>;
+        type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]

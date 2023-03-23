@@ -6,7 +6,7 @@ pub mod mock;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+pub mod benchmarking;
 
 mod traits;
 pub mod utils;
@@ -55,6 +55,9 @@ pub mod pallet {
         type JobHooks: JobHooks<Self>;
         /// Weight Info for extrinsics. Needs to include weight of hooks called. The weights in this pallet or only correct when using the default hooks [()].
         type WeightInfo: WeightInfo;
+
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]
