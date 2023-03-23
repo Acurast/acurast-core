@@ -88,6 +88,9 @@ pub mod pallet {
         type RewardManager: RewardManager<Self>;
         type AssetValidator: AssetValidator<Self::AssetId>;
         type WeightInfo: WeightInfo;
+
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
     #[pallet::pallet]

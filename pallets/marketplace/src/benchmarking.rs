@@ -19,6 +19,11 @@ use crate::Pallet as AcurastMarketplace;
 
 use super::*;
 
+pub trait BenchmarkHelper<T: Config> {
+    /// Extends the job requirements, defined by benchmarking code in this pallet, with the containing struct RegistrationExtra.
+    fn registration_extra(r: JobRequirementsFor<T>) -> <T as Config>::RegistrationExtra;
+}
+
 pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
@@ -34,7 +39,6 @@ pub fn advertisement<T: Config>(
     storage_capacity: u32,
 ) -> AdvertisementFor<T>
 where
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
     RewardFor<T>: From<MockAsset>,
     <T as Config>::AssetId: From<u32>,
     <T as Config>::AssetAmount: From<u128>,
@@ -66,7 +70,6 @@ pub fn job_registration_with_reward<T: Config>(
     reward_value: u128,
 ) -> JobRegistrationFor<T>
 where
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
     RewardFor<T>: From<MockAsset>,
 {
     let r = JobRequirements {
@@ -75,7 +78,7 @@ where
         min_reputation: Some(0),
         instant_match: None,
     };
-    let r: <T as Config>::RegistrationExtra = r.into();
+    let r: <T as Config>::RegistrationExtra = <T as Config>::BenchmarkHelper::registration_extra(r);
     let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
     JobRegistrationFor::<T> {
         script,
@@ -139,7 +142,6 @@ where
     <T as Config>::AssetAmount: From<u128>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
     RewardFor<T>: From<MockAsset>,
 {
     let caller: T::AccountId = token_22_funded_account::<T>();
@@ -165,7 +167,6 @@ where
     <T as Config>::AssetAmount: From<u128>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
-    <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
     RewardFor<T>: From<MockAsset>,
 {
     let caller: T::AccountId = token_22_funded_account::<T>();
@@ -185,7 +186,6 @@ where
 benchmarks! {
     where_clause {  where
         T: pallet_assets::Config + pallet_acurast::Config,
-        <T as Config>::RegistrationExtra: From<JobRequirementsFor<T>>,
         RewardFor<T>: From<MockAsset>,
         <T as Config>::AssetId: From<u32>,
         <T as Config>::AssetAmount: From<u128>,

@@ -47,6 +47,7 @@ pub mod pallet {
         type ManagerOrigin: EnsureOrigin<Self::RuntimeOrigin>;
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
+
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
