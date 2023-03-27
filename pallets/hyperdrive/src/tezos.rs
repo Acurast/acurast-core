@@ -13,9 +13,8 @@ use sp_std::vec;
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
-use tezos_michelson::michelson::data::{self, try_nat};
 use tezos_michelson::michelson::data::{
-    try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
+    self, try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
 use tezos_michelson::michelson::types::{
     address, bool as bool_type, bytes, nat, option, pair, set, string,
@@ -26,9 +25,7 @@ use tezos_michelson::{
     michelson::ComparableTypePrimitive,
 };
 
-use pallet_acurast::{
-    JobIdSequence, JobModule, JobModules, JobRegistration, MultiOrigin, Schedule, CU32,
-};
+use pallet_acurast::{JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32};
 use pallet_acurast_marketplace::{
     JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
 };
@@ -119,9 +116,6 @@ fn message_schema() -> &'static Micheline {
 /// # Example
 /// A message to register a job could look like:
 ///
-/// ```txt
-/// PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(String(String("REGISTER_JOB"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x00008a8584be3718453e78923713a6966202b05f99c6"))), Literal(Bytes(Bytes("0x050707030a0707030607070a0000001601000000000000000000000000000000000000000000070707070000070703060707030607070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f3741445832636444656100010707000207070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001")))]), annots: None })]), annots: None })
-/// ```
 fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), ValidationError> {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(message_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
@@ -180,6 +174,7 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 ///     jobId=sp.TNat,
 ///     memory=sp.TNat,
 ///     networkRequests=sp.TNat,
+///     requiredModules = sp.TSet(sp.TNat),
 ///     schedule=sp.TRecord(
 ///         duration=sp.TNat,
 ///         endTime=sp.TNat,
@@ -230,6 +225,9 @@ fn registration_payload_schema() -> &'static Micheline {
             nat(),
             // network_requests
             nat(),
+            // required_modules
+            set(nat()),
+            // schedule
             pair(
                 // Schedules
                 vec![
@@ -258,9 +256,6 @@ fn registration_payload_schema() -> &'static Micheline {
 /// # Example
 /// A message's payload to register a job could look like:
 ///
-/// ```txt
-/// PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "True", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M")))]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x01000000000000000000000000000000000000000000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Some", args: Some([Sequence(Sequence([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(String(String("5DxbTWE4FkSdCQ1D6mJDN2nqcaVw7MaKqwjvjDGRdYenKk2M"))), Literal(Int(Int("0")))]), annots: None })]))]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "None", args: None, annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0xff"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("4"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("30000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("1678266546623"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("31000"))), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Int(Int("0"))), Literal(Int(Int("1678266066623")))]), annots: None })]), annots: None })]), annots: None })]), annots: None }), PrimitiveApplication(PrimitiveApplication { prim: "Pair", args: Some([Literal(Bytes(Bytes("0x697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f37414458326364446561"))), Literal(Int(Int("1")))]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })]), annots: None })
-/// ```
 fn parse_job_registration_payload<
     Reward,
     Balance,
@@ -285,10 +280,9 @@ where
     let pair: Pair = p.try_into()?;
 
     let values = pair.flatten().values;
-    if values.len() != 18 {
-        Err(ValidationError::InvalidMessage)?;
-    }
     let mut iter = values.into_iter();
+
+    // !!! [IMPORTANT]: The values need to be decoded alphabetically !!!
 
     let allow_only_verified_sources: bool = try_bool(iter.next().ok_or(
         ValidationError::MissingField(FieldError::AllowOnlyVerifiedSources),
@@ -404,6 +398,20 @@ where
         )?;
         v.to_integer()?
     };
+
+    let required_modules_unparsed = iter
+        .next()
+        .ok_or(ValidationError::MissingField(FieldError::RequiredModules))?;
+    let required_modules = try_sequence::<JobModule, _>(required_modules_unparsed, |module| {
+        let value: Int = module.try_into()?;
+        value
+            .to_integer::<u32>()?
+            .try_into()
+            .map_err(|_| ValidationError::RequiredModulesParsing)
+    })?
+    .try_into()
+    .map_err(|_| ValidationError::RequiredModulesParsing)?;
+
     let duration = {
         let v: Int = try_int(
             iter.next()
@@ -457,22 +465,6 @@ where
         )?;
         v.to_integer()?
     };
-
-    let mut required_modules: JobModules = vec![]
-        .try_into()
-        .map_err(|_| ValidationError::RequiredModulesParsing)?;
-    if let Some(value) = iter.next() {
-        required_modules = try_sequence::<JobModule, _>(value, |module| {
-            Ok(try_nat::<_, Nat, _>(module)
-                .map_err(|_| ValidationError::RequiredModulesParsing)?
-                .to_integer::<u32>()
-                .map_err(|_| ValidationError::RequiredModulesParsing)?
-                .try_into()
-                .map_err(|_| ValidationError::RequiredModulesParsing)?)
-        })?
-        .try_into()
-        .map_err(|_| ValidationError::RequiredModulesParsing)?;
-    }
 
     let extra: Extra = RegistrationExtra {
         destination,
@@ -559,6 +551,7 @@ pub enum FieldError {
     EndTime,
     Interval,
     MaxStartDelay,
+    RequiredModules,
     StartTime,
     Script,
     Storage,
@@ -614,10 +607,10 @@ mod tests {
 
     #[test]
     fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000edaa0fa299565241bd285414579f88705568c6b00a00000102050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070a000000160100000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000207070001070700010707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f804670a0000010b050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070a000000160100000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
-        let exp: TezosAddress = "tz1hJgZdhnRGvg5XD6pYxRCsbWh4jg5HQ476".try_into().unwrap();
+        let exp: TezosAddress = "tz1h4EsGunH2Ue1T2uNs8mfKZ8XZoQji3HcK".try_into().unwrap();
         assert_eq!(exp, origin);
 
         let payload: Vec<u8> = (&payload).into();
@@ -661,7 +654,7 @@ mod tests {
             memory: 1,
             network_requests: 1,
             storage: 1,
-            required_modules: JobModules::default(),
+            required_modules: vec![JobModule::DataEncryption].try_into().unwrap(),
             extra: RegistrationExtra {
                 destination: MultiDestination::Tezos(
                     BoundedVec::<u8, CU32<36>>::try_from([0; 21].to_vec()).unwrap(),
@@ -684,7 +677,7 @@ mod tests {
         };
 
         assert_eq!(expected, registration);
-        assert_eq!(2, job_id);
+        assert_eq!(1, job_id);
         Ok(())
     }
 }
