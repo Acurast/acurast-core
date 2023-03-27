@@ -13,7 +13,7 @@ use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use serde::{Deserialize, Serialize};
 use sp_std::prelude::*;
 
-const ISSUER_NAME_MAX_LENGTH: u32 = 64;
+const ISSUER_NAME_MAX_LENGTH: u32 = 128;
 pub type IssuerName = BoundedVec<u8, ConstU32<ISSUER_NAME_MAX_LENGTH>>;
 
 pub(crate) const PURPOSE_MAX_LENGTH: u32 = 50;
