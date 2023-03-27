@@ -42,6 +42,7 @@ pub struct TBSCertificate<'a> {
     pub version: u64,
     pub serial_number: asn1::BigUint<'a>,
     pub signature: AlgorithmIdentifier<'a>,
+    // RFC: https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.4
     pub issuer: Name<'a>,
     pub validity: Validity,
     pub subject: Name<'a>,
