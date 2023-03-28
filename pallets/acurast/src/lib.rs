@@ -8,6 +8,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
+mod migration;
 mod traits;
 pub mod utils;
 pub mod weights;
@@ -18,6 +19,8 @@ pub use traits::*;
 
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+
+pub(crate) use pallet::STORAGE_VERSION;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -185,9 +188,12 @@ pub mod pallet {
         }
     }
 
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// A unique job identifier sequence for jobs created directly from this pallet.
@@ -292,7 +298,11 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> frame_support::weights::Weight {
+            crate::migration::migrate_to_v2::<T>()
+        }
+    }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {

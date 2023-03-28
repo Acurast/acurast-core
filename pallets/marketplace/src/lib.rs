@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use functions::*;
 pub use pallet::*;
 pub use payments::*;
 pub use types::*;
@@ -14,11 +15,15 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
+mod functions;
+mod migration;
 pub mod payments;
 pub mod types;
 mod utils;
 pub mod weights;
 pub mod weights_with_hooks;
+
+pub(crate) use pallet::STORAGE_VERSION;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -54,7 +59,7 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedConsumers: Get<u32>;
+        type MaxAllowedConsumers: Get<u32> + Parameter;
         type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
@@ -93,9 +98,12 @@ pub mod pallet {
         type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// The storage for jobs' status as a map [`AccountId`] `(consumer)` -> [`Script`] -> [`JobStatus`].
@@ -275,10 +283,16 @@ pub mod pallet {
         ReportOutsideSchedule,
         /// Reputation not known for a source. SEVERE error
         ReputationNotFound,
+        /// Job required module not available.
+        ModuleNotAvailableInMatch,
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> frame_support::weights::Weight {
+            crate::migration::migrate_to_v2::<T>()
+        }
+    }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -296,55 +310,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             ensure!((&advertisement).pricing.len() > 0, Error::<T>::EmptyPricing);
 
-            if let Some(allowed_consumers) = &advertisement.allowed_consumers {
-                let max_allowed_consumers_len = T::MaxAllowedSources::get() as usize;
-                ensure!(
-                    allowed_consumers.len() > 0,
-                    Error::<T>::TooFewAllowedConsumers
-                );
-                ensure!(
-                    allowed_consumers.len() <= max_allowed_consumers_len,
-                    Error::<T>::TooManyAllowedConsumers
-                );
-            }
-
-            // update capacity to save on operations when checking available capacity
-            if let Some(old) = <StoredAdvertisementRestriction<T>>::get(&who) {
-                // allow capacity to become negative (in which case source remains assigned but does not receive new jobs assigned)
-                <StoredStorageCapacity<T>>::mutate(&who, |c| {
-                    // new remaining capacity = new total capacity - (old total capacity - old remaining capacity) = old remaining capacity + new total capacity - old total capacity
-                    *c = Some(
-                        c.unwrap_or(0)
-                            .checked_add(advertisement.storage_capacity as i64)
-                            .unwrap_or(i64::MAX)
-                            .checked_sub(old.storage_capacity as i64)
-                            .unwrap_or(0),
-                    )
-                });
-            } else {
-                <StoredStorageCapacity<T>>::insert(&who, advertisement.storage_capacity as i64);
-            }
-
-            <StoredAdvertisementRestriction<T>>::insert(
-                &who,
-                AdvertisementRestriction {
-                    max_memory: advertisement.max_memory,
-                    network_request_quota: advertisement.network_request_quota,
-                    storage_capacity: advertisement.storage_capacity,
-                    allowed_consumers: advertisement.allowed_consumers.clone(),
-                },
-            );
-            // update separate pricing index
-            for pricing in &advertisement.pricing {
-                T::AssetValidator::validate(&pricing.reward_asset).map_err(|e| e.into())?;
-                <StoredAdvertisementPricing<T>>::insert(&who, &pricing.reward_asset, pricing);
-
-                <StoredReputation<T>>::mutate(&who, &pricing.reward_asset, |r| {
-                    if r.is_none() {
-                        *r = Some(BetaParameters::default());
-                    }
-                });
-            }
+            Self::do_advertise(&who, &advertisement)?;
 
             Self::deposit_event(Event::AdvertisementStored(advertisement, who));
             Ok(().into())
@@ -768,6 +734,13 @@ pub mod pallet {
 
                     let ad = <StoredAdvertisementRestriction<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::AdvertisementNotFound)?;
+
+                    for required_module in &registration.required_modules {
+                        ensure!(
+                            ad.available_modules.contains(required_module),
+                            Error::<T>::ModuleNotAvailableInMatch
+                        );
+                    }
 
                     let pricing = <StoredAdvertisementPricing<T>>::get(
                         &planned_execution.source,

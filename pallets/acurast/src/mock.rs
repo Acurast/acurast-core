@@ -1,4 +1,4 @@
-use acurast_common::Schedule;
+use acurast_common::{JobModules, Schedule};
 use frame_support::{
     dispatch::Weight, pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
     traits::Everything, PalletId,
@@ -183,6 +183,8 @@ impl crate::Config for Test {
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type JobHooks = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 pub fn events() -> Vec<RuntimeEvent> {
@@ -229,6 +231,7 @@ pub fn job_registration(
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: (),
     }
 }
@@ -248,6 +251,7 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: (),
     }
 }
@@ -267,6 +271,7 @@ pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra: (),
     }
 }

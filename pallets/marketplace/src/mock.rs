@@ -14,7 +14,7 @@ use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
 
-use pallet_acurast::{CertificateRevocationListUpdate, RevocationListUpdateBarrier};
+use pallet_acurast::{CertificateRevocationListUpdate, JobModules, RevocationListUpdateBarrier};
 
 use crate::stub::*;
 use crate::*;
@@ -226,6 +226,22 @@ impl pallet_acurast::Config for Test {
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type JobHooks = Pallet<Test>;
     type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = TestBenchmarkHelper;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TestBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_acurast::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
+    fn registration_extra() -> <Test as pallet_acurast::Config>::RegistrationExtra {
+        JobRequirements {
+            slots: 1,
+            reward: asset(1),
+            min_reputation: None,
+            instant_match: None,
+        }
+    }
 }
 
 impl mock_pallet::Config for Test {
@@ -287,7 +303,7 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type MaxAllowedConsumers = frame_support::traits::ConstU32<4>;
+    type MaxAllowedConsumers = pallet_acurast::CU32<4>;
     type MaxProposedMatches = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
@@ -297,6 +313,15 @@ impl Config for Test {
     type RewardManager = MockRewardManager;
     type AssetValidator = PassAllAssets;
     type WeightInfo = weights::Weights<Test>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = TestBenchmarkHelper;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
+    fn registration_extra(r: JobRequirementsFor<Test>) -> <Test as Config>::RegistrationExtra {
+        r
+    }
 }
 
 pub fn events() -> Vec<RuntimeEvent> {
@@ -339,5 +364,6 @@ pub fn advertisement(
         storage_capacity,
         max_memory,
         network_request_quota,
+        available_modules: JobModules::default(),
     }
 }

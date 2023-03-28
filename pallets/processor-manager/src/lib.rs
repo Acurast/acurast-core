@@ -36,7 +36,7 @@ pub mod pallet {
         pallet_prelude::{Member, *},
         sp_runtime::traits::{CheckedAdd, IdentifyAccount, StaticLookup, Verify},
         traits::{Get, UnixTime},
-        Blake2_128,
+        Blake2_128, Parameter,
     };
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
     use sp_std::prelude::*;
@@ -55,6 +55,8 @@ pub mod pallet {
         type MaxPairingUpdates: Get<u32>;
         type Counter: Parameter + Member + MaxEncodedLen + Copy + CheckedAdd + Ord + From<u8>;
         type PairingProofExpirationTime: Get<u128>;
+        type Advertisement: Parameter + Member;
+        type AdvertisementHandler: AdvertisementHandler<Self>;
         /// Timestamp
         type UnixTime: UnixTime;
         /// Weight Info for extrinsics.
@@ -78,7 +80,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            for (manager, processors) in self.managers.clone() {
+            for (manager, processors) in &self.managers {
                 let manager_id =
                     T::ManagerIdProvider::manager_id_for(&manager).unwrap_or_else(|_| {
                         // Get the latest manager identifier in the sequence.
@@ -137,11 +139,18 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// Manager id created. [manager_account_id, manager_id]
         ManagerCreated(T::AccountId, T::ManagerId),
+        /// Processor pairing updated. [manager_account_id, updates]
         ProcessorPairingsUpdated(T::AccountId, ProcessorUpdatesFor<T>),
+        /// Processor pairing updated. [processor_account_id, destination]
         ProcessorFundsRecovered(T::AccountId, T::AccountId),
+        /// Processor paired. [processor_account_id, pairing]
         ProcessorPaired(T::AccountId, ProcessorPairingFor<T>),
+        /// Heartbeat. [processor_account_id]
         ProcessorHeartbeat(T::AccountId),
+        /// Processor advertisement. [manager_account_id, processor_account_id, advertisement]
+        ProcessorAdvertisement(T::AccountId, T::AccountId, T::Advertisement),
     }
 
     // Errors inform users that something went wrong.
@@ -154,6 +163,23 @@ pub mod pallet {
         ProcessorHasNoManager,
         CounterOverflow,
         PairingProofExpired,
+    }
+
+    impl<T: Config> Pallet<T> {
+        fn ensure_managed(
+            manager: &T::AccountId,
+            processor: &T::AccountId,
+        ) -> Result<T::ManagerId, DispatchError> {
+            let manager_id = T::ManagerIdProvider::manager_id_for(manager)?;
+            let processor_manager_id = Self::manager_id_for_processor(processor)
+                .ok_or(Error::<T>::ProcessorHasNoManager)?;
+
+            if manager_id != processor_manager_id {
+                return Err(Error::<T>::ProcessorPairedWithAnotherManager)?;
+            }
+
+            Ok(manager_id)
+        }
     }
 
     #[pallet::call]
@@ -245,15 +271,9 @@ pub mod pallet {
             destination: <T::Lookup as StaticLookup>::Source,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let manager_id = T::ManagerIdProvider::manager_id_for(&who)?;
             let processor_account_id = <T::Lookup as StaticLookup>::lookup(processor)?;
+            _ = Self::ensure_managed(&who, &processor_account_id)?;
             let destination_account_id = <T::Lookup as StaticLookup>::lookup(destination)?;
-            let processor_manager_id = Self::manager_id_for_processor(&processor_account_id)
-                .ok_or(Error::<T>::ProcessorHasNoManager)?;
-
-            if manager_id != processor_manager_id {
-                return Err(Error::<T>::ProcessorPairedWithAnotherManager)?;
-            }
 
             T::ProcessorAssetRecovery::recover_assets(
                 &processor_account_id,
@@ -272,12 +292,33 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::heartbeat())]
         pub fn heartbeat(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let _ =
-                Self::manager_id_for_processor(&who).ok_or(Error::<T>::ProcessorHasNoManager)?;
+            _ = Self::manager_id_for_processor(&who).ok_or(Error::<T>::ProcessorHasNoManager)?;
 
             <ProcessorHeartbeat<T>>::insert(&who, T::UnixTime::now().as_millis());
 
             Self::deposit_event(Event::<T>::ProcessorHeartbeat(who));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(4)]
+        #[pallet::weight(T::WeightInfo::advertise_for())]
+        pub fn advertise_for(
+            origin: OriginFor<T>,
+            processor: <T::Lookup as StaticLookup>::Source,
+            advertisement: T::Advertisement,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            let processor_account_id = <T::Lookup as StaticLookup>::lookup(processor)?;
+            _ = Self::ensure_managed(&who, &processor_account_id)?;
+
+            T::AdvertisementHandler::advertise_for(&processor_account_id, &advertisement)?;
+
+            Self::deposit_event(Event::<T>::ProcessorAdvertisement(
+                who,
+                processor_account_id,
+                advertisement,
+            ));
 
             Ok(().into())
         }

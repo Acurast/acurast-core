@@ -32,6 +32,15 @@ pub trait BenchmarkHelper<T: Config> {
     fn registration_extra() -> T::RegistrationExtra;
 }
 
+impl<T: Config> BenchmarkHelper<T> for ()
+where
+    T::RegistrationExtra: Default,
+{
+    fn registration_extra() -> T::RegistrationExtra {
+        Default::default()
+    }
+}
+
 pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
@@ -51,6 +60,7 @@ pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrati
         memory: 5_000u32,
         network_requests: 5,
         storage: 20_000u32,
+        required_modules: JobModules::default(),
         extra,
     };
 }

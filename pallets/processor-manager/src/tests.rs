@@ -374,7 +374,7 @@ fn test_recover_funds_failure_2() {
 
         assert_ok!(AcurastProcessorManager::update_processor_pairings(
             RuntimeOrigin::signed(bob_account_id()),
-            vec![].try_into().unwrap(),
+            Default::default(),
         ));
 
         let call = AcurastProcessorManager::recover_funds(
@@ -425,6 +425,84 @@ fn test_pair_with_manager() {
                     update
                 )),
             ]
+        );
+    });
+}
+
+#[test]
+fn test_advertise_for_success() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (signer, manager_account) = generate_account();
+        let (_, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &manager_account, timestamp, 1);
+        let update = ProcessorPairingFor::<Test>::new_with_proof(
+            manager_account.clone(),
+            timestamp,
+            signature,
+        );
+        assert_ok!(AcurastProcessorManager::pair_with_manager(
+            RuntimeOrigin::signed(processor_account.clone()),
+            update,
+        ));
+
+        assert_ok!(AcurastProcessorManager::advertise_for(
+            RuntimeOrigin::signed(manager_account.clone()),
+            processor_account.clone().into(),
+            (),
+        ));
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::ProcessorAdvertisement(manager_account, processor_account, ())
+            ))
+            .as_ref()
+        );
+    });
+}
+
+#[test]
+fn test_advertise_for_failure() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (signer, manager_account) = generate_account();
+        let (_, processor_account) = generate_account();
+        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
+        let timestamp = 1657363915002u128;
+        let signature = generate_signature(&signer, &manager_account, timestamp, 1);
+        let update = ProcessorPairingFor::<Test>::new_with_proof(
+            manager_account.clone(),
+            timestamp,
+            signature,
+        );
+        assert_ok!(AcurastProcessorManager::pair_with_manager(
+            RuntimeOrigin::signed(processor_account.clone()),
+            update,
+        ));
+
+        let (signer, manager_account_2) = generate_account();
+        let (_, processor_account_2) = generate_account();
+
+        let signature = generate_signature(&signer, &manager_account_2, timestamp, 1);
+        let update = ProcessorPairingFor::<Test>::new_with_proof(
+            manager_account_2.clone(),
+            timestamp,
+            signature,
+        );
+        assert_ok!(AcurastProcessorManager::pair_with_manager(
+            RuntimeOrigin::signed(processor_account_2.clone()),
+            update,
+        ));
+
+        assert_err!(
+            AcurastProcessorManager::advertise_for(
+                RuntimeOrigin::signed(manager_account_2),
+                processor_account.clone().into(),
+                (),
+            ),
+            Error::<Test>::ProcessorPairedWithAnotherManager,
         );
     });
 }

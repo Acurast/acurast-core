@@ -169,6 +169,8 @@ impl pallet_uniques::Config for Test {
     type KeyLimit = ConstU32<256>;
     type ValueLimit = ConstU32<256>;
     type WeightInfo = pallet_uniques::weights::SubstrateWeight<Self>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }
 
 impl pallet_timestamp::Config for Test {
@@ -188,6 +190,8 @@ impl Config for Test {
     type Counter = u64;
     type PairingProofExpirationTime = ConstU128<600000>;
     type UnixTime = pallet_timestamp::Pallet<Test>;
+    type Advertisement = ();
+    type AdvertisementHandler = ();
     type WeightInfo = ();
 }
 

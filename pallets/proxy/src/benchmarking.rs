@@ -9,7 +9,8 @@ use pallet_acurast_marketplace::Advertisement;
 pub trait BenchmarkHelper<T: Config> {
     fn create_job_registration() -> JobRegistration<T::AccountId, T::RegistrationExtra>;
     fn create_allowed_sources_update(index: u32) -> AllowedSourcesUpdate<T::AccountId>;
-    fn create_advertisement() -> Advertisement<T::AccountId, T::AssetId, T::AssetAmount>;
+    fn create_advertisement(
+    ) -> Advertisement<T::AccountId, T::AssetId, T::AssetAmount, T::MaxAllowedConsumers>;
 }
 
 benchmarks! {
