@@ -7,9 +7,7 @@ use frame_support::{
 };
 use sp_core::*;
 use sp_io;
-use sp_runtime::traits::{
-    AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32, StaticLookup,
-};
+use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
 use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
@@ -30,12 +28,6 @@ impl RevocationListUpdateBarrier<Test> for Barrier {
         _updates: &Vec<CertificateRevocationListUpdate>,
     ) -> bool {
         AllowedRevocationListUpdate::get().contains(origin)
-    }
-}
-
-impl AssetBarrier<MockAsset> for Barrier {
-    fn can_use_asset(_asset: &MockAsset) -> bool {
-        true
     }
 }
 
@@ -277,26 +269,28 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
     type Reward = MockAsset;
 
     fn lock_reward(
-        reward: Self::Reward,
-        _owner: <<T>::Lookup as StaticLookup>::Source,
+        reward: &Self::Reward,
+        _owner: &<T as frame_system::Config>::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward.clone()));
         Ok(())
     }
 
     fn pay_reward(
-        reward: Self::Reward,
-        _target: <<T>::Lookup as StaticLookup>::Source,
+        reward: &Self::Reward,
+        _target: &<T as frame_system::Config>::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward.clone()));
         Ok(())
     }
 
     fn pay_matcher_reward(
-        reward: Self::Reward,
-        _matcher: <<T>::Lookup as StaticLookup>::Source,
+        reward: &Self::Reward,
+        _matcher: &<T as frame_system::Config>::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(reward));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(
+            reward.clone(),
+        ));
         Ok(())
     }
 }

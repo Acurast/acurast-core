@@ -28,8 +28,8 @@ pub(crate) use pallet::STORAGE_VERSION;
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
-        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*,
-        sp_runtime::traits::StaticLookup, traits::UnixTime, Blake2_128, PalletId,
+        dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
+        Blake2_128, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
@@ -352,10 +352,7 @@ pub mod pallet {
 
             // pay part of accumulated remaining reward (unspent to consumer) to matcher
             // pay only after all other steps succeeded without errors because paying reward is not revertable
-            T::RewardManager::pay_matcher_reward(
-                remaining_reward,
-                T::Lookup::unlookup(who.clone()),
-            )?;
+            T::RewardManager::pay_matcher_reward(&remaining_reward, &who)?;
 
             Ok(().into())
         }
@@ -478,6 +475,7 @@ pub mod pallet {
                         .try_get_asset_id()
                         .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                         .into();
+
                     T::AssetValidator::validate(&reward_asset).map_err(|e| e.into())?;
 
                     let reward_amount: <T as Config>::AssetAmount = requirements
@@ -542,10 +540,7 @@ pub mod pallet {
             }
 
             // pay only after all other steps succeeded without errors because paying reward is not revertable
-            T::RewardManager::pay_reward(
-                assignment.fee_per_execution.clone(),
-                T::Lookup::unlookup(who.clone()),
-            )?;
+            T::RewardManager::pay_reward(&assignment.fee_per_execution, &who)?;
 
             match execution_result {
                 ExecutionResult::Success(operation_hash) => {
@@ -627,11 +622,11 @@ pub mod pallet {
             // lock only after all other steps succeeded without errors because locking reward is not revertable
             if let MultiOrigin::Acurast(who) = who {
                 // reward is understood per slot and execution
-                let mut reward = requirements.reward.clone();
+                let mut reward = requirements.reward;
                 reward
                     .with_amount(Self::total_reward_amount(registration)?.into())
                     .map_err(|_| Error::<T>::RewardConversionFailed)?;
-                T::RewardManager::lock_reward(reward, T::Lookup::unlookup(who.clone()))?;
+                T::RewardManager::lock_reward(&reward, &who)?;
             }
 
             Ok(().into())

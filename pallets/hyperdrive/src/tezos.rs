@@ -26,9 +26,7 @@ use tezos_michelson::{
 };
 
 use pallet_acurast::{JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32};
-use pallet_acurast_marketplace::{
-    JobRequirements, MultiDestination, PlannedExecution, RegistrationExtra,
-};
+use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 
 use crate::types::{MessageParser, RawAction};
 use crate::RewardParser;
@@ -154,7 +152,6 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 /// sp.TRecord(
 ///     allowOnlyVerifiedSources=sp.TBool,
 ///     allowedSources=sp.TOption(sp.TSet(sp.TString)),
-///     destination=sp.TAddress,
 ///     extra=sp.TRecord(
 ///         expectedFulfillmentFee=sp.TNat,
 ///         requirements=sp.TRecord(
@@ -195,8 +192,6 @@ fn registration_payload_schema() -> &'static Micheline {
             bool_type(),
             // allowed_sources
             option(set(bytes())),
-            // destination
-            address(),
             // RegistrationExtra
             pair(vec![
                 // expected_fulfillment_fee
@@ -300,13 +295,6 @@ where
         },
     )?;
 
-    let destination = {
-        let address = try_address(
-            iter.next()
-                .ok_or(ValidationError::MissingField(FieldError::Destination))?,
-        )?;
-        MultiDestination::Tezos(bounded_address(&address)?)
-    };
     let expected_fulfillment_fee = {
         let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
             FieldError::ExpectedFulfillmentFee,
@@ -467,8 +455,6 @@ where
     };
 
     let extra: Extra = RegistrationExtra {
-        destination,
-        parameters: None,
         requirements: JobRequirements {
             slots,
             reward,
@@ -607,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f804670a0000010b050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070a000000160100000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f804670a000000ee050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
         let exp: TezosAddress = "tz1h4EsGunH2Ue1T2uNs8mfKZ8XZoQji3HcK".try_into().unwrap();
@@ -656,10 +642,6 @@ mod tests {
             storage: 1,
             required_modules: vec![JobModule::DataEncryption].try_into().unwrap(),
             extra: RegistrationExtra {
-                destination: MultiDestination::Tezos(
-                    BoundedVec::<u8, CU32<36>>::try_from([0; 21].to_vec()).unwrap(),
-                ),
-                parameters: None,
                 requirements: JobRequirements {
                     slots: 1,
                     reward: MockAsset { id: 5, amount: 255 },

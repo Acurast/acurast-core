@@ -147,7 +147,7 @@ pub mod acurast_runtime {
     pub use pallet_acurast::{self, CU32};
     use pallet_acurast_assets_manager::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
-    use pallet_acurast_marketplace::{AssetBarrier, AssetRewardManager, JobRequirements};
+    use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
 
     use super::{AcurastAsset, AcurastAssetAmount, AcurastAssetId, InternalAssetId};
 
@@ -171,14 +171,6 @@ pub mod acurast_runtime {
         super::SignedAccountId32FromXcm<RuntimeOrigin>,
         XcmPassthrough<RuntimeOrigin>,
     );
-
-    pub struct AcurastBarrier;
-
-    impl AssetBarrier<AcurastAsset> for AcurastBarrier {
-        fn can_use_asset(_asset: &AcurastAsset) -> bool {
-            true
-        }
-    }
 
     pub struct PassAllAssets {}
     impl<AssetId> AssetValidator<AssetId> for PassAllAssets {
@@ -409,7 +401,8 @@ pub mod acurast_runtime {
         type ReportTolerance = ReportTolerance;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
-        type RewardManager = AssetRewardManager<AcurastAsset, AcurastBarrier, FeeManagerImpl>;
+        type RewardManager =
+            AssetRewardManager<AcurastAsset, FeeManagerImpl, Balances, AcurastAssets>;
         type AssetValidator = PassAllAssets;
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
         #[cfg(feature = "runtime-benchmarks")]

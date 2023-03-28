@@ -1,8 +1,7 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
-use xcm::prelude::MultiLocation;
 
-use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, CU32};
+use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin};
 
 use crate::payments::RewardFor;
 use crate::Config;
@@ -25,8 +24,6 @@ pub struct RegistrationExtra<Reward, Balance, AccountId>
 where
     Reward: Parameter + Member,
 {
-    pub destination: MultiDestination,
-    pub parameters: Option<Vec<u8>>,
     pub requirements: JobRequirements<Reward, AccountId>,
     pub expected_fulfillment_fee: Balance,
 }
@@ -39,13 +36,6 @@ where
     fn from(extra: RegistrationExtra<Reward, Balance, AccountId>) -> Self {
         extra.requirements
     }
-}
-
-/// A multi destination identifies a destination contract on a given target chain.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub enum MultiDestination {
-    Acurast(MultiLocation),
-    Tezos(BoundedVec<u8, CU32<36>>),
 }
 
 /// The resource advertisement by a source containing pricing and capacity announcements.
