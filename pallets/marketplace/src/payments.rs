@@ -100,10 +100,11 @@ pub struct AssetRewardManager<Asset, AssetSplit, Currency, AssetTransfer>(
     PhantomData<(Asset, AssetSplit, Currency, AssetTransfer)>,
 );
 
-impl<T: Config, Asset, AssetSplit, Currency, AssetTransfer> RewardManager<T>
+impl<T, Asset, AssetSplit, Currency, AssetTransfer> RewardManager<T>
     for AssetRewardManager<Asset, AssetSplit, Currency, AssetTransfer>
 where
-    T: frame_system::Config,
+    T: Config<AssetId = AssetId> + frame_system::Config,
+    DispatchError: From<<<T as Config>::AssetValidator as AssetValidator<AssetId>>::Error>,
     Asset: Parameter + Member + Reward<AssetId = AssetId, AssetAmount = Currency::Balance>,
     AssetSplit: FeeManager,
     Currency: frame_support::traits::Currency<T::AccountId>,
@@ -120,6 +121,8 @@ where
         let asset_id = reward
             .try_get_asset_id()
             .map_err(|_| Error::<T>::InvalidAssetId)?;
+
+        T::AssetValidator::validate(&asset_id)?;
 
         let amount = reward
             .try_get_amount()
