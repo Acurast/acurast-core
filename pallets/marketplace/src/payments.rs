@@ -1,26 +1,15 @@
 use crate::{Config, Error};
 use core::marker::PhantomData;
 use frame_support::{
-    dispatch::RawOrigin,
     pallet_prelude::Member,
     sp_runtime::{
-        traits::{AccountIdConversion, Get, StaticLookup},
+        traits::{AccountIdConversion, Get},
         DispatchError, Percent,
     },
     Never, PalletId, Parameter,
 };
-use xcm::prelude::AssetId;
-
-/// Asset barrier that allows to customize which asset can be used as reward.
-pub trait AssetBarrier<Asset> {
-    fn can_use_asset(asset: &Asset) -> bool;
-}
-
-impl<Asset> AssetBarrier<Asset> for () {
-    fn can_use_asset(_asset: &Asset) -> bool {
-        false
-    }
-}
+use pallet_acurast_assets_manager::traits::AssetValidator;
+use xcm::{prelude::AssetId, v2::AssetId::Concrete};
 
 pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
@@ -60,40 +49,28 @@ impl Reward for () {
 pub trait RewardManager<T: frame_system::Config> {
     type Reward: Parameter + Member + Reward;
 
-    fn lock_reward(
-        reward: Self::Reward,
-        owner: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
-    fn pay_reward(
-        reward: Self::Reward,
-        target: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError>;
+    fn lock_reward(reward: &Self::Reward, owner: &T::AccountId) -> Result<(), DispatchError>;
+    fn pay_reward(reward: &Self::Reward, target: &T::AccountId) -> Result<(), DispatchError>;
     fn pay_matcher_reward(
-        reward: Self::Reward,
-        matcher: <T::Lookup as StaticLookup>::Source,
+        reward: &Self::Reward,
+        matcher: &T::AccountId,
     ) -> Result<(), DispatchError>;
 }
 
 impl<T: frame_system::Config> RewardManager<T> for () {
     type Reward = ();
 
-    fn lock_reward(
-        _reward: Self::Reward,
-        _owner: <<T>::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
+    fn lock_reward(_reward: &Self::Reward, _owner: &T::AccountId) -> Result<(), DispatchError> {
         Ok(())
     }
 
-    fn pay_reward(
-        _reward: Self::Reward,
-        _target: <<T>::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
+    fn pay_reward(_reward: &Self::Reward, _target: &T::AccountId) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_matcher_reward(
-        _reward: Self::Reward,
-        _matcher: <<T>::Lookup as StaticLookup>::Source,
+        _reward: &Self::Reward,
+        _matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
@@ -106,62 +83,76 @@ pub trait FeeManager {
     fn pallet_id() -> PalletId;
 }
 
-pub struct AssetRewardManager<Asset, Barrier, AssetSplit>(
-    PhantomData<(Asset, Barrier, AssetSplit)>,
+trait IsNativeAsset {
+    fn is_native_asset(&self) -> bool;
+}
+
+impl IsNativeAsset for AssetId {
+    fn is_native_asset(&self) -> bool {
+        match self {
+            Concrete(multi_location) => multi_location.is_here(),
+            _ => false,
+        }
+    }
+}
+
+pub struct AssetRewardManager<Asset, AssetSplit, Currency, AssetTransfer>(
+    PhantomData<(Asset, AssetSplit, Currency, AssetTransfer)>,
 );
-impl<T: Config, Asset, Barrier, AssetSplit> RewardManager<T>
-    for AssetRewardManager<Asset, Barrier, AssetSplit>
+
+impl<T, Asset, AssetSplit, Currency, AssetTransfer> RewardManager<T>
+    for AssetRewardManager<Asset, AssetSplit, Currency, AssetTransfer>
 where
-    T: pallet_acurast_assets_manager::Config,
-    Asset: Parameter
-        + Member
-        + Reward<AssetId = AssetId, AssetAmount = <T as pallet_assets::Config>::Balance>,
-    Barrier: AssetBarrier<Asset>,
+    T: Config<AssetId = AssetId> + frame_system::Config,
+    DispatchError: From<<<T as Config>::AssetValidator as AssetValidator<AssetId>>::Error>,
+    Asset: Parameter + Member + Reward<AssetId = AssetId, AssetAmount = Currency::Balance>,
     AssetSplit: FeeManager,
+    Currency: frame_support::traits::Currency<T::AccountId>,
+    AssetTransfer: pallet_acurast::AssetTransfer<
+        AccountId = T::AccountId,
+        AssetId = Asset::AssetId,
+        Balance = Currency::Balance,
+        Error = DispatchError,
+    >,
 {
     type Reward = Asset;
 
-    fn lock_reward(
-        reward: Self::Reward,
-        owner: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
-        if !Barrier::can_use_asset(&reward) {
-            Err(Error::<T>::AssetNotAllowedByBarrier)?;
-        }
-        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-        let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
-        let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
-            (Ok(id), Ok(amount)) => (id, amount),
-            (Err(_err), _) => Err(Error::<T>::InvalidAssetId)?,
-            (_, Err(_err)) => Err(Error::<T>::InvalidAssetAmount)?,
-        };
+    fn lock_reward(reward: &Self::Reward, owner: &T::AccountId) -> Result<(), DispatchError> {
+        let asset_id = reward
+            .try_get_asset_id()
+            .map_err(|_| Error::<T>::InvalidAssetId)?;
 
-        // transfer funds from caller to pallet account for holding until fulfill is called
-        // this is a privileged operation, hence the force_transfer call.
-        // we could do an approve_transfer first, but this would require the assets pallet being
-        // public which we can't do at the moment due to our statemint assets 1 to 1 integration
-        pallet_acurast_assets_manager::Pallet::<T>::force_transfer(
-            pallet_origin,
-            id.into(),
-            owner,
-            T::Lookup::unlookup(pallet_account),
-            amount,
-        )
+        T::AssetValidator::validate(&asset_id)?;
+
+        let amount = reward
+            .try_get_amount()
+            .map_err(|_| Error::<T>::InvalidAssetAmount)?;
+
+        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
+        if asset_id.is_native_asset() {
+            Currency::transfer(
+                owner,
+                &pallet_account,
+                amount,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            )?;
+        } else {
+            AssetTransfer::transfer(asset_id, owner, &pallet_account, amount)?;
+        }
+
+        Ok(())
     }
 
-    fn pay_reward(
-        reward: Self::Reward,
-        target: <T::Lookup as StaticLookup>::Source,
-    ) -> Result<(), DispatchError> {
+    fn pay_reward(reward: &Self::Reward, target: &T::AccountId) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-        let raw_origin = RawOrigin::<T::AccountId>::Signed(pallet_account.clone());
-        let pallet_origin: T::RuntimeOrigin = raw_origin.into();
-        let (id, amount) = match (reward.try_get_asset_id(), reward.try_get_amount()) {
-            (Ok(id), Ok(amount)) => (id, amount),
-            (Err(_err), _) => Err(Error::<T>::InvalidAssetId)?,
-            (_, Err(_err)) => Err(Error::<T>::InvalidAssetAmount)?,
-        };
+
+        let asset_id = reward
+            .try_get_asset_id()
+            .map_err(|_| Error::<T>::InvalidAssetId)?;
+
+        let amount = reward
+            .try_get_amount()
+            .map_err(|_| Error::<T>::InvalidAssetAmount)?;
 
         // Extract fee from the processor reward
         let fee_percentage = AssetSplit::get_fee_percentage(); // TODO: fee will be indexed by version in the future
@@ -172,25 +163,31 @@ where
 
         // Transfer fees to Acurast fees manager account
         let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
-        pallet_acurast_assets_manager::Pallet::<T>::transfer(
-            pallet_origin.clone(),
-            id.clone().into(),
-            T::Lookup::unlookup(fee_pallet_account),
-            fee,
-        )?;
 
-        // Transfer reward to the processor
-        pallet_acurast_assets_manager::Pallet::<T>::transfer(
-            pallet_origin,
-            id.into(),
-            target,
-            reward_after_fee.into(),
-        )
+        if asset_id.is_native_asset() {
+            Currency::transfer(
+                &pallet_account,
+                &fee_pallet_account,
+                fee,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            )?;
+            Currency::transfer(
+                &pallet_account,
+                target,
+                reward_after_fee,
+                frame_support::traits::ExistenceRequirement::KeepAlive,
+            )?;
+        } else {
+            AssetTransfer::transfer(asset_id.clone(), &pallet_account, &fee_pallet_account, fee)?;
+            AssetTransfer::transfer(asset_id, &pallet_account, target, reward_after_fee)?;
+        }
+
+        Ok(())
     }
 
     fn pay_matcher_reward(
-        remaining_reward: Self::Reward,
-        matcher: <T::Lookup as StaticLookup>::Source,
+        remaining_reward: &Self::Reward,
+        matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
         let matcher_fee_percentage = AssetSplit::get_matcher_percentage(); // TODO: fee will be indexed by version in the future
         let amount = remaining_reward
@@ -200,6 +197,23 @@ where
         r.with_amount(matcher_fee_percentage.mul_floor(amount))
             .map_err(|_| Error::<T>::InvalidAssetAmount)?;
 
-        <Self as RewardManager<T>>::pay_reward(r, matcher)
+        <Self as RewardManager<T>>::pay_reward(&r, matcher)
+    }
+}
+
+impl<Asset, AssetSplit, Currency, AssetTransfer> AssetValidator<AssetId>
+    for AssetRewardManager<Asset, AssetSplit, Currency, AssetTransfer>
+where
+    AssetTransfer: AssetValidator<AssetId>,
+    DispatchError: From<AssetTransfer::Error>,
+{
+    type Error = DispatchError;
+
+    fn validate(asset: &AssetId) -> Result<(), Self::Error> {
+        if asset.is_native_asset() {
+            Ok(())
+        } else {
+            Ok(AssetTransfer::validate(asset)?)
+        }
     }
 }
