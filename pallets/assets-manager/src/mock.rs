@@ -82,6 +82,10 @@ impl pallet_balances::Config for Test {
 }
 
 impl frame_system::Config for Test {
+    type BaseCallFilter = Everything;
+    type BlockWeights = ();
+    type BlockLength = ();
+    type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Index = u32;
     type BlockNumber = BlockNumber;
@@ -91,18 +95,14 @@ impl frame_system::Config for Test {
     type Lookup = AccountIdLookup<AccountId, ()>;
     type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
-    type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
+    type DbWeight = ();
     type Version = ();
     type PalletInfo = PalletInfo;
     type AccountData = pallet_balances::AccountData<Balance>;
     type OnNewAccount = ();
     type OnKilledAccount = ();
-    type DbWeight = ();
-    type BaseCallFilter = Everything;
     type SystemWeightInfo = ();
-    type BlockWeights = ();
-    type BlockLength = ();
     type SS58Prefix = ();
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;

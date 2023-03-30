@@ -6,7 +6,7 @@ use sp_core::ConstU32;
 use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
 use sp_std::vec;
-use strum_macros::EnumString;
+use strum_macros::{EnumString, IntoStaticStr};
 
 use pallet_acurast::{JobId, JobRegistration};
 
@@ -117,7 +117,9 @@ pub type StateKey = BoundedVec<u8, ConstU32<KEY_MAX_LENGTH>>;
 pub const VALUE_MAX_LENGTH: u32 = 4096;
 pub type StateValue = BoundedVec<u8, ConstU32<VALUE_MAX_LENGTH>>;
 
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, EnumString)]
+#[derive(
+    RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
+)]
 pub enum RawAction {
     #[strum(serialize = "REGISTER_JOB")]
     RegisterJob,
