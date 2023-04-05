@@ -136,7 +136,6 @@ fn test_match() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false,
             ExecutionResult::Success(operation_hash())
         ));
         // average reward only updated at end of job
@@ -180,9 +179,18 @@ fn test_match() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            true,
             ExecutionResult::Success(operation_hash())
         ));
+
+        // pretend time moved on
+        later(registration.schedule.end_time + 1);
+        assert_eq!(4, System::block_number());
+
+        assert_ok!(AcurastMarketplace::finalize_job(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            job_id.clone()
+        ));
+
         assert_eq!(
             None,
             AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
@@ -297,6 +305,7 @@ fn test_match() {
                         sla: SLA { total: 2, met: 2 },
                     }
                 )),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id.clone(),)),
             ]
         );
     });
@@ -616,7 +625,6 @@ fn test_more_reports_than_expected() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false,
             ExecutionResult::Success(operation_hash())
         ));
 
@@ -625,7 +633,6 @@ fn test_more_reports_than_expected() {
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
-            false,
             ExecutionResult::Success(operation_hash())
         ));
 
@@ -635,7 +642,6 @@ fn test_more_reports_than_expected() {
             AcurastMarketplace::report(
                 RuntimeOrigin::signed(processor_account_id()).into(),
                 job_id.clone(),
-                true,
                 ExecutionResult::Success(operation_hash())
             ),
             Error::<Test>::MoreReportsThanExpected
