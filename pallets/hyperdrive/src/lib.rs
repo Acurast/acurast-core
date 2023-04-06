@@ -351,6 +351,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
+            let key_bytes = &key.to_vec();
             let message_bytes = &value.to_vec();
             let leaf_hash = Self::leaf_hash(T::TargetChainOwner::get(), key, value);
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
@@ -360,7 +361,7 @@ pub mod pallet {
             }
 
             // don't fail extrinsic from here onwards
-            if let Err(e) = Self::process_message(message_bytes) {
+            if let Err(e) = Self::process_message(key_bytes, message_bytes) {
                 Self::deposit_event(Event::MessageProcessed(e));
             }
 
@@ -411,8 +412,11 @@ pub mod pallet {
             <CurrentTargetChainOwner<T, I>>::set(owner);
         }
 
-        fn process_message(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
-            let message_id = T::MessageParser::parse_key(message_bytes)
+        fn process_message(
+            key_bytes: &Vec<u8>,
+            message_bytes: &Vec<u8>,
+        ) -> Result<(), ProcessMessageResult> {
+            let message_id = T::MessageParser::parse_key(key_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
 
             ensure!(
