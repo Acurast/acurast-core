@@ -353,6 +353,7 @@ It is possible to directly call the fulfill method directly from the processors.
 const callIndex = '0x4606'; // the call index for the "call" extrinsic of pallet-contracts
 const payload = _STD_.chains.substrate.codec.encodeUnsignedNumber(2, 128); // encoding the price value (2) as an u128
 const destination = "XTj3CLB3G6WnwPMgYo1PM2xi9BkDegtGw5WPd7X36G515La"; // the smart contract address
+_STD_.chains.substrate.signer.setSigner("SECP256K1"); // select which curve to use for the signature
 _STD_.chains.substrate.contract.fulfill(
     "https://shibuya-rpc.dwellir.com", // the parachain rpc endpoint
     callIndex,
