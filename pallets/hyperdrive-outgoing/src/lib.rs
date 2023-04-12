@@ -3,9 +3,10 @@
 use core::cmp::min;
 use core::ops::AddAssign;
 
+use frame_support::dispatch::{Pays, PostDispatchInfo};
 use frame_support::ensure;
-use frame_support::weights::Weight;
 use mmr_lib::leaf_index_to_pos;
+use sp_core::Get;
 use sp_runtime::traits::{self, Saturating};
 use sp_std::prelude::*;
 
@@ -15,6 +16,7 @@ pub use types::{
 };
 pub use utils::NodesUtils;
 
+use crate::default_weights::WeightInfo;
 use crate::mmr::{HashOf, Merger};
 pub use crate::types::Leaf;
 use crate::types::{
@@ -37,12 +39,6 @@ mod tezos;
 pub mod types;
 pub mod utils;
 
-pub trait WeightInfo {
-    fn on_initialize() -> Weight;
-    fn send_message() -> Weight;
-    fn send_message_actual(peaks: NodeIndex) -> Weight;
-}
-
 /// A MMR specific to this pallet instance.
 type ModuleMmr<StorageType, T, I> = mmr::Mmr<StorageType, T, I, Merger<HasherOf<T, I>>>;
 
@@ -60,6 +56,8 @@ pub(crate) type HasherError<T, I> = <TargetChainEncoderOf<T, I> as LeafEncoder>:
 pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
+
+    use crate::default_weights::WeightInfo;
 
     use super::*;
 
@@ -202,15 +200,10 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {
         fn on_finalize(current_block: BlockNumberFor<T>) {
-            // check if we should create new snapshot
-            let (last_block, _last_message_excl): (T::BlockNumber, LeafIndex) =
-                Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))
-                    .unwrap_or((0u32.into(), 0));
-
             let (included_message_number_excl, next_message_number) = Self::message_numbers();
+            // check if we should create new snapshot
             if included_message_number_excl < next_message_number
-                && current_block.saturating_sub(last_block)
-                    >= T::MaximumBlocksBeforeSnapshot::get().into()
+                && Self::maximum_blocks_before_snapshot_reached(current_block)
             {
                 // there was at least one message since last snapshot and enough blocks passed -> take snapshot
                 let current_snapshot = <NextSnapshotNumber<T, I>>::mutate(|s| {
@@ -225,12 +218,22 @@ pub mod pallet {
                 );
                 MessageNumbers::<T, I>::put((next_message_number, next_message_number));
             }
-
-            // TODO add weight used here in on_initialize (convention)
         }
 
-        fn on_initialize(_n: T::BlockNumber) -> Weight {
-            T::WeightInfo::on_initialize()
+        fn on_initialize(current_block: T::BlockNumber) -> Weight {
+            // add weight used here in on_finalize
+
+            // We did the check already and will repeat it in on_finalize
+            let weight = T::WeightInfo::check_snapshot().saturating_mul(2);
+
+            // predict if we definitely will not create snapshot in the initialized block and estimate lower weight
+            if !Self::maximum_blocks_before_snapshot_reached(current_block) {
+                return weight;
+            }
+
+            // we can't avoid that sometimes there is no message at the end of MaximumBlocksBeforeSnapshot
+            // and we unnecessarily reserve weight for snapshotting
+            weight.saturating_add(T::WeightInfo::create_snapshot())
         }
     }
 
@@ -243,9 +246,10 @@ pub mod pallet {
 }
 
 impl<T: Config<I>, I: 'static> Pallet<T, I> {
-    pub fn send_message(action: Action) -> Result<(), MMRError> {
+    pub fn send_message(action: Action) -> Result<PostDispatchInfo, MMRError> {
         let leaves = Self::mmr_leaves();
-        let _peaks_before = NodesUtils::new(leaves).number_of_peaks();
+        // used to calculate actual weight, see below
+        let peaks_before = NodesUtils::new(leaves).number_of_peaks();
 
         let (included_message_number_excl, next_message_number) = Self::message_numbers();
         let message = Message {
@@ -265,12 +269,16 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         <RootHash<T, I>>::put(root);
         MessageNumbers::<T, I>::put((included_message_number_excl, next_message_number + 1));
 
-        let _peaks_after = NodesUtils::new(leaves).number_of_peaks();
-        // TODO use _peaks_after - _peaks_before difference to calculate actual weight
-
         Self::deposit_event(Event::MessageSent(message));
 
-        Ok(())
+        // use peaks_after - peaks_before difference to calculate actual weight
+        let peaks_after = NodesUtils::new(leaves).number_of_peaks();
+        Ok(PostDispatchInfo {
+            actual_weight: Some(T::WeightInfo::send_message_actual_weight(
+                peaks_before.max(peaks_after),
+            )),
+            pays_fee: Pays::Yes,
+        })
     }
 
     /// Build offchain key from `parent_hash` of block that originally added node `pos` to MMR.
@@ -294,6 +302,19 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// there's no `node_offchain_key` key in the storage.
     fn node_canon_offchain_key(pos: NodeIndex) -> Vec<u8> {
         NodesUtils::node_canon_offchain_key(&T::INDEXING_PREFIX, pos)
+    }
+
+    /// Check if we should create new snapshot at the end of `current_block`,
+    /// according to [`T::MaximumBlocksBeforeSnapshot`].
+    ///
+    /// This function should be combined with a check (not included!) if there was at least one new message to snapshot.
+    fn maximum_blocks_before_snapshot_reached(current_block: T::BlockNumber) -> bool {
+        // check if we should create new snapshot
+        let (last_block, _last_message_excl): (T::BlockNumber, LeafIndex) =
+            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))
+                .unwrap_or((0u32.into(), 0));
+
+        current_block.saturating_sub(last_block) >= T::MaximumBlocksBeforeSnapshot::get().into()
     }
 
     /// Generates a MMR proof for the messages in the range `[next_message_number..last_message_excl]`.

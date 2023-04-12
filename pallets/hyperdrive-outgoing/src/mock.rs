@@ -1,4 +1,7 @@
-use frame_support::{parameter_types, traits::ConstU32};
+use frame_support::{
+    dispatch::Weight, parameter_types, traits::ConstU32,
+    weights::constants::RocksDbWeight as DbWeight,
+};
 use sp_core::H256;
 use sp_runtime::traits::AccountIdLookup;
 use sp_runtime::{
@@ -61,6 +64,20 @@ impl Config for Test {
 
 impl TargetChainHasher for Keccak256 {
     type TargetChainEncoder = TezosEncoder;
+}
+
+impl crate::WeightInfo for () {
+    fn check_snapshot() -> Weight {
+        DbWeight::get().reads_writes(3, 3)
+    }
+
+    fn create_snapshot() -> Weight {
+        DbWeight::get().reads_writes(3, 3)
+    }
+
+    fn send_message() -> Weight {
+        DbWeight::get().reads_writes(3, 3)
+    }
 }
 
 parameter_types! {
