@@ -11,6 +11,10 @@ pub type Block<T> = frame_system::mocking::MockBlock<T>;
 pub type AccountId = AccountId32;
 pub type BlockNumber = u64;
 
+pub fn alice_account_id() -> AccountId {
+    [0; 32].into()
+}
+
 pub fn tezos_account_id() -> String {
     "tz1h4EsGunH2Ue1T2uNs8mfKZ8XZoQji3HcK".into()
 }

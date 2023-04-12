@@ -185,7 +185,7 @@ where
             .iter()
             .map(|pos| match mmr_lib::MMRStore::get_elem(&store, *pos) {
                 Ok(Some(Node::Data(leaf))) => Ok(leaf),
-                e => Err(MMRError::LeafNotFound.log_debug(e)),
+                e => Err(MMRError::LeafNotFound.log_error(e)),
             })
             .collect::<Result<Vec<_>, MMRError>>()?;
 

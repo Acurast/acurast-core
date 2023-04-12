@@ -219,6 +219,27 @@ pub mod pallet {
         /// A message was successfully sent. [JobId, SourceId, Assignment]
         MessageSent(Message),
     }
+
+    #[pallet::error]
+    pub enum Error<T, I = ()> {
+        MMRPush,
+    }
+
+    #[pallet::call]
+    impl<T: Config<I>, I: 'static> Pallet<T, I> {
+        #[pallet::call_index(0)]
+        #[pallet::weight(T::WeightInfo::send_message())]
+        pub fn send_test_message(origin: OriginFor<T>) -> DispatchResult {
+            ensure_root(origin)?;
+
+            Self::send_message(Action::Noop).map_err(|e| {
+                e.log_error("send_message failed");
+                Error::<T, I>::MMRPush
+            })?;
+
+            Ok(().into())
+        }
+    }
 }
 
 impl<T: Config<I>, I: 'static> Pallet<T, I> {

@@ -50,12 +50,15 @@ impl<Hash> OnNewRoot<Hash> for () {
 pub enum RawAction {
     #[strum(serialize = "ASSIGN_JOB_PROCESSOR")]
     AssignJob,
+    #[strum(serialize = "NOOP")]
+    Noop,
 }
 
 impl From<&Action> for RawAction {
     fn from(action: &Action) -> Self {
         match action {
             Action::AssignJob(_, _) => RawAction::AssignJob,
+            Action::Noop => RawAction::Noop,
         }
     }
 }
@@ -67,6 +70,8 @@ pub enum Action {
     ///
     /// Consists of `(Job ID on Tezos, [processor addresses])`.
     AssignJob(JobIdSequence, String), // (nat, address)
+    /// A noop action that solely suits the purpose of testing that messages get sent.
+    Noop,
 }
 
 /// Message that is transferred to target chains.

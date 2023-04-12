@@ -18,7 +18,7 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic<Test>,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
-        HyperdriveOutgoing: crate::{Pallet, Storage, Event<T>},
+        HyperdriveOutgoing: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
 

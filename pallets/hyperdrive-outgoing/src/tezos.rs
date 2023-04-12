@@ -55,6 +55,7 @@ impl LeafEncoder for TezosEncoder {
                     ]);
                     Micheline::pack(data, Some(assign_payload_schema()))
                 }
+                Action::Noop => Ok(Default::default()),
             }?),
         ]);
 
