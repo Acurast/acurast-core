@@ -6,6 +6,7 @@ use derive_more::{Display, From};
 use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
+use sp_core::RuntimeDebug;
 use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
@@ -496,7 +497,7 @@ fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, V
 }
 
 /// Errors returned by this crate.
-#[derive(Display, Debug, From)]
+#[derive(RuntimeDebug, Display, From)]
 #[cfg_attr(feature = "std", derive(DError))]
 pub enum ValidationError {
     TezosMicheline(TezosMichelineError),
@@ -514,7 +515,7 @@ pub enum ValidationError {
     RequiredModulesParsing,
 }
 
-#[derive(Display, Debug, From)]
+#[derive(RuntimeDebug, Display, From)]
 #[cfg_attr(feature = "std", derive(DError))]
 pub enum FieldError {
     ACTION,

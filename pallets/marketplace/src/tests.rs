@@ -245,7 +245,7 @@ fn test_match() {
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
                     id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transfered to the matcher
+                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
                 })),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationAssigned(
                     job_id.clone(),
@@ -449,7 +449,7 @@ fn test_no_match_schedule_overlap() {
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
                     id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transfered to the matcher
+                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
                 })),
                 // no match event for second
             ]
@@ -665,7 +665,7 @@ fn test_more_reports_than_expected() {
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
                     id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transfered to the matcher
+                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
                 })),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationAssigned(
                     job_id.clone(),
