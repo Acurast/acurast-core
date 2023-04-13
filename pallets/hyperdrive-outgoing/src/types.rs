@@ -38,6 +38,8 @@ impl<Hash> OnNewRoot<Hash> for () {
     fn on_new_root(_root: &Hash) {}
 }
 
+/// The encodable version of an [`Action`].
+// #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 #[derive(
     RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
 )]
@@ -54,6 +56,7 @@ impl From<&Action> for RawAction {
     }
 }
 
+/// The action is triggered over Hyperdrive as part of a [`Message`].
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 pub enum Action {
     /// A subset of values expressed by [`pallet_acurast::JobId`], only for jobs created on Tezos.
@@ -117,6 +120,10 @@ impl<H: TargetChainHasher> TargetChainNodeHasher<H::Output> for H {
     }
 }
 
+/// An encoder for leaves that can be decoded on target chains.
+///
+/// Note that we can't use [`codec::Encode`] since we derive that trait for the SCALE-encoding used to store leaves
+/// in the off-chain index.
 pub trait LeafEncoder {
     type Error: Debug;
     fn encode(leaf: &Leaf) -> Result<Vec<u8>, Self::Error>;

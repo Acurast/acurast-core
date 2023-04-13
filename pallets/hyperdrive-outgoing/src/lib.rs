@@ -246,6 +246,7 @@ pub mod pallet {
 }
 
 impl<T: Config<I>, I: 'static> Pallet<T, I> {
+    /// Sends a message with the given [`Action`] over Hyperdrive.
     pub fn send_message(action: Action) -> Result<PostDispatchInfo, MMRError> {
         let leaves = Self::mmr_leaves();
         // used to calculate actual weight, see below
@@ -283,7 +284,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 
     /// Build offchain key from `parent_hash` of block that originally added node `pos` to MMR.
     ///
-    /// This combination makes the offchain (key,value) entry resilient to chain forks.
+    /// This combination makes the offchain (key, value) entry resilient to chain forks.
     fn node_temp_offchain_key(
         pos: NodeIndex,
         parent_hash: <T as frame_system::Config>::Hash,

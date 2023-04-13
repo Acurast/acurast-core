@@ -66,7 +66,7 @@ impl TargetChainHasher for Keccak256 {
     type TargetChainEncoder = TezosEncoder;
 }
 
-impl crate::WeightInfo for () {
+impl WeightInfo for () {
     fn check_snapshot() -> Weight {
         DbWeight::get().reads_writes(3, 3)
     }

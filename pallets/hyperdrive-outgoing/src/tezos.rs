@@ -10,6 +10,7 @@ use crate::Action;
 use crate::Leaf;
 use crate::{LeafEncoder, RawAction};
 
+/// The [`LeafEncoder`] for Tezos using Micheline/Michelson encoding/packing.
 pub struct TezosEncoder();
 
 impl LeafEncoder for TezosEncoder {
