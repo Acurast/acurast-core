@@ -35,7 +35,7 @@ mod benchmarking;
 
 mod default_weights;
 mod mmr;
-mod tezos;
+pub mod tezos;
 pub mod types;
 pub mod utils;
 

@@ -1,5 +1,5 @@
 [package]
-name = "pallet-acurast-hyperdrive-mmr"
+name = "pallet-acurast-hyperdrive-outgoing"
 authors = ["Papers AG", "Parity Technologies <admin@parity.io>"]
 description = "Acurast Hyperdrive is a building block allowing for general bidirectional message passing"
 version = "0.0.1"
