@@ -12,13 +12,12 @@ use sp_std::prelude::*;
 
 pub use pallet::*;
 pub use types::{
-    Action, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
+    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
 };
 pub use utils::NodesUtils;
 
-use crate::default_weights::WeightInfo;
+pub use crate::default_weights::WeightInfo;
 use crate::mmr::{HashOf, Merger};
-pub use crate::types::Leaf;
 use crate::types::{
     Node, Proof, SnapshotNumber, TargetChainHasher, TargetChainProof, TargetChainProofLeaf,
 };
@@ -383,14 +382,22 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         )?;
         proof
             .map(|(leaves, proof)| {
-                let leaves = proof
+                let leaves_count = NodesUtils::new(Self::mmr_leaves()).size();
+                let leaf_positions: Vec<NodeIndex> = proof
                     .leaf_indices
                     .iter()
+                    .map(|leaf_index| leaf_index_to_pos(leaf_index.to_owned()))
+                    .collect();
+                let leaf_k_indices = mmr::node_pos_to_k_index(leaf_positions.clone(), leaves_count);
+                let leaves = leaf_positions
+                    .iter()
+                    .zip(leaf_k_indices.iter())
                     .zip(leaves.iter())
-                    .map(|(leaf_index, leaf)| {
+                    .map(|((position, (pos, k_index)), leaf)| {
+                        assert_eq!(pos, position);
                         Ok(TargetChainProofLeaf {
-                            leaf_index: leaf_index.to_owned(),
-                            position: leaf_index_to_pos(leaf_index.to_owned()),
+                            k_index: k_index.to_owned() as NodeIndex,
+                            position: position.to_owned(),
                             message: TargetChainEncoderOf::<T, I>::encode(leaf)
                                 .map_err(|_| MMRError::GenerateProof)?,
                         })
