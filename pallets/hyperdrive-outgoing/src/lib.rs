@@ -396,7 +396,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
                     })
                     .collect::<Result<Vec<TargetChainProofLeaf>, MMRError>>()?;
                 Ok(TargetChainProof {
-                    leaves: leaves,
+                    leaves,
                     leaf_count: proof.leaf_count,
                     items: proof.items,
                 })

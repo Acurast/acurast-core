@@ -1,7 +1,5 @@
 //! Merkle Mountain Range utilities.
 
-use core::fmt::Write;
-
 use codec::Encode;
 use mmr_lib;
 use sp_runtime::traits::Header;
@@ -9,15 +7,6 @@ use sp_runtime::traits::Header;
 use sp_std::prelude::Vec;
 
 use crate::{LeafIndex, NodeIndex};
-
-pub fn fmt_hex(bytes: &Vec<u8>) -> String {
-    let mut s = String::with_capacity(2 * bytes.len());
-    for byte in bytes {
-        write!(s, "{:02x}", byte).unwrap();
-    }
-
-    s
-}
 
 /// MMR nodes & size -related utilities.
 pub struct NodesUtils {

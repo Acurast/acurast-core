@@ -56,8 +56,6 @@ log = { version = "0.4.17", default-features = false }
 [dev-dependencies]
 hex-literal = "0.3"
 
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-
 array-bytes = "4.1"
 env_logger = "0.9"
 itertools = "0.10.3"
