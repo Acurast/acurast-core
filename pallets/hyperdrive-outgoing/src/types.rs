@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use core::fmt::Debug;
 pub use mmr_lib;
 
@@ -104,7 +102,7 @@ pub trait TargetChainHasher: traits::Hash {
 }
 
 /// Hashing used for the pallet.
-pub(crate) trait TargetChainNodeHasher<Hash> {
+pub trait TargetChainNodeHasher<Hash> {
     type Error;
     fn hash_node(node: &Node<Hash>) -> Result<Hash, Self::Error>;
 }
@@ -155,8 +153,8 @@ pub struct TargetChainProof<Hash> {
 /// A leaf of a self-contained MMR [`TargetChainProof`].
 #[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
 pub struct TargetChainProofLeaf {
-    /// The index of this leaf.
-    pub leaf_index: LeafIndex,
+    /// The k-index of this leaf.
+    pub k_index: NodeIndex,
     /// The position of this leaf.
     pub position: NodeIndex,
     /// The encoded message on this leaf.

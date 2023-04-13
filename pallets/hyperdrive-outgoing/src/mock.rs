@@ -67,14 +67,6 @@ impl TargetChainHasher for Keccak256 {
 }
 
 impl WeightInfo for () {
-    fn check_snapshot() -> Weight {
-        DbWeight::get().reads_writes(3, 3)
-    }
-
-    fn create_snapshot() -> Weight {
-        DbWeight::get().reads_writes(3, 3)
-    }
-
     fn send_message() -> Weight {
         DbWeight::get().reads_writes(3, 3)
     }

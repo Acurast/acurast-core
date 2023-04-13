@@ -1,8 +1,5 @@
 use sp_std::prelude::*;
 
-use mmr_lib;
-use mmr_lib::Merge;
-
 use crate::mmr::HashOf;
 use crate::types::{Proof, TargetChainNodeHasher};
 use crate::utils::NodesUtils;
@@ -14,6 +11,9 @@ use crate::{
     types::{MMRError, NodeIndex},
     Config, HasherError, HasherOf, Leaf,
 };
+use mmr_lib;
+use mmr_lib::helper;
+use mmr_lib::Merge;
 
 /// Stateless verification of the proof for a batch of leaves.
 /// Note, the leaves should be sorted such that corresponding leaves and leaf indices have the

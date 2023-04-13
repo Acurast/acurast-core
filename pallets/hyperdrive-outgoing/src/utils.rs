@@ -37,11 +37,11 @@ impl NodesUtils {
     /// Calculate `LeafIndex` for the leaf that added `node_index` to the MMR.
     pub fn leaf_index_that_added_node(node_index: NodeIndex) -> LeafIndex {
         let rightmost_leaf_pos = Self::rightmost_leaf_node_index_from_pos(node_index);
-        Self::leaf_node_index_to_leaf_index(rightmost_leaf_pos)
+        Self::leaf_node_pos_to_leaf_index(rightmost_leaf_pos)
     }
 
-    // Translate a _leaf_ `NodeIndex` to its `LeafIndex`.
-    fn leaf_node_index_to_leaf_index(pos: NodeIndex) -> LeafIndex {
+    /// Translate a leaf's [`NodeIndex`] to its `LeafIndex`.
+    fn leaf_node_pos_to_leaf_index(pos: NodeIndex) -> LeafIndex {
         if pos == 0 {
             return 0;
         }
@@ -95,7 +95,7 @@ mod tests {
     fn should_calculate_node_index_from_leaf_index() {
         for index in 0..100000 {
             let pos = leaf_index_to_pos(index);
-            assert_eq!(NodesUtils::leaf_node_index_to_leaf_index(pos), index);
+            assert_eq!(NodesUtils::leaf_node_pos_to_leaf_index(pos), index);
         }
     }
 
@@ -125,7 +125,7 @@ mod tests {
     fn should_calculate_rightmost_leaf_node_index_from_pos() {
         for pos in 0..100000 {
             let leaf_pos = NodesUtils::rightmost_leaf_node_index_from_pos(pos);
-            let leaf_index = NodesUtils::leaf_node_index_to_leaf_index(leaf_pos);
+            let leaf_index = NodesUtils::leaf_node_pos_to_leaf_index(leaf_pos);
             assert!(NodesUtils::right_branch_ending_in_leaf(leaf_index).contains(&pos));
         }
     }

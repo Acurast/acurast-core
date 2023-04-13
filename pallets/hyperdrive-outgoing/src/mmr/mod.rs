@@ -1,7 +1,7 @@
-use sp_runtime::traits;
-
 use mmr_lib;
 use mmr_lib::Merge;
+use sp_runtime::traits;
+use sp_std::prelude::ToOwned;
 
 use crate::types::{Node, TargetChainHasher, TargetChainNodeHasher};
 use crate::Config;

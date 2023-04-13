@@ -6,9 +6,9 @@ use mmr_lib;
 use mmr_lib::helper;
 use sp_core::offchain::StorageKind;
 use sp_io::offchain_index;
-use sp_std::iter::Peekable;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::*;
+use sp_std::{iter::Peekable, vec};
 
 use crate::types::TargetChainNodeHasher;
 use crate::utils::NodesUtils;
