@@ -6,7 +6,7 @@ use sp_std::prelude::ToOwned;
 use crate::types::{Node, TargetChainHasher, TargetChainNodeHasher};
 use crate::Config;
 
-pub use self::mmr::{verify_leaves_proof, Mmr};
+pub use self::mmr::{node_pos_to_k_index, verify_leaves_proof, Mmr};
 
 mod mmr;
 pub mod storage;
