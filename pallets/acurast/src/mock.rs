@@ -1,6 +1,6 @@
 use acurast_common::{JobModules, Schedule};
 use frame_support::{
-    dispatch::Weight, pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
+    pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
     traits::Everything, PalletId,
 };
 use hex_literal::hex;
@@ -87,7 +87,6 @@ parameter_types! {
     pub const BlockHashCount: BlockNumber = 2400;
 }
 parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
@@ -151,8 +150,8 @@ impl pallet_balances::Config for Test {
 impl pallet_assets::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Balance = Balance;
-    type AssetId = parachains_common::AssetId;
-    type AssetIdParameter = codec::Compact<parachains_common::AssetId>;
+    type AssetId = parachains_common::AssetIdForTrustBackedAssets;
+    type AssetIdParameter = codec::Compact<parachains_common::AssetIdForTrustBackedAssets>;
     type Currency = Balances;
     type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
@@ -166,6 +165,7 @@ impl pallet_assets::Config for Test {
     type Extra = ();
     type WeightInfo = ();
     type RemoveItemsLimit = ();
+    type CallbackHandle = ();
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
 }

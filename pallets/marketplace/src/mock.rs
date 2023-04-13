@@ -1,5 +1,4 @@
 use frame_support::{
-    dispatch::Weight,
     pallet_prelude::GenesisBuild,
     parameter_types,
     traits::{AsEnsureOriginWithArg, Everything},
@@ -123,7 +122,6 @@ parameter_types! {
     pub const BlockHashCount: BlockNumber = 2400;
 }
 parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 2000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
     pub const ExistentialDeposit: AssetAmount = EXISTENTIAL_DEPOSIT;
@@ -201,6 +199,7 @@ impl pallet_assets::Config for Test {
     type Extra = ();
     type WeightInfo = ();
     type RemoveItemsLimit = ();
+    type CallbackHandle = ();
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
 }

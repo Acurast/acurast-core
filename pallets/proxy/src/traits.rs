@@ -9,18 +9,18 @@ pub trait WeightInfo {
 
 impl WeightInfo for () {
     fn register() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn deregister() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn update_allowed_sources() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn advertise() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 }

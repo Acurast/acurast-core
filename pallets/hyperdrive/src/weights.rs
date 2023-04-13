@@ -38,14 +38,14 @@ pub struct Weights<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for Weights<T> {
 	fn update_state_transmitters() -> Weight {
 		// Minimum execution time: 33_241 nanoseconds.
-		Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2))
+		Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 2))
 	}
 	fn submit_state_merkle_root() -> Weight {
 		// Minimum execution time: 33_241 nanoseconds.
-		Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2))
+		Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 2))
 	}
 	fn submit_message() -> Weight {
 		// Minimum execution time: 33_241 nanoseconds.
-		Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2))
+		Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 2))
 	}
 }

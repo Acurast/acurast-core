@@ -2,7 +2,7 @@ use crate::stub::{bob_account_id, AccountId};
 use crate::types::Fulfillment;
 use acurast_common::Script;
 use frame_support::sp_runtime::DispatchError;
-use frame_support::{parameter_types, sp_runtime, traits::Everything, weights::Weight, PalletId};
+use frame_support::{parameter_types, sp_runtime, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_runtime::generic;
 use sp_runtime::traits::{AccountIdLookup, BlakeTwo256};
@@ -28,7 +28,6 @@ parameter_types! {
     pub const BlockHashCount: BlockNumber = 2400;
 }
 parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
     pub const MinimumPeriod: u64 = 6000;
     pub AllowedFulfillAccounts: Vec<AccountId> = vec![bob_account_id()];
 }

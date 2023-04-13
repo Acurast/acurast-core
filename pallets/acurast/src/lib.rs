@@ -191,7 +191,6 @@ pub mod pallet {
     pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);

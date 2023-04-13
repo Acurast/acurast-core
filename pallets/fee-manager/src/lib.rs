@@ -23,7 +23,6 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
@@ -60,7 +59,7 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Updates the fee percentage. Can only be called by a privileged/root account.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
+        #[pallet::weight(Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
             T::UpdateOrigin::ensure_origin(origin)?;
             let (new_version, _) = Self::set_fee_percentage(fee);

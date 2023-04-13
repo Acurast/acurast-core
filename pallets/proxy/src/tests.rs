@@ -179,7 +179,7 @@ mod network_tests {
     use codec::Encode;
     use frame_support::assert_ok;
     use xcm::latest::prelude::*;
-    use xcm_simulator::TestExt;
+    use xcm_simulator::{TestExt, Weight};
 
     use super::*;
 
@@ -205,8 +205,8 @@ mod network_tests {
                 Here,
                 Parachain(2000),
                 Xcm(vec![Transact {
-                    origin_type: OriginKind::SovereignAccount,
-                    require_weight_at_most: INITIAL_BALANCE as u64,
+                    origin_kind: OriginKind::SovereignAccount,
+                    require_weight_at_most: Weight::from_parts(1_000_000_000, 0),
                     call: remark.encode().into(),
                 }]),
             ));
@@ -235,8 +235,8 @@ mod network_tests {
                 Here,
                 Parent,
                 Xcm(vec![Transact {
-                    origin_type: OriginKind::SovereignAccount,
-                    require_weight_at_most: INITIAL_BALANCE as u64,
+                    origin_kind: OriginKind::SovereignAccount,
+                    require_weight_at_most: Weight::from_parts(1_000_000_000, 0),
                     call: remark.encode().into(),
                 }]),
             ));
@@ -266,8 +266,8 @@ mod network_tests {
                 Here,
                 (Parent, Parachain(2001)),
                 Xcm(vec![Transact {
-                    origin_type: OriginKind::SovereignAccount,
-                    require_weight_at_most: INITIAL_BALANCE as u64,
+                    origin_kind: OriginKind::SovereignAccount,
+                    require_weight_at_most: Weight::from_parts(1_000_000_000, 0),
                     call: remark.encode().into(),
                 }]),
             ));
@@ -291,13 +291,12 @@ mod network_tests {
         Relay::execute_with(|| {
             assert_ok!(RelayChainPalletXcm::reserve_transfer_assets(
                 relay_chain::RuntimeOrigin::signed(ALICE),
-                Box::new(X1(Parachain(2000)).into().into()),
+                Box::new(X1(Parachain(2000)).into()),
                 Box::new(
                     X1(AccountId32 {
-                        network: Any,
+                        network: None,
                         id: ALICE.into()
                     })
-                    .into()
                     .into()
                 ),
                 Box::new((Here, withdraw_amount).into()),
@@ -334,7 +333,6 @@ mod network_tests {
                 buy_execution((Here, send_amount)),
                 DepositAsset {
                     assets: All.into(),
-                    max_assets: 1,
                     beneficiary: Parachain(2001).into(),
                 },
             ]);
@@ -350,66 +348,6 @@ mod network_tests {
             assert_eq!(
                 relay_chain::Balances::free_balance(para_account_id(2001)),
                 send_amount
-            );
-        });
-    }
-
-    /// Scenario:
-    /// A parachain wants to be notified that a transfer worked correctly.
-    /// It sends a `QueryHolding` after the deposit to get notified on success.
-    ///
-    /// Asserts that the balances are updated correctly and the expected XCM is sent.
-    #[test]
-    fn query_holding() {
-        Network::reset();
-
-        let send_amount = 10;
-        let query_id_set = 1234;
-
-        // Send a message which fully succeeds on the relay chain
-        AcurastParachain::execute_with(|| {
-            let message = Xcm(vec![
-                WithdrawAsset((Here, send_amount).into()),
-                buy_execution((Here, send_amount)),
-                DepositAsset {
-                    assets: All.into(),
-                    max_assets: 1,
-                    beneficiary: Parachain(2001).into(),
-                },
-                QueryHolding {
-                    query_id: query_id_set,
-                    dest: Parachain(2000).into(),
-                    assets: All.into(),
-                    max_response_weight: 1_000_000_000,
-                },
-            ]);
-            // Send withdraw and deposit with query holding
-            assert_ok!(AcurastPalletXcm::send_xcm(Here, Parent, message.clone(),));
-        });
-
-        // Check that transfer was executed
-        Relay::execute_with(|| {
-            // Withdraw executed
-            assert_eq!(
-                relay_chain::Balances::free_balance(para_account_id(2000)),
-                INITIAL_BALANCE - send_amount
-            );
-            // Deposit executed
-            assert_eq!(
-                relay_chain::Balances::free_balance(para_account_id(2001)),
-                send_amount
-            );
-        });
-
-        // Check that QueryResponse message was received
-        AcurastParachain::execute_with(|| {
-            assert_eq!(
-                acurast_runtime::MsgQueue::received_dmp(),
-                vec![Xcm(vec![QueryResponse {
-                    query_id: query_id_set,
-                    response: Response::Assets(MultiAssets::new()),
-                    max_weight: 1_000_000_000,
-                }])],
             );
         });
     }

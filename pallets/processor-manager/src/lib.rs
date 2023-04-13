@@ -133,7 +133,6 @@ pub mod pallet {
     pub(super) type ProcessorHeartbeat<T: Config> = StorageMap<_, Blake2_128, T::AccountId, u128>;
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
 
     #[pallet::event]
