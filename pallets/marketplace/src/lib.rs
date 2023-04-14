@@ -27,10 +27,9 @@ pub(crate) use pallet::STORAGE_VERSION;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::Blake2_128Concat;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
-        Blake2_128, PalletId,
+        Blake2_128, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
