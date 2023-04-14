@@ -9,10 +9,10 @@ use pallet_acurast::{
 };
 use reputation::{BetaReputation, ReputationEngine};
 
-use crate::stub::*;
 use crate::{
     mock::*, AdvertisementRestriction, Assignment, Error, ExecutionResult, JobStatus, Match, SLA,
 };
+use crate::{stub::*, PubKeys};
 use crate::{JobRequirements, PlannedExecution};
 
 #[test]
@@ -122,6 +122,7 @@ fn test_match() {
         assert_ok!(AcurastMarketplace::acknowledge_match(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
+            PubKeys::default(),
         ));
         assert_eq!(
             Some(JobStatus::Assigned(1)),
@@ -159,6 +160,7 @@ fn test_match() {
                 },
                 acknowledged: true,
                 sla: SLA { total: 2, met: 1 },
+                pub_keys: Some(PubKeys::default()),
             }),
             AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
         );
@@ -259,6 +261,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -281,6 +284,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -303,6 +307,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id.clone(),)),
@@ -614,6 +619,7 @@ fn test_more_reports_than_expected() {
         assert_ok!(AcurastMarketplace::acknowledge_match(
             RuntimeOrigin::signed(processor_account_id()).into(),
             job_id.clone(),
+            PubKeys::default(),
         ));
 
         // report twice with success
@@ -679,6 +685,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -701,6 +708,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -723,6 +731,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
+                        pub_keys: Some(PubKeys::default()),
                     }
                 )),
             ]
