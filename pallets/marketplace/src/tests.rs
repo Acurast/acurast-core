@@ -160,7 +160,7 @@ fn test_match() {
                 },
                 acknowledged: true,
                 sla: SLA { total: 2, met: 1 },
-                pub_keys: Some(PubKeys::default()),
+                pub_keys: PubKeys::default(),
             }),
             AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
         );
@@ -261,7 +261,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -284,7 +284,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -307,7 +307,7 @@ fn test_match() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id.clone(),)),
@@ -685,7 +685,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -708,7 +708,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
@@ -731,7 +731,7 @@ fn test_more_reports_than_expected() {
                         },
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
-                        pub_keys: Some(PubKeys::default()),
+                        pub_keys: PubKeys::default(),
                     }
                 )),
             ]

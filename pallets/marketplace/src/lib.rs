@@ -388,7 +388,7 @@ pub mod pallet {
                         .ok_or(Error::<T>::CannotAcknowledgeWhenNotMatched)?;
                     let changed = !assignment.acknowledged;
                     assignment.acknowledged = true;
-                    assignment.pub_keys = Some(pub_keys);
+                    assignment.pub_keys = pub_keys;
                     Ok((changed, assignment.to_owned()))
                 },
             )?;
@@ -913,7 +913,7 @@ pub mod pallet {
                                             total: execution_count,
                                             met: 0,
                                         },
-                                        pub_keys: None,
+                                        pub_keys: PubKeys::default(),
                                     });
                                     Ok(())
                                 }

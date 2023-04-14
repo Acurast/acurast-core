@@ -126,7 +126,7 @@ pub struct Assignment<Reward> {
     /// Keeps track of the SLA.
     pub sla: SLA,
     /// Processor Pub Keys
-    pub pub_keys: Option<PubKeys>,
+    pub pub_keys: PubKeys,
 }
 
 pub const NUMBER_OF_PUB_KEYS: u32 = 2;

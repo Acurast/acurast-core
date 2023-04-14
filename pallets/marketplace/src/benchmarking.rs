@@ -6,13 +6,13 @@ use frame_support::{
 };
 use frame_system::RawOrigin;
 use sp_core::*;
-use sp_runtime::traits::ConstU32;
 use sp_runtime::BoundedVec;
+use sp_runtime::{traits::ConstU32, DispatchError};
 use sp_std::prelude::*;
 
 pub use pallet::Config;
 use pallet_acurast::{
-    Event as AcurastEvent, JobModules, JobRegistrationFor, MultiOrigin, Pallet as Acurast,
+    Event as AcurastEvent, JobId, JobModules, JobRegistrationFor, MultiOrigin, Pallet as Acurast,
     Schedule, Script,
 };
 
@@ -106,14 +106,14 @@ pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
 }
 
-fn token_22_funded_account<T: Config>() -> T::AccountId
+fn token_22_funded_account<T: Config>(index: u32) -> T::AccountId
 where
     T: pallet_assets::Config,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
 {
     use pallet_assets::Pallet as Assets;
-    let caller: T::AccountId = account("token_account", 0, SEED);
+    let caller: T::AccountId = account("token_account", index, SEED);
     whitelist_account!(caller);
     let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
     let pallet_origin: T::RuntimeOrigin = RawOrigin::Signed(pallet_account.clone()).into();
@@ -148,7 +148,7 @@ where
     <T as pallet_assets::Config>::Balance: From<u128>,
     RewardFor<T>: From<MockAsset>,
 {
-    let caller: T::AccountId = token_22_funded_account::<T>();
+    let caller: T::AccountId = token_22_funded_account::<T>(0);
     whitelist_account!(caller);
 
     let ad = advertisement::<T>(10000, 5);
@@ -173,7 +173,7 @@ where
     <T as pallet_assets::Config>::Balance: From<u128>,
     RewardFor<T>: From<MockAsset>,
 {
-    let caller: T::AccountId = token_22_funded_account::<T>();
+    let caller: T::AccountId = token_22_funded_account::<T>(0);
     whitelist_account!(caller);
 
     let job = job_registration_with_reward::<T>(script(), 2, 20100);
@@ -185,6 +185,37 @@ where
     }
 
     (caller, job)
+}
+
+fn acknowledge_match_helper<T: Config>(
+) -> Result<(T::AccountId, JobId<T::AccountId>), DispatchError>
+where
+    T: pallet_assets::Config,
+    <T as Config>::AssetId: From<u32>,
+    <T as pallet_assets::Config>::AssetId: From<u32>,
+    <T as pallet_assets::Config>::Balance: From<u128>,
+    RewardFor<T>: From<MockAsset>,
+{
+    let consumer: T::AccountId = token_22_funded_account::<T>(0);
+    let processor: T::AccountId = token_22_funded_account::<T>(1);
+    let ad = advertisement::<T>(1, 1000);
+    assert_ok!(AcurastMarketplace::<T>::advertise(
+        RawOrigin::Signed(processor.clone()).into(),
+        ad.clone(),
+    ));
+    let job = job_registration_with_reward::<T>(script(), 100, 1000);
+    assert_ok!(Acurast::<T>::register(
+        RawOrigin::Signed(consumer.clone()).into(),
+        job.clone()
+    ));
+
+    Ok((
+        processor,
+        (
+            MultiOrigin::Acurast(consumer),
+            Acurast::<T>::job_id_sequence(),
+        ),
+    ))
 }
 
 benchmarks! {
@@ -241,6 +272,11 @@ benchmarks! {
             (MultiOrigin::Acurast(caller), local_job_id)
         ).into());
     }
+
+    acknowledge_match {
+        let (processor, job_id) = acknowledge_match_helper::<T>()?;
+        let pub_keys: PubKeys = vec![PubKey::SECP256r1([0u8; 33].to_vec().try_into().unwrap()), PubKey::SECP256k1([0u8; 33].to_vec().try_into().unwrap())].try_into().unwrap();
+    }: _(RawOrigin::Signed(processor.clone()), job_id.clone(), pub_keys)
 
     impl_benchmark_test_suite!(AcurastMarketplace, mock::ExtBuilder::default().build(), mock::Test);
 }
