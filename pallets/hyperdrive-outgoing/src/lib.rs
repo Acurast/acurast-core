@@ -382,13 +382,13 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         )?;
         proof
             .map(|(leaves, proof)| {
-                let leaves_count = NodesUtils::new(Self::mmr_leaves()).size();
+                let mmr_size = NodesUtils::new(Self::mmr_leaves()).size();
                 let leaf_positions: Vec<NodeIndex> = proof
                     .leaf_indices
                     .iter()
                     .map(|leaf_index| leaf_index_to_pos(leaf_index.to_owned()))
                     .collect();
-                let leaf_k_indices = mmr::node_pos_to_k_index(leaf_positions.clone(), leaves_count);
+                let leaf_k_indices = mmr::node_pos_to_k_index(leaf_positions.clone(), mmr_size);
                 let leaves = leaf_positions
                     .iter()
                     .zip(leaf_k_indices.iter())
@@ -405,7 +405,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
                     .collect::<Result<Vec<TargetChainProofLeaf>, MMRError>>()?;
                 Ok(TargetChainProof {
                     leaves,
-                    leaf_count: proof.leaf_count,
+                    mmr_size,
                     items: proof.items,
                 })
             })
