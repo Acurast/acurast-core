@@ -144,7 +144,7 @@ pub struct TargetChainProof<Hash> {
     /// The indices of the leaves the proof is for.
     pub leaves: Vec<TargetChainProofLeaf>,
     /// Number of leaves in MMR, when the proof was generated.
-    pub leaf_count: NodeIndex,
+    pub mmr_size: NodeIndex,
     /// Proof elements (hashes of siblings of inner nodes on the path to the leaf).
     /// Excluding MMR root.
     pub items: Vec<Hash>,
