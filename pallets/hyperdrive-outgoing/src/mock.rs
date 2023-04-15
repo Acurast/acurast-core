@@ -62,10 +62,6 @@ impl Config for Test {
     type MaximumBlocksBeforeSnapshot = MaximumBlocksBeforeSnapshot;
 }
 
-impl TargetChainHasher for Keccak256 {
-    type TargetChainEncoder = TezosEncoder;
-}
-
 impl WeightInfo for () {
     fn send_message() -> Weight {
         DbWeight::get().reads_writes(3, 3)
