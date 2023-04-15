@@ -1,4 +1,5 @@
 use once_cell::race::OnceBox;
+use sp_runtime::traits::Keccak256;
 use sp_std::prelude::*;
 use sp_std::vec;
 use tezos_michelson::micheline::Micheline;
@@ -6,6 +7,7 @@ use tezos_michelson::michelson::data;
 use tezos_michelson::michelson::types::{bytes, list, nat, pair, string};
 use tezos_michelson::Error as TezosMichelineError;
 
+use crate::types::TargetChainHasher;
 use crate::Action;
 use crate::Leaf;
 use crate::{LeafEncoder, RawAction};
@@ -86,6 +88,10 @@ fn assign_payload_schema() -> &'static Micheline {
         ]);
         Box::new(schema)
     })
+}
+
+impl TargetChainHasher for Keccak256 {
+    type TargetChainEncoder = TezosEncoder;
 }
 
 #[cfg(test)]
