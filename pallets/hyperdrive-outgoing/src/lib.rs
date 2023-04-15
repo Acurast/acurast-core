@@ -86,7 +86,7 @@ pub mod pallet {
         /// To construct trie nodes that result in merging (bagging) two peaks, depending on the
         /// node kind we take either:
         /// - The node (hash) itself if it's an inner node.
-        /// - The hash of SCALE-encoding of the leaf data if it's a leaf node.
+        /// - The hash of [`Self::LeafEncoder`]-encoded leaf data if it's a leaf node.
         ///
         /// Then we create a tuple of these two hashes, SCALE-encode it (concatenate) and
         /// hash, to obtain a new MMR inner node - the new peak.
