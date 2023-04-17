@@ -175,7 +175,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn stored_matches_reverse_index)]
     pub type StoredMatchesReverseIndex<T: Config> =
-        StorageMap<_, Blake2_128Concat, JobId<T::AccountId>, T::AccountId>;
+        StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
