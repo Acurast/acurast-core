@@ -140,19 +140,20 @@ pub mod pallet {
     pub type NextSnapshotNumber<T: Config<I>, I: 'static = ()> =
         StorageValue<_, SnapshotNumber, ValueQuery>;
 
-    /// Latest snapshot's MMR root hash.
-    #[pallet::storage]
-    #[pallet::getter(fn snapshot_root_hash)]
-    pub type SnapshotRootHash<T: Config<I>, I: 'static = ()> =
-        StorageValue<_, HashOf<T, I>, ValueQuery>;
-
-    /// Meta data for a snapshot as a map `snapshot_number -> (last_block, last_message_excl)`.
+    /// Meta data for a snapshot as a map `snapshot_number -> (root_hash, last_block, last_message_excl)`.
     ///
-    /// Used to ensure a maximum number of blocks per snapshot, even if no messages get sent.
+    /// First value is the latest snapshot's MMR root hash.
+    ///
+    /// `last_block` and `last_message_excl` are used to ensure a maximum number of blocks per snapshot, even if no messages get sent.
     #[pallet::storage]
     #[pallet::getter(fn snapshot_meta)]
-    pub type SnapshotMeta<T: Config<I>, I: 'static = ()> =
-        StorageMap<_, Identity, SnapshotNumber, (BlockNumberFor<T>, LeafIndex), OptionQuery>;
+    pub type SnapshotMeta<T: Config<I>, I: 'static = ()> = StorageMap<
+        _,
+        Identity,
+        SnapshotNumber,
+        (HashOf<T, I>, BlockNumberFor<T>, LeafIndex),
+        OptionQuery,
+    >;
 
     /// Latest MMR root hash.
     #[pallet::storage]
@@ -187,10 +188,9 @@ pub mod pallet {
                     s.add_assign(1);
                     current_snapshot
                 });
-                SnapshotRootHash::<T, I>::put(RootHash::<T, I>::get());
                 SnapshotMeta::<T, I>::insert(
                     current_snapshot,
-                    (current_block, next_message_number),
+                    (RootHash::<T, I>::get(), current_block, next_message_number),
                 );
                 MessageNumbers::<T, I>::put((next_message_number, next_message_number));
             }
@@ -287,9 +287,12 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// This function should be combined with a check (not included!) if there was at least one new message to snapshot.
     fn maximum_blocks_before_snapshot_reached(current_block: T::BlockNumber) -> bool {
         // check if we should create new snapshot
-        let (last_block, _last_message_excl): (T::BlockNumber, LeafIndex) =
-            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))
-                .unwrap_or((0u32.into(), 0));
+        let (_root_hash, last_block, _last_message_excl): (_, T::BlockNumber, LeafIndex) =
+            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1)).unwrap_or((
+                Default::default(),
+                0u32.into(),
+                0,
+            ));
 
         current_block.saturating_sub(last_block) >= T::MaximumBlocksBeforeSnapshot::get().into()
     }
@@ -315,8 +318,9 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         maximum_messages: Option<u64>,
         latest_known_snapshot_number: SnapshotNumber,
     ) -> Result<Option<(Vec<Leaf>, Proof<HashOf<T, I>>)>, MMRError> {
-        let (_last_block, last_message_excl) = Self::snapshot_meta(latest_known_snapshot_number)
-            .ok_or(MMRError::GenerateProofFutureSnapshot)?;
+        let (_root_hash, _last_block, last_message_excl) =
+            Self::snapshot_meta(latest_known_snapshot_number)
+                .ok_or(MMRError::GenerateProofFutureSnapshot)?;
 
         ensure!(
             next_message_number <= last_message_excl,
