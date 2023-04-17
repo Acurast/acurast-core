@@ -87,15 +87,45 @@ impl<H: traits::Hash> From<Leaf> for Node<H> {
     }
 }
 
-/// Extension trait for [`traits::Hash`] that adds hashing with previsously encoded value, using an encoding supported on target chain.
-pub trait TargetChainHasher: traits::Hash {
+/// A bundled config of encoder/hasher for the target chain.
+///
+/// Extends traits [`traits::Hash`] and adds hashing with previsously encoded value, using an encoding supported on target chain.
+pub trait TargetChainConfig {
     type TargetChainEncoder: LeafEncoder;
 
-    /// Produce the hash of some encodable value, using an encoding supported on target chain.
+    /// A hasher type for MMR.
+    ///
+    /// To construct trie nodes that result in merging (bagging) two peaks, depending on the
+    /// node kind we take either:
+    /// - The node (hash) itself if it's an inner node.
+    /// - The hash of [`Self::LeafEncoder`]-encoded leaf data if it's a leaf node.
+    ///
+    /// Then we create a tuple of these two hashes (concatenate them) and
+    /// hash, to obtain a new MMR inner node - the new peak.
+    type Hasher: traits::Hash<Output = Self::Hash>;
+
+    /// The hashing output type.
+    ///
+    /// This type is actually going to be stored in the MMR.
+    /// Required to be provided separatly from [`Self::Hasher`], to satisfy trait bounds for storage items.
+    type Hash: Member
+        + MaybeSerializeDeserialize
+        + sp_std::fmt::Debug
+        + sp_std::hash::Hash
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + Copy
+        + Default
+        + codec::Codec
+        + codec::EncodeLike
+        + scale_info::TypeInfo
+        + MaxEncodedLen;
+
+    /// Produce the hash of some encodable value.
     fn hash_for_target(
         leaf: &Leaf,
-    ) -> Result<Self::Output, <Self::TargetChainEncoder as LeafEncoder>::Error> {
-        Ok(<Self as traits::Hash>::hash(
+    ) -> Result<Self::Hash, <Self::TargetChainEncoder as LeafEncoder>::Error> {
+        Ok(<Self::Hasher as traits::Hash>::hash(
             Self::TargetChainEncoder::encode(leaf)?.as_slice(),
         ))
     }
@@ -108,9 +138,9 @@ pub trait TargetChainNodeHasher<Hash> {
 }
 
 /// Implements node hashing for all nodes that contain leaves that support target chain hashing.
-impl<H: TargetChainHasher> TargetChainNodeHasher<H::Output> for H {
+impl<H: TargetChainConfig> TargetChainNodeHasher<H::Hash> for H {
     type Error = <H::TargetChainEncoder as LeafEncoder>::Error;
-    fn hash_node(node: &Node<H::Output>) -> Result<H::Output, Self::Error> {
+    fn hash_node(node: &Node<H::Hash>) -> Result<H::Hash, Self::Error> {
         match *node {
             Node::Data(ref leaf) => H::hash_for_target(leaf),
             Node::Hash(ref hash) => Ok(*hash),

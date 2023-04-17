@@ -4,14 +4,11 @@ use frame_support::{
 };
 use sp_core::H256;
 use sp_runtime::traits::AccountIdLookup;
-use sp_runtime::{
-    generic,
-    traits::{BlakeTwo256, Keccak256},
-};
+use sp_runtime::{generic, traits::BlakeTwo256};
 
 use stub::*;
 
-use crate::tezos::TezosEncoder;
+use crate::tezos::DefaultTezosConfig;
 use crate::*;
 
 frame_support::construct_runtime!(
@@ -55,8 +52,7 @@ impl frame_system::Config for Test {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
-    type Hasher = Keccak256;
-    type Hash = H256;
+    type TargetChainConfig = DefaultTezosConfig;
     type OnNewRoot = ();
     type WeightInfo = ();
     type MaximumBlocksBeforeSnapshot = MaximumBlocksBeforeSnapshot;

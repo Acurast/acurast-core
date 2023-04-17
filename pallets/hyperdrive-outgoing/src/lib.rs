@@ -7,19 +7,19 @@ use frame_support::dispatch::{Pays, PostDispatchInfo};
 use frame_support::ensure;
 use mmr_lib::leaf_index_to_pos;
 use sp_core::Get;
-use sp_runtime::traits::{self, Saturating};
+use sp_runtime::traits::Saturating;
 use sp_std::prelude::*;
 
 pub use pallet::*;
 pub use types::{
-    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
+    Action, Leaf, LeafEncoder, LeafIndex, Message, MMRError, NodeIndex, OnNewRoot, RawAction, TargetChainConfig
 };
 pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
-use crate::mmr::{HashOf, Merger};
+use crate::mmr::Merger;
 use crate::types::{
-    Node, Proof, SnapshotNumber, TargetChainHasher, TargetChainProof, TargetChainProofLeaf,
+    Node, Proof, SnapshotNumber, TargetChainProof, TargetChainProofLeaf,
 };
 
 #[cfg(test)]
@@ -35,18 +35,21 @@ mod benchmarking;
 mod default_weights;
 mod mmr;
 pub mod tezos;
-pub mod types;
+mod types;
 pub mod utils;
 
 /// A MMR specific to this pallet instance.
-type ModuleMmr<StorageType, T, I> = mmr::Mmr<StorageType, T, I, Merger<HasherOf<T, I>>>;
+type ModuleMmr<StorageType, T, I> = mmr::Mmr<StorageType, T, I, Merger<TargetChainConfigOf<T, I>>>;
 
-/// Hashing used for this pallet instance.
-pub(crate) type HasherOf<T, I> = <T as Config<I>>::Hasher;
+/// Hashing for target chain used for this pallet instance.
+pub(crate) type TargetChainConfigOf<T, I> = <T as Config<I>>::TargetChainConfig;
+
+/// Hash used for this pallet instance.
+pub(crate) type HashOf<T, I> = <<T as Config<I>>::TargetChainConfig as TargetChainConfig>::Hash;
 
 /// Encoder used for this pallet instance.
 pub(crate) type TargetChainEncoderOf<T, I> =
-    <HasherOf<T, I> as TargetChainHasher>::TargetChainEncoder;
+    <<T as Config<I>>::TargetChainConfig as TargetChainConfig>::TargetChainEncoder;
 
 /// Encoder error returned by Hasher/Encoder used for this pallet instance.
 pub(crate) type HasherError<T, I> = <TargetChainEncoderOf<T, I> as LeafEncoder>::Error;
@@ -81,34 +84,8 @@ pub mod pallet {
         /// [`Self::INDEXING_PREFIX`] and its in-tree index (MMR position).
         const INDEXING_PREFIX: &'static [u8];
 
-        /// A hasher type for MMR.
-        ///
-        /// To construct trie nodes that result in merging (bagging) two peaks, depending on the
-        /// node kind we take either:
-        /// - The node (hash) itself if it's an inner node.
-        /// - The hash of SCALE-encoding of the leaf data if it's a leaf node.
-        ///
-        /// Then we create a tuple of these two hashes, SCALE-encode it (concatenate) and
-        /// hash, to obtain a new MMR inner node - the new peak.
-        type Hasher: TargetChainHasher<Output = <Self as Config<I>>::Hash>
-            + traits::Hash<Output = <Self as Config<I>>::Hash>;
-
-        /// The hashing output type.
-        ///
-        /// This type is actually going to be stored in the MMR.
-        /// Required to be provided again, to satisfy trait bounds for storage items.
-        type Hash: Member
-            + MaybeSerializeDeserialize
-            + sp_std::fmt::Debug
-            + sp_std::hash::Hash
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + Copy
-            + Default
-            + codec::Codec
-            + codec::EncodeLike
-            + scale_info::TypeInfo
-            + MaxEncodedLen;
+        /// The bundled config of encoder/hasher using an encoding/hash function supported on target chain.
+        type TargetChainConfig: TargetChainConfig;
 
         /// The usual number of blocks included before a new snapshot of the current MMR's [`RootHash`] is stored into [`SnapshotRootHash`].
         ///
@@ -122,7 +99,7 @@ pub mod pallet {
         /// apart from having it in the storage. For instance you might output it in the header
         /// digest (see [`frame_system::Pallet::deposit_log`]) to make it available for Light
         /// Clients. Hook complexity should be `O(1)`.
-        type OnNewRoot: OnNewRoot<<Self as Config<I>>::Hash>;
+        type OnNewRoot: OnNewRoot<HashOf<Self, I>>;
 
         /// Weights for this pallet.
         type WeightInfo: WeightInfo;
@@ -166,7 +143,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn snapshot_root_hash)]
     pub type SnapshotRootHash<T: Config<I>, I: 'static = ()> =
-        StorageValue<_, <T as Config<I>>::Hash, ValueQuery>;
+        StorageValue<_, HashOf<T, I>, ValueQuery>;
 
     /// Meta data for a snapshot as a map `snapshot_number -> (last_block, last_message_excl)`.
     ///
@@ -179,8 +156,7 @@ pub mod pallet {
     /// Latest MMR root hash.
     #[pallet::storage]
     #[pallet::getter(fn root_hash)]
-    pub type RootHash<T: Config<I>, I: 'static = ()> =
-        StorageValue<_, <T as Config<I>>::Hash, ValueQuery>;
+    pub type RootHash<T: Config<I>, I: 'static = ()> = StorageValue<_, HashOf<T, I>, ValueQuery>;
 
     /// Current size of the MMR (number of leaves).
     #[pallet::storage]
@@ -194,7 +170,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn mmr_peak)]
     pub type Nodes<T: Config<I>, I: 'static = ()> =
-        StorageMap<_, Identity, NodeIndex, <T as Config<I>>::Hash, OptionQuery>;
+        StorageMap<_, Identity, NodeIndex, HashOf<T, I>, OptionQuery>;
 
     #[pallet::hooks]
     impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {
@@ -337,7 +313,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         next_message_number: LeafIndex,
         maximum_messages: Option<u64>,
         latest_known_snapshot_number: SnapshotNumber,
-    ) -> Result<Option<(Vec<Leaf>, Proof<<T as Config<I>>::Hash>)>, MMRError> {
+    ) -> Result<Option<(Vec<Leaf>, Proof<HashOf<T, I>>)>, MMRError> {
         let (_last_block, last_message_excl) = Self::snapshot_meta(latest_known_snapshot_number)
             .ok_or(MMRError::GenerateProofFutureSnapshot)?;
 
@@ -374,7 +350,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         next_message_number: LeafIndex,
         maximum_messages: Option<u64>,
         latest_known_snapshot_number: SnapshotNumber,
-    ) -> Result<Option<TargetChainProof<<T as Config<I>>::Hash>>, MMRError> {
+    ) -> Result<Option<TargetChainProof<HashOf<T, I>>>, MMRError> {
         let proof = Self::generate_proof(
             next_message_number,
             maximum_messages,
@@ -413,7 +389,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     }
 
     /// Return the on-chain MMR root hash.
-    pub fn mmr_root() -> <T as Config<I>>::Hash {
+    pub fn mmr_root() -> HashOf<T, I> {
         Self::root_hash()
     }
 
@@ -423,10 +399,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// It will return `Ok(())` if the proof is valid
     /// and an `Err(..)` if MMR is inconsistent (some leaves are missing)
     /// or the proof is invalid.
-    pub fn verify_proof(
-        leaves: Vec<Leaf>,
-        proof: Proof<<T as Config<I>>::Hash>,
-    ) -> Result<(), MMRError> {
+    pub fn verify_proof(leaves: Vec<Leaf>, proof: Proof<HashOf<T, I>>) -> Result<(), MMRError> {
         if proof.leaf_count > Self::mmr_leaves()
             || proof.leaf_count == 0
             || (proof.items.len().saturating_add(leaves.len())) as u64 > proof.leaf_count
@@ -456,7 +429,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         leaves: Vec<Leaf>,
         proof: Proof<HashOf<T, I>>,
     ) -> Result<(), MMRError> {
-        let is_valid = mmr::verify_leaves_proof::<T, I, Merger<HasherOf<T, I>>>(
+        let is_valid = mmr::verify_leaves_proof::<T, I, Merger<TargetChainConfigOf<T, I>>>(
             root,
             leaves.iter().map(|leaf| Node::Data(leaf.clone())).collect(),
             proof,
