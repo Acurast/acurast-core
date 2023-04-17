@@ -14,7 +14,8 @@ use crate::types::TargetChainNodeHasher;
 use crate::utils::NodesUtils;
 use crate::{
     mmr::{Node, NodeOf},
-    Config, HasherOf, LeafIndexToParentBlockHash, NodeIndex, Nodes, NumberOfLeaves, Pallet,
+    Config, LeafIndexToParentBlockHash, NodeIndex, Nodes, NumberOfLeaves, Pallet,
+    TargetChainConfigOf,
 };
 
 /// A marker type for runtime-specific storage implementation.
@@ -115,7 +116,7 @@ where
 
         trace!(
             target: "runtime::mmr", "elems: {:?}",
-            elems.iter().map(|elem| <T as Config<I>>::Hasher::hash_node(elem)).collect::<Vec<_>>()
+            elems.iter().map(|elem| TargetChainConfigOf::<T,I>::hash_node(elem)).collect::<Vec<_>>()
         );
 
         let leaves = NumberOfLeaves::<T, I>::get();
@@ -140,7 +141,7 @@ where
             if peaks_to_store.next_if_eq(&node_index).is_some() {
                 <Nodes<T, I>>::insert(
                     node_index,
-                    HasherOf::<T, I>::hash_node(&elem)
+                    TargetChainConfigOf::<T, I>::hash_node(&elem)
                         .map_err(|_| mmr_lib::Error::StoreError("hasher failed".to_owned()))?,
                 );
             }

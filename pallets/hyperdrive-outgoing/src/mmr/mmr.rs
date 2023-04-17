@@ -9,7 +9,7 @@ use crate::{
         Node,
     },
     types::{MMRError, NodeIndex},
-    Config, HasherError, HasherOf, Leaf,
+    Config, HasherError, Leaf, TargetChainConfigOf,
 };
 use mmr_lib;
 use mmr_lib::helper;
@@ -155,7 +155,8 @@ where
             .map_err(|e| MMRError::Commit.log_error(e))?;
         Ok((
             self.leaves,
-            HasherOf::<T, I>::hash_node(&root).map_err(|e| MMRError::Commit.log_error(e))?,
+            TargetChainConfigOf::<T, I>::hash_node(&root)
+                .map_err(|e| MMRError::Commit.log_error(e))?,
         ))
     }
 }
@@ -202,7 +203,7 @@ where
                 items: proof
                     .proof_items()
                     .iter()
-                    .map(|x| HasherOf::<T, I>::hash_node(x))
+                    .map(|x| TargetChainConfigOf::<T, I>::hash_node(x))
                     .collect::<Result<Vec<HashOf<T, I>>, HasherError<T, I>>>()
                     .map_err(|e| MMRError::GenerateProof.log_error(e))?,
             },
