@@ -1,5 +1,6 @@
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::*;
+use hex_literal::hex;
 use mmr_lib::helper;
 use sp_core::{
     offchain::{testing::TestOffchainExt, OffchainDbExt, OffchainWorkerExt},
@@ -599,4 +600,43 @@ fn does_not_panic_when_generating_historical_proofs() {
         // when no new message because maximum_messages==0
         assert_eq!(Pallet::<Test>::generate_proof(5, Some(0), 0), Ok(None));
     });
+}
+
+/// Tests serialization for proof:
+/// ```txt
+/// k_index: 1, position: 8, message 05070700050707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000502000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b
+/// k_index: 0, position: 10, message 05070700060707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000602000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b
+///
+/// mmr_size: 11
+///
+/// items: [0x53db3d426fa99eff2cc6ef1f07a226c2e5b32d9ccc2b67411d52e8d2b0de8d13,
+///         0xbca5ce83486f6bd8be90523d0e9bcefd812fbd451337b584d32f8203dbf340c7]
+/// ```
+#[test]
+fn should_serialize_target_chain_proof() {
+    // given
+    let leaf = vec![1_u8, 2, 3, 4];
+    let proof = TargetChainProof {
+        leaves: vec![TargetChainProofLeaf{
+            k_index: 1,
+            position: 8,
+            message: hex!("05070700050707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000502000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b").into(),
+        },
+                     TargetChainProofLeaf{
+                         k_index: 0,
+                         position: 10,
+                         message: hex!("05070700060707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000602000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b").into(),
+                     }],
+        mmr_size:11,
+        items: vec![hex!("53db3d426fa99eff2cc6ef1f07a226c2e5b32d9ccc2b67411d52e8d2b0de8d13"), hex!("bca5ce83486f6bd8be90523d0e9bcefd812fbd451337b584d32f8203dbf340c7")],
+    };
+
+    // when
+    let actual = serde_json::to_string(&proof).unwrap();
+
+    // then
+    assert_eq!(
+        actual,
+        r#"{"leaves":[{"kIndex":1,"position":8,"message":[5,7,7,0,5,7,7,1,0,0,0,6,65,83,83,73,71,78,10,0,0,0,70,5,7,7,10,0,0,0,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,2,0,0,0,41,10,0,0,0,36,116,122,49,104,52,69,115,71,117,110,72,50,85,101,49,84,50,117,78,115,56,109,102,75,90,56,88,90,111,81,106,105,51,72,99,75]},{"kIndex":0,"position":10,"message":[5,7,7,0,6,7,7,1,0,0,0,6,65,83,83,73,71,78,10,0,0,0,70,5,7,7,10,0,0,0,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,2,0,0,0,41,10,0,0,0,36,116,122,49,104,52,69,115,71,117,110,72,50,85,101,49,84,50,117,78,115,56,109,102,75,90,56,88,90,111,81,106,105,51,72,99,75]}],"mmrSize":11,"items":[[83,219,61,66,111,169,158,255,44,198,239,31,7,162,38,194,229,179,45,156,204,43,103,65,29,82,232,210,176,222,141,19],[188,165,206,131,72,111,107,216,190,144,82,61,14,155,206,253,129,47,189,69,19,55,181,132,211,47,130,3,219,243,64,199]]}"#
+    );
 }

@@ -5,6 +5,10 @@ use codec::alloc;
 use frame_support::pallet_prelude::*;
 pub use mmr_lib;
 use scale_info::TypeInfo;
+#[cfg(feature = "std")]
+use serde;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
 use sp_core::RuntimeDebug;
 use sp_runtime::traits;
 #[cfg(not(feature = "std"))]
@@ -171,6 +175,8 @@ pub struct Proof<Hash> {
 }
 
 /// A self-contained MMR proof for a group of leaves, containing messages encoded for target chain.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
 pub struct TargetChainProof<Hash> {
     /// The indices of the leaves the proof is for.
@@ -183,6 +189,8 @@ pub struct TargetChainProof<Hash> {
 }
 
 /// A leaf of a self-contained MMR [`TargetChainProof`].
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
 pub struct TargetChainProofLeaf {
     /// The k-index of this leaf.
@@ -257,50 +265,5 @@ impl MMRError {
             e,
         );
         self
-    }
-}
-
-sp_api::decl_runtime_apis! {
-    /// API to interact with MMR pallet.
-    pub trait HyperdriveApi<Hash: codec::Codec, BlockNumber: codec::Codec> {
-        /// Return the on-chain MMR root hash.
-        fn snapshot_mmr_root() -> Result<Hash, MMRError>;
-
-        /// Return the number of MMR blocks in the chain.
-        fn mmr_leaf_count() -> Result<LeafIndex, MMRError>;
-
-        /// Generates a MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
-        fn generate_proof(
-            next_message_number: LeafIndex,
-            maximum_messages: Option<u64>,
-            latest_known_snapshot_number: SnapshotNumber,
-        ) -> Result<Option<(Vec<Leaf>, Proof<Hash>)>, MMRError>;
-
-        /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
-        /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
-        ///
-        /// This function wraps [`Self::generate_proof`] and converts result to [`TargetChainProof`].
-        fn generate_target_chain_proof(
-            next_message_number: LeafIndex,
-            maximum_messages: Option<u64>,
-            latest_known_snapshot_number: SnapshotNumber,
-        ) -> Result<Option<TargetChainProof<Hash>>, MMRError>;
-
-        /// Verify MMR proof against on-chain MMR for a batch of leaves.
-        ///
-        /// Note this function will use on-chain MMR root hash and check if the proof matches the hash.
-        /// Note, the leaves should be sorted such that corresponding leaves and leaf indices have the
-        /// same position in both the `leaves` vector and the `leaf_indices` vector contained in the [Proof]
-        fn verify_proof(leaves: Vec<Leaf>, proof: Proof<Hash>) -> Result<(), MMRError>;
-
-        /// Verify MMR proof against given root hash for a batch of leaves.
-        ///
-        /// Note this function does not require any on-chain storage - the
-        /// proof is verified against given MMR root hash.
-        ///
-        /// Note, the leaves should be sorted such that corresponding leaves and leaf indices have the
-        /// same position in both the `leaves` vector and the `leaf_indices` vector contained in the [Proof]
-        fn verify_proof_stateless(root: Hash, leaves: Vec<Leaf>, proof: Proof<Hash>)
-            -> Result<(), MMRError>;
     }
 }

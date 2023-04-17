@@ -12,14 +12,14 @@ use sp_std::prelude::*;
 
 pub use pallet::*;
 pub use types::{
-    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
-    TargetChainConfig,
+    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, Proof,
+    RawAction, SnapshotNumber, TargetChainConfig, TargetChainProof,
 };
 pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
 use crate::mmr::Merger;
-use crate::types::{Node, Proof, SnapshotNumber, TargetChainProof, TargetChainProofLeaf};
+use crate::types::{Node, TargetChainProofLeaf};
 
 #[cfg(test)]
 pub mod mock;
@@ -33,6 +33,8 @@ mod benchmarking;
 
 mod default_weights;
 mod mmr;
+#[cfg(feature = "std")]
+pub mod rpc;
 pub mod tezos;
 mod types;
 pub mod utils;
@@ -438,5 +440,20 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         } else {
             Err(MMRError::Verify.log_debug(("The proof is incorrect.", root)))
         }
+    }
+}
+
+sp_api::decl_runtime_apis! {
+    /// API to interact with MMR pallet.
+    pub trait HyperdriveApi<Hash: codec::Codec> {
+        /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
+        /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
+        ///
+        /// This function forwards to [`Pallet::generate_target_chain_proof`].
+        fn generate_target_chain_proof(
+            next_message_number: LeafIndex,
+            maximum_messages: Option<u64>,
+            latest_known_snapshot_number: SnapshotNumber,
+        ) -> Result<Option<TargetChainProof<Hash>>, MMRError>;
     }
 }
