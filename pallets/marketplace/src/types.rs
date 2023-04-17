@@ -125,6 +125,21 @@ pub struct Assignment<Reward> {
     pub acknowledged: bool,
     /// Keeps track of the SLA.
     pub sla: SLA,
+    /// Processor Pub Keys
+    pub pub_keys: PubKeys,
+}
+
+pub const NUMBER_OF_PUB_KEYS: u32 = 2;
+pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
+
+/// The public keys of the processor releaved when a job is acknowledge.
+pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
+
+/// The public key revealed by a processor.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub enum PubKey {
+    SECP256r1(BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>),
+    SECP256k1(BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>),
 }
 
 pub type AssignmentFor<T> = Assignment<RewardFor<T>>;

@@ -29,7 +29,7 @@ pub(crate) use pallet::STORAGE_VERSION;
 pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
-        Blake2_128, PalletId,
+        Blake2_128, Blake2_128Concat, PalletId,
     };
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
@@ -171,6 +171,11 @@ pub mod pallet {
         JobId<T::AccountId>,
         AssignmentFor<T>,
     >;
+
+    #[pallet::storage]
+    #[pallet::getter(fn stored_matches_reverse_index)]
+    pub type StoredMatchesReverseIndex<T: Config> =
+        StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
@@ -369,6 +374,7 @@ pub mod pallet {
         pub fn acknowledge_match(
             origin: OriginFor<T>,
             job_id: JobId<T::AccountId>,
+            pub_keys: PubKeys,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -382,6 +388,7 @@ pub mod pallet {
                         .ok_or(Error::<T>::CannotAcknowledgeWhenNotMatched)?;
                     let changed = !assignment.acknowledged;
                     assignment.acknowledged = true;
+                    assignment.pub_keys = pub_keys;
                     Ok((changed, assignment.to_owned()))
                 },
             )?;
@@ -574,6 +581,7 @@ pub mod pallet {
             // removed completed job from all storage points (completed SLA gets still deposited in event below)
             <StoredMatches<T>>::remove(&who, &job_id);
             <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+            <StoredMatchesReverseIndex<T>>::remove(&job_id);
 
             // increase capacity
             <StoredStorageCapacity<T>>::mutate(&who, |c| {
@@ -905,6 +913,7 @@ pub mod pallet {
                                             total: execution_count,
                                             met: 0,
                                         },
+                                        pub_keys: PubKeys::default(),
                                     });
                                     Ok(())
                                 }
@@ -912,6 +921,10 @@ pub mod pallet {
                             Ok(())
                         },
                     )?;
+                    <StoredMatchesReverseIndex<T>>::insert(
+                        &m.job_id,
+                        planned_execution.source.clone(),
+                    );
                     <StoredStorageCapacity<T>>::set(
                         &planned_execution.source,
                         capacity.checked_sub(registration.storage.into()),
