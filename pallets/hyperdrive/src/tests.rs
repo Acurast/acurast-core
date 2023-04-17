@@ -358,3 +358,76 @@ fn test_verify_proof() {
         assert_eq!(derive_proof::<Keccak256, _>(proof, leaf), root_hash);
     });
 }
+
+#[test]
+fn test_send_message() {
+    let mut test = new_test_ext();
+
+    test.execute_with(|| {
+        let actions = vec![
+            StateTransmitterUpdate::Add(
+                alice_account_id(),
+                ActivityWindow {
+                    start_block: 10,
+                    end_block: 20,
+                },
+            ),
+            StateTransmitterUpdate::Add(
+                bob_account_id(),
+                ActivityWindow {
+                    start_block: 10,
+                    end_block: 50,
+                },
+            ),
+        ];
+
+        let tezos_contract = StateOwner::try_from(hex!("050a00000016011ba8a95352a4d7f3c753ca700e10ab46cbf963f400").to_vec()).unwrap();
+        assert_ok!(TezosHyperdrive::update_target_chain_owner(
+            RuntimeOrigin::root().into(),
+            tezos_contract.clone()
+        ));
+
+        assert_eq!(TezosHyperdrive::current_target_chain_owner(), tezos_contract);
+
+        assert_ok!(TezosHyperdrive::update_state_transmitters(
+            RuntimeOrigin::root().into(),
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
+        ));
+
+        System::set_block_number(10);
+
+        let snapshot_root_1 = H256(hex!(
+            "bed0c00cb1d8727772702af88a395a4e6c82ac6230cc1daf0610d97470377b91"
+        ));
+        assert_ok!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(alice_account_id()),
+                1,
+                snapshot_root_1
+            )
+        );
+        assert_ok!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(bob_account_id()),
+                1,
+                snapshot_root_1
+            )
+        );
+
+        assert_eq!(TezosHyperdrive::validate_state_merkle_root(1, snapshot_root_1), true);
+
+        let proof: StateProof<H256> = bounded_vec![];
+        let key = StateKey::try_from(hex!("050001").to_vec()).unwrap();
+        let value = StateValue::try_from(hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000ee05070703030707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000107070001070700010707020000000200000707070700b0d403070700b4f292aaf36107070098e4030707000000b4b8dba6f36107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001").to_vec()).unwrap();
+
+        assert_ok!(
+            TezosHyperdrive::submit_message(
+                RuntimeOrigin::signed(alice_account_id()),
+                1,
+                proof,
+                key,
+                value
+            )
+        );
+    });
+}

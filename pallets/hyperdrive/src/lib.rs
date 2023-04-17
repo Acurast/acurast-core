@@ -353,7 +353,7 @@ pub mod pallet {
 
             let key_bytes = &key.to_vec();
             let message_bytes = &value.to_vec();
-            let leaf_hash = Self::leaf_hash(T::TargetChainOwner::get(), key, value);
+            let leaf_hash = Self::leaf_hash(<CurrentTargetChainOwner<T, I>>::get(), key, value);
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             if !Self::validate_state_merkle_root(block, derived_root) {

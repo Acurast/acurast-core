@@ -12,14 +12,14 @@ use sp_std::prelude::*;
 
 pub use pallet::*;
 pub use types::{
-    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
-    TargetChainConfig,
+    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, Proof,
+    RawAction, SnapshotNumber, TargetChainConfig, TargetChainProof,
 };
 pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
 use crate::mmr::Merger;
-use crate::types::{Node, Proof, SnapshotNumber, TargetChainProof, TargetChainProofLeaf};
+use crate::types::{Node, TargetChainProofLeaf};
 
 #[cfg(test)]
 pub mod mock;
@@ -33,6 +33,8 @@ mod benchmarking;
 
 mod default_weights;
 mod mmr;
+#[cfg(feature = "std")]
+pub mod rpc;
 pub mod tezos;
 mod types;
 pub mod utils;
@@ -138,19 +140,20 @@ pub mod pallet {
     pub type NextSnapshotNumber<T: Config<I>, I: 'static = ()> =
         StorageValue<_, SnapshotNumber, ValueQuery>;
 
-    /// Latest snapshot's MMR root hash.
-    #[pallet::storage]
-    #[pallet::getter(fn snapshot_root_hash)]
-    pub type SnapshotRootHash<T: Config<I>, I: 'static = ()> =
-        StorageValue<_, HashOf<T, I>, ValueQuery>;
-
-    /// Meta data for a snapshot as a map `snapshot_number -> (last_block, last_message_excl)`.
+    /// Meta data for a snapshot as a map `snapshot_number -> (root_hash, last_block, last_message_excl)`.
     ///
-    /// Used to ensure a maximum number of blocks per snapshot, even if no messages get sent.
+    /// First value is the latest snapshot's MMR root hash.
+    ///
+    /// `last_block` and `last_message_excl` are used to ensure a maximum number of blocks per snapshot, even if no messages get sent.
     #[pallet::storage]
     #[pallet::getter(fn snapshot_meta)]
-    pub type SnapshotMeta<T: Config<I>, I: 'static = ()> =
-        StorageMap<_, Identity, SnapshotNumber, (BlockNumberFor<T>, LeafIndex), OptionQuery>;
+    pub type SnapshotMeta<T: Config<I>, I: 'static = ()> = StorageMap<
+        _,
+        Identity,
+        SnapshotNumber,
+        (HashOf<T, I>, BlockNumberFor<T>, LeafIndex),
+        OptionQuery,
+    >;
 
     /// Latest MMR root hash.
     #[pallet::storage]
@@ -185,10 +188,9 @@ pub mod pallet {
                     s.add_assign(1);
                     current_snapshot
                 });
-                SnapshotRootHash::<T, I>::put(RootHash::<T, I>::get());
                 SnapshotMeta::<T, I>::insert(
                     current_snapshot,
-                    (current_block, next_message_number),
+                    (RootHash::<T, I>::get(), current_block, next_message_number),
                 );
                 MessageNumbers::<T, I>::put((next_message_number, next_message_number));
             }
@@ -285,9 +287,12 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// This function should be combined with a check (not included!) if there was at least one new message to snapshot.
     fn maximum_blocks_before_snapshot_reached(current_block: T::BlockNumber) -> bool {
         // check if we should create new snapshot
-        let (last_block, _last_message_excl): (T::BlockNumber, LeafIndex) =
-            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))
-                .unwrap_or((0u32.into(), 0));
+        let (_root_hash, last_block, _last_message_excl): (_, T::BlockNumber, LeafIndex) =
+            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1)).unwrap_or((
+                Default::default(),
+                0u32.into(),
+                0,
+            ));
 
         current_block.saturating_sub(last_block) >= T::MaximumBlocksBeforeSnapshot::get().into()
     }
@@ -313,8 +318,9 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         maximum_messages: Option<u64>,
         latest_known_snapshot_number: SnapshotNumber,
     ) -> Result<Option<(Vec<Leaf>, Proof<HashOf<T, I>>)>, MMRError> {
-        let (_last_block, last_message_excl) = Self::snapshot_meta(latest_known_snapshot_number)
-            .ok_or(MMRError::GenerateProofFutureSnapshot)?;
+        let (_root_hash, _last_block, last_message_excl) =
+            Self::snapshot_meta(latest_known_snapshot_number)
+                .ok_or(MMRError::GenerateProofFutureSnapshot)?;
 
         ensure!(
             next_message_number <= last_message_excl,
@@ -387,9 +393,22 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
             .transpose()
     }
 
-    /// Return the on-chain MMR root hash.
-    pub fn mmr_root() -> HashOf<T, I> {
-        Self::root_hash()
+    /// Returns the snapshot MMR roots from `next_expected_snapshot_number, ...` onwards or an empty vec if no new snapshots.
+    pub fn snapshot_roots(
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> impl Iterator<Item = Result<(SnapshotNumber, HashOf<T, I>), MMRError>> + 'static {
+        let next_snapshot_number = Self::next_snapshot_number();
+        (next_expected_snapshot_number..next_snapshot_number)
+            .into_iter()
+            .map(move |snapshot_number| {
+                if let Some((root_hash, _last_block, _last_message_excl)) =
+                    Self::snapshot_meta(snapshot_number)
+                {
+                    Ok((snapshot_number, root_hash))
+                } else {
+                    Err(MMRError::InconsistentSnapshotMeta)
+                }
+            })
     }
 
     /// Verify MMR proof for given `leaves`.
@@ -438,5 +457,24 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         } else {
             Err(MMRError::Verify.log_debug(("The proof is incorrect.", root)))
         }
+    }
+}
+
+sp_api::decl_runtime_apis! {
+    /// API to interact with MMR pallet.
+    pub trait HyperdriveApi<Hash: codec::Codec> {
+        fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, Hash)>, MMRError>;
+
+        fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, Hash)>, MMRError>;
+
+        /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
+        /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
+        ///
+        /// This function forwards to [`Pallet::generate_target_chain_proof`].
+        fn generate_target_chain_proof(
+            next_message_number: LeafIndex,
+            maximum_messages: Option<u64>,
+            latest_known_snapshot_number: SnapshotNumber,
+        ) -> Result<Option<TargetChainProof<Hash>>, MMRError>;
     }
 }
