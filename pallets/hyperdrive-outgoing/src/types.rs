@@ -1,16 +1,18 @@
 use core::fmt::Debug;
-pub use mmr_lib;
 
+use alloc::string::String;
+use codec::alloc;
 use frame_support::pallet_prelude::*;
+pub use mmr_lib;
 use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;
 use sp_runtime::traits;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::Vec;
 use sp_std::prelude::*;
-
-use pallet_acurast::{JobIdSequence, TezosAddressBytes};
 use strum_macros::{EnumString, IntoStaticStr};
+
+use pallet_acurast::JobIdSequence;
 
 /// A type to describe node position in the MMR (node index).
 pub type NodeIndex = u64;
@@ -42,7 +44,7 @@ impl<Hash> OnNewRoot<Hash> for () {
     RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
 )]
 pub enum RawAction {
-    #[strum(serialize = "ASSIGN")]
+    #[strum(serialize = "ASSIGN_JOB_PROCESSOR")]
     AssignJob,
 }
 
@@ -60,7 +62,7 @@ pub enum Action {
     /// A subset of values expressed by [`pallet_acurast::JobId`], only for jobs created on Tezos.
     ///
     /// Consists of `(Job ID on Tezos, [processor addresses])`.
-    AssignJob(JobIdSequence, Vec<TezosAddressBytes>), // (nat, address)
+    AssignJob(JobIdSequence, String), // (nat, address)
 }
 
 /// Message that is transferred to target chains.

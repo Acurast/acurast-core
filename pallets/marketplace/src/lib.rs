@@ -92,6 +92,8 @@ pub mod pallet {
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type AssetValidator: AssetValidator<Self::AssetId>;
+        /// Hook to act on marketplace related state transitions.
+        type MarketplaceHooks: MarketplaceHooks<Self>;
         type WeightInfo: WeightInfo;
 
         #[cfg(feature = "runtime-benchmarks")]
@@ -408,6 +410,9 @@ pub mod pallet {
                         Ok(())
                     },
                 )?;
+
+                // activate hook so implementing side can react on job assignment
+                T::MarketplaceHooks::assign_job(&job_id, &assignment.pub_keys)?;
 
                 Self::deposit_event(Event::JobRegistrationAssigned(
                     job_id,

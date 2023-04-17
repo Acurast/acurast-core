@@ -404,6 +404,7 @@ pub mod acurast_runtime {
         type RewardManager =
             AssetRewardManager<AcurastAsset, FeeManagerImpl, Balances, AcurastAssets>;
         type AssetValidator = PassAllAssets;
+        type MarketplaceHooks = ();
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper = TestBenchmarkHelper;
