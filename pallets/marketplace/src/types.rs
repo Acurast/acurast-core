@@ -132,14 +132,16 @@ pub struct Assignment<Reward> {
 pub const NUMBER_OF_PUB_KEYS: u32 = 2;
 pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
 
+pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
+
 /// The public keys of the processor releaved when a job is acknowledge.
 pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
 
 /// The public key revealed by a processor.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub enum PubKey {
-    SECP256r1(BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>),
-    SECP256k1(BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>),
+    SECP256r1(PubKeyBytes),
+    SECP256k1(PubKeyBytes),
 }
 
 pub type AssignmentFor<T> = Assignment<RewardFor<T>>;
@@ -215,4 +217,21 @@ pub enum ExecutionResult {
     Success(ExecutionOperationHash),
     /// Failure with message.
     Failure(ExecutionFailureMessage),
+}
+
+/// Allows to hook additional logic for marketplace related state transitions.
+pub trait MarketplaceHooks<T: Config> {
+    fn assign_job(
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        pub_keys: &PubKeys,
+    ) -> DispatchResultWithPostInfo;
+}
+
+impl<T: Config> MarketplaceHooks<T> for () {
+    fn assign_job(
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        _pub_keys: &PubKeys,
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
+    }
 }

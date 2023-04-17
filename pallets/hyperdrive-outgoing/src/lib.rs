@@ -12,15 +12,14 @@ use sp_std::prelude::*;
 
 pub use pallet::*;
 pub use types::{
-    Action, Leaf, LeafEncoder, LeafIndex, Message, MMRError, NodeIndex, OnNewRoot, RawAction, TargetChainConfig
+    Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, RawAction,
+    TargetChainConfig,
 };
 pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
 use crate::mmr::Merger;
-use crate::types::{
-    Node, Proof, SnapshotNumber, TargetChainProof, TargetChainProofLeaf,
-};
+use crate::types::{Node, Proof, SnapshotNumber, TargetChainProof, TargetChainProofLeaf};
 
 #[cfg(test)]
 pub mod mock;
