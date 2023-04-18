@@ -21,6 +21,20 @@ const MMR_ERROR: i32 = 8010;
 /// Hyperdrive RPC methods.
 #[rpc(client, server)]
 pub trait MmrApi<BlockHash, Hash: MaybeSerializeDeserialize> {
+    /// Returns the snapshot MMR roots from `next_expected_snapshot_number, ...` onwards or an empty vec if no new snapshots.
+    #[method(name = "snapshotRoots")]
+    fn snapshot_roots(
+        &self,
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> RpcResult<Vec<(SnapshotNumber, Hash)>>;
+
+    /// Returns the snapshot MMR root `next_expected_snapshot_number` or None if not snapshot not yet taken.
+    #[method(name = "snapshotRoot")]
+    fn snapshot_root(
+        &self,
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> RpcResult<Option<(SnapshotNumber, Hash)>>;
+
     /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
     /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
     ///
@@ -59,6 +73,36 @@ where
     Client::Api: HyperdriveApi<Block, Hash>,
     Hash: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
+    fn snapshot_roots(
+        &self,
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> RpcResult<Vec<(SnapshotNumber, Hash)>> {
+        let api = self.client.runtime_api();
+        let roots = api
+            .snapshot_roots(
+                &BlockId::number(self.client.info().best_number),
+                next_expected_snapshot_number,
+            )
+            .map_err(runtime_error_into_rpc_error)?
+            .map_err(mmr_error_into_rpc_error)?;
+        Ok(roots)
+    }
+
+    fn snapshot_root(
+        &self,
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> RpcResult<Option<(SnapshotNumber, Hash)>> {
+        let api = self.client.runtime_api();
+        let root = api
+            .snapshot_root(
+                &BlockId::number(self.client.info().best_number),
+                next_expected_snapshot_number,
+            )
+            .map_err(runtime_error_into_rpc_error)?
+            .map_err(mmr_error_into_rpc_error)?;
+        Ok(root)
+    }
+
     fn generate_target_chain_proof(
         &self,
         next_message_number: LeafIndex,
@@ -94,6 +138,7 @@ fn mmr_error_into_rpc_error(err: MMRError) -> CallError {
             MMRError::GenerateProofFutureMessage => 7,
             MMRError::Verify => 8,
             MMRError::LeafNotFound => 9,
+            MMRError::InconsistentSnapshotMeta => 10,
         };
 
     CallError::Custom(ErrorObject::owned(

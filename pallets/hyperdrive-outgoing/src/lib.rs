@@ -393,9 +393,22 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
             .transpose()
     }
 
-    /// Return the on-chain MMR root hash.
-    pub fn mmr_root() -> HashOf<T, I> {
-        Self::root_hash()
+    /// Returns the snapshot MMR roots from `next_expected_snapshot_number, ...` onwards or an empty vec if no new snapshots.
+    pub fn snapshot_roots(
+        next_expected_snapshot_number: SnapshotNumber,
+    ) -> impl Iterator<Item = Result<(SnapshotNumber, HashOf<T, I>), MMRError>> + 'static {
+        let next_snapshot_number = Self::next_snapshot_number();
+        (next_expected_snapshot_number..next_snapshot_number)
+            .into_iter()
+            .map(move |snapshot_number| {
+                if let Some((root_hash, _last_block, _last_message_excl)) =
+                    Self::snapshot_meta(snapshot_number)
+                {
+                    Ok((snapshot_number, root_hash))
+                } else {
+                    Err(MMRError::InconsistentSnapshotMeta)
+                }
+            })
     }
 
     /// Verify MMR proof for given `leaves`.
@@ -450,6 +463,10 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
     pub trait HyperdriveApi<Hash: codec::Codec> {
+        fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, Hash)>, MMRError>;
+
+        fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, Hash)>, MMRError>;
+
         /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
         /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
         ///

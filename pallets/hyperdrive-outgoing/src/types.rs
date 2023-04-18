@@ -214,6 +214,12 @@ pub enum MMRError {
     /// Error committing changes.
     #[cfg_attr(feature = "std", error("Error committing changes"))]
     Commit,
+    /// Error when snapshot meta index became inconsistent.
+    #[cfg_attr(
+        feature = "std",
+        error("Snapshot meta index is inconsistent: missing snapshot that should be there")
+    )]
+    InconsistentSnapshotMeta,
     /// Error during proof generation.
     #[cfg_attr(feature = "std", error("Error generating proof"))]
     GenerateProof,
