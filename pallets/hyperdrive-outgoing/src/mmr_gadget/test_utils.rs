@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::MmrGadget;
+use crate::mmr_gadget::MmrGadget;
 use parking_lot::Mutex;
 use sc_block_builder::BlockBuilderProvider;
 use sc_client_api::{
@@ -31,8 +31,7 @@ use sp_core::{
 	offchain::{DbExternalities, StorageKind},
 	H256,
 };
-use sp_mmr_primitives as mmr;
-use sp_mmr_primitives::{utils::NodesUtils, LeafIndex, NodeIndex};
+use crate::{utils::NodesUtils, LeafIndex, NodeIndex, HyperdriveApi};
 use sp_runtime::{
 	generic::BlockId,
 	traits::{Block as BlockT, Header as HeaderT},
@@ -274,7 +273,7 @@ impl ProvideRuntimeApi<Block> for MockClient {
 }
 
 sp_api::mock_impl_runtime_apis! {
-	impl mmr::MmrApi<Block, MmrHash, BlockNumber> for MockRuntimeApi {
+	impl HyperdriveApi<Block, MmrHash, BlockNumber> for MockRuntimeApi {
 		fn mmr_root() -> Result<MmrHash, mmr::Error> {
 			Err(mmr::Error::PalletNotIncluded)
 		}

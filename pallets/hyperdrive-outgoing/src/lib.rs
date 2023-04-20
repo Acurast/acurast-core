@@ -516,6 +516,9 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
     pub trait HyperdriveApi<Hash: codec::Codec> {
+        /// Return the number of MMR leaves/messages on-chain.
+		fn mmr_leaf_count() -> Result<LeafIndex, MMRError>;
+
         fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, Hash)>, MMRError>;
 
         fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, Hash)>, MMRError>;

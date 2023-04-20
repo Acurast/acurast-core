@@ -21,13 +21,13 @@
 
 #![warn(missing_docs)]
 
-use crate::{aux_schema, LOG_TARGET};
+use crate::mmr_gadget::{aux_schema, LOG_TARGET};
 use log::{debug, error, info, warn};
 use sc_client_api::{AuxStore, Backend, FinalityNotification};
 use sc_offchain::OffchainDb;
 use sp_blockchain::{CachedHeaderMetadata, ForkBackend, HeaderBackend, HeaderMetadata};
 use sp_core::offchain::{DbExternalities, StorageKind};
-use sp_mmr_primitives::{utils, utils::NodesUtils, NodeIndex};
+use crate::{utils, utils::NodesUtils, NodeIndex};
 use sp_runtime::{
 	traits::{Block, NumberFor, One},
 	Saturating,
@@ -268,7 +268,7 @@ where
 
 #[cfg(test)]
 mod tests {
-	use crate::test_utils::{run_test_with_mmr_gadget, run_test_with_mmr_gadget_pre_post};
+	use crate::mmr_gadget::test_utils::{run_test_with_mmr_gadget, run_test_with_mmr_gadget_pre_post};
 	use parking_lot::Mutex;
 	use sp_runtime::generic::BlockId;
 	use std::{sync::Arc, time::Duration};

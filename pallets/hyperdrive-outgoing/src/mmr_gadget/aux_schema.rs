@@ -18,12 +18,12 @@
 
 //! Schema for MMR-gadget state persisted in the aux-db.
 
-use crate::LOG_TARGET;
 use codec::{Decode, Encode};
 use log::{info, trace};
 use sc_client_api::backend::AuxStore;
 use sp_blockchain::{Error as ClientError, Result as ClientResult};
 use sp_runtime::traits::{Block, NumberFor};
+use crate::mmr_gadget::LOG_TARGET;
 
 const VERSION_KEY: &[u8] = b"mmr_auxschema_version";
 const GADGET_STATE: &[u8] = b"mmr_gadget_state";
@@ -76,7 +76,7 @@ where
 #[cfg(test)]
 pub(crate) mod tests {
 	use super::*;
-	use crate::test_utils::{
+	use crate::mmr_gadget::test_utils::{
 		run_test_with_mmr_gadget_pre_post_using_client, MmrBlock, MockClient, OffchainKeyType,
 	};
 	use parking_lot::Mutex;

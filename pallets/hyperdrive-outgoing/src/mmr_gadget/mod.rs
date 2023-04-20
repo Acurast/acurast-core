@@ -42,39 +42,40 @@ mod offchain_mmr;
 #[cfg(test)]
 pub mod test_utils;
 
-use crate::offchain_mmr::OffchainMmr;
-use beefy_primitives::MmrRootHash;
+use offchain_mmr::OffchainMmr;
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use sc_client_api::{Backend, BlockchainEvents, FinalityNotifications};
 use sc_offchain::OffchainDb;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HeaderBackend, HeaderMetadata};
-use sp_mmr_primitives::{utils, LeafIndex, MmrApi};
+use crate::{utils, LeafIndex, HyperdriveApi};
 use sp_runtime::{
 	generic::BlockId,
 	traits::{Block, Header, NumberFor},
 };
 use std::{marker::PhantomData, sync::Arc};
+use codec::Codec;
 
 /// Logging target for the mmr gadget.
 pub const LOG_TARGET: &str = "mmr";
 
-struct OffchainMmrBuilder<B: Block, BE: Backend<B>, C> {
+struct OffchainMmrBuilder<B: Block, BE: Backend<B>, C, MmrHash: codec::Codec> {
 	backend: Arc<BE>,
 	client: Arc<C>,
 	offchain_db: OffchainDb<BE::OffchainStorage>,
 	indexing_prefix: Vec<u8>,
 
-	_phantom: PhantomData<B>,
+	_phantom: PhantomData<(B, MmrHash)>,
 }
 
-impl<B, BE, C> OffchainMmrBuilder<B, BE, C>
-where
-	B: Block,
-	BE: Backend<B>,
-	C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
-	C::Api: MmrApi<B, MmrRootHash, NumberFor<B>>,
+impl<B, BE, C, MmrHash> OffchainMmrBuilder<B, BE, C, MmrHash>
+	where
+		B: Block,
+		BE: Backend<B>,
+		C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
+		MmrHash: Codec,
+		C::Api: HyperdriveApi<B, MmrHash>,
 {
 	async fn try_build(
 		self,
@@ -154,21 +155,22 @@ where
 }
 
 /// A MMR Gadget.
-pub struct MmrGadget<B: Block, BE: Backend<B>, C> {
+pub struct MmrGadget<B: Block, BE: Backend<B>, C, MmrHash: Codec> {
 	finality_notifications: FinalityNotifications<B>,
 
-	_phantom: PhantomData<(B, BE, C)>,
+	_phantom: PhantomData<(B, BE, C, MmrHash)>,
 }
 
-impl<B, BE, C> MmrGadget<B, BE, C>
-where
-	B: Block,
-	<B::Header as Header>::Number: Into<LeafIndex>,
-	BE: Backend<B>,
-	C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
-	C::Api: MmrApi<B, MmrRootHash, NumberFor<B>>,
+impl<B, BE, C, MmrHash> MmrGadget<B, BE, C, MmrHash>
+	where
+		B: Block,
+		<B::Header as Header>::Number: Into<LeafIndex>,
+		BE: Backend<B>,
+		C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
+		MmrHash: Codec,
+		C::Api: HyperdriveApi<B, MmrHash>,
 {
-	async fn run(mut self, builder: OffchainMmrBuilder<B, BE, C>) {
+	async fn run(mut self, builder: OffchainMmrBuilder<B, BE, C, MmrHash>) {
 		let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {
 			Some(offchain_mmr) => offchain_mmr,
 			None => return,
@@ -192,7 +194,7 @@ where
 			},
 		};
 
-		let mmr_gadget = MmrGadget::<B, BE, C> {
+		let mmr_gadget = MmrGadget::<B, BE, C, MmrHash> {
 			finality_notifications: client.finality_notification_stream(),
 
 			_phantom: Default::default(),
@@ -211,7 +213,7 @@ where
 
 #[cfg(test)]
 mod tests {
-	use crate::test_utils::run_test_with_mmr_gadget;
+	use crate::mmr_gadget::test_utils::run_test_with_mmr_gadget;
 	use sp_runtime::generic::BlockId;
 	use std::time::Duration;
 

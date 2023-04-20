@@ -50,10 +50,15 @@ sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "pol
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
 
-
+# for RPC
 serde = { version = "1.0.136", features = ["derive"], optional = true }
 thiserror = "1.0"
 log = { version = "0.4.17", default-features = false }
+
+# for mmr-gadget
+futures = { version = "0.3", optional = true }
+sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false, optional = true }
+sc-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false, optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -62,6 +67,14 @@ serde_json = "1.0.85"
 array-bytes = "4.1"
 env_logger = "0.9"
 itertools = "0.10.3"
+
+# for mmr-gadget tests
+parking_lot = "0.12.1"
+sc-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sp-tracing = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+substrate-test-runtime-client = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+tokio = "1.17.0"
 
 [features]
 default = ["std"]
@@ -87,6 +100,12 @@ std = [
 	"jsonrpsee",
 	"sp-blockchain",
 	"log/std",
+	"mmr-gadget",
+]
+mmr-gadget = [
+	"futures",
+	"sc-client-api",
+	"sc-offchain"
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
