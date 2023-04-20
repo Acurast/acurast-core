@@ -52,6 +52,8 @@ mod default_weights;
 mod mmr;
 #[cfg(feature = "std")]
 pub mod rpc;
+#[cfg(feature = "std")]
+pub mod mmr_gadget;
 pub mod tezos;
 mod types;
 pub mod utils;
