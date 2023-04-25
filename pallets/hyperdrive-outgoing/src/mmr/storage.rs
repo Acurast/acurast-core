@@ -70,7 +70,7 @@ where
 {
 }
 
-impl<T, I> mmr_lib::MMRStore<NodeOf<T, I>> for Storage<OffchainStorage, T, I>
+impl<T, I> mmr_lib::MMRStoreReadOps<NodeOf<T, I>> for Storage<OffchainStorage, T, I>
 where
     T: Config<I>,
     I: 'static,
@@ -111,13 +111,9 @@ where
                 .and_then(|v| codec::Decode::decode(&mut &*v).ok()),
         )
     }
-
-    fn append(&mut self, _: NodeIndex, _: Vec<NodeOf<T, I>>) -> mmr_lib::Result<()> {
-        panic!("MMR must not be altered in the off-chain context.")
-    }
 }
 
-impl<T, I> mmr_lib::MMRStore<NodeOf<T, I>> for Storage<RuntimeStorage, T, I>
+impl<T, I> mmr_lib::MMRStoreReadOps<NodeOf<T, I>> for Storage<RuntimeStorage, T, I>
 where
     T: Config<I>,
     I: 'static,
@@ -125,7 +121,13 @@ where
     fn get_elem(&self, pos: NodeIndex) -> mmr_lib::Result<Option<NodeOf<T, I>>> {
         Ok(<Nodes<T, I>>::get(pos).map(Node::Hash))
     }
+}
 
+impl<T, I> mmr_lib::MMRStoreWriteOps<NodeOf<T, I>> for Storage<RuntimeStorage, T, I>
+where
+    T: Config<I>,
+    I: 'static,
+{
     fn append(&mut self, pos: u64, elems: Vec<NodeOf<T, I>>) -> mmr_lib::Result<()> {
         if elems.is_empty() {
             return Ok(());
