@@ -101,6 +101,11 @@ pub mod pallet {
         /// Each node is stored in the Off-chain DB under key derived from the
         /// [`Self::INDEXING_PREFIX`] and its in-tree index (MMR position).
         const INDEXING_PREFIX: &'static [u8];
+        /// Prefix for elements temporarily stored in the Off-chain DB via Indexing API.
+        ///
+        /// For fork resistency, nodes are first stored with their [`Self::TEMP_INDEXING_PREFIX`]
+        /// before they get conanicalized and stored under a key with [`Self::INDEXING_PREFIX`].
+        const TEMP_INDEXING_PREFIX: &'static [u8];
 
         /// The bundled config of encoder/hasher using an encoding/hash function supported on target chain.
         type TargetChainConfig: TargetChainConfig;
@@ -142,14 +147,20 @@ pub mod pallet {
     pub type MessageNumbers<T: Config<I>, I: 'static = ()> =
         StorageValue<_, (LeafIndex, LeafIndex), ValueQuery>;
 
-    /// An index `leaf_index -> parent_block_hash`.
+    /// An index `leaf_index -> (parent_block_hash, root_hash)`, where `root_hash` is the new root hash produced
+    /// as a result of inserting leaf with `leaf_index`.
     ///
     /// Useful to recover the block hash of the parent that added a certain leaf.
     /// This block hash is used in temporary keys for offchain-indexing full leaves.
     #[pallet::storage]
-    #[pallet::getter(fn leaf_index_to_parent_block_hash)]
-    pub type LeafIndexToParentBlockHash<T: Config<I>, I: 'static = ()> =
-        StorageMap<_, Identity, LeafIndex, <T as frame_system::Config>::Hash, OptionQuery>;
+    #[pallet::getter(fn leaf_meta)]
+    pub type LeafMeta<T: Config<I>, I: 'static = ()> = StorageMap<
+        _,
+        Identity,
+        LeafIndex,
+        (<T as frame_system::Config>::Hash, HashOf<T, I>),
+        OptionQuery,
+    >;
 
     /// Next snapshot number. The latest completed snapshot is the stored value - 1.
     #[pallet::storage]
@@ -302,11 +313,13 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     fn node_temp_offchain_key(
         pos: NodeIndex,
         parent_hash: <T as frame_system::Config>::Hash,
+        unique: HashOf<T, I>,
     ) -> Vec<u8> {
-        NodesUtils::node_temp_offchain_key::<<T as frame_system::Config>::Header>(
-            &T::INDEXING_PREFIX,
+        NodesUtils::node_temp_offchain_key::<<T as frame_system::Config>::Header, _>(
+            &T::TEMP_INDEXING_PREFIX,
             pos,
             parent_hash,
+            unique,
         )
     }
 

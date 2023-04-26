@@ -77,7 +77,7 @@ where
     Storage<StorageType, T, I>: mmr_lib::MMRStoreReadOps<Node<HashOf<T, I>>>,
     M: Merge<Item = Node<HashOf<T, I>>>,
 {
-    mmr: mmr_lib::MMR<Node<HashOf<T, I>>, M, Storage<StorageType, T, I>>,
+    mmr: mmr_lib::MMR<Node<HashOf<T, I>>, M, Storage<StorageType, T, I>, HashOf<T, I>>,
     leaves: NodeIndex,
 }
 
@@ -167,14 +167,12 @@ where
             .mmr
             .get_root()
             .map_err(|e| MMRError::GetRoot.log_error(e))?;
-        self.mmr
-            .commit()
+        let root_hash = TargetChainConfigOf::<T, I>::hash_node(&root)
             .map_err(|e| MMRError::Commit.log_error(e))?;
-        Ok((
-            self.leaves,
-            TargetChainConfigOf::<T, I>::hash_node(&root)
-                .map_err(|e| MMRError::Commit.log_error(e))?,
-        ))
+        self.mmr
+            .commit(&root_hash)
+            .map_err(|e| MMRError::Commit.log_error(e))?;
+        Ok((self.leaves, root_hash))
     }
 }
 

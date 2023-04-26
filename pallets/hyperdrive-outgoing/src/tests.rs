@@ -108,6 +108,8 @@ fn should_append_to_mmr_when_send_message_is_called() {
     let _ = env_logger::try_init();
     let mut ext = new_test_ext();
 
+    let root_0 = hex("a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc");
+    let root_1 = hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07");
     let (parent_b1, parent_b2) = ext.execute_with(|| {
         // when
         next_block();
@@ -127,7 +129,7 @@ fn should_append_to_mmr_when_send_message_is_called() {
                     "a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc"
                 )),
                 None,
-                hex("a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc"),
+                root_0,
             )
         );
 
@@ -155,7 +157,7 @@ fn should_append_to_mmr_when_send_message_is_called() {
                     "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"
                 )),
                 None,
-                hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"),
+                root_1,
             )
         );
 
@@ -168,21 +170,29 @@ fn should_append_to_mmr_when_send_message_is_called() {
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(0, parent_b1))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                0, parent_b1, root_0
+            ))
             .map(decode_node),
         Some(Node::Data(message(0)))
     );
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(1, parent_b2))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                1, parent_b2, root_1
+            ))
             .map(decode_node),
         Some(Node::Data(message(1)))
     );
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(2, parent_b2))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                2,
+                parent_b2,
+                hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07")
+            ))
             .map(decode_node),
         Some(Node::Hash(hex(
             "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07",
@@ -190,7 +200,11 @@ fn should_append_to_mmr_when_send_message_is_called() {
     );
 
     assert_eq!(
-        offchain_db.get(&HyperdriveOutgoing::node_temp_offchain_key(3, parent_b2)),
+        offchain_db.get(&HyperdriveOutgoing::node_temp_offchain_key(
+            3,
+            parent_b2,
+            hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07")
+        )),
         None
     );
 }
@@ -296,9 +310,6 @@ fn should_generate_verify_proofs_correctly() {
                 Pallet::<Test>::generate_target_chain_proof(next_message_number, None, 2).unwrap()
             })
             .collect::<Vec<_>>();
-
-        // dbg!(target_chain_proofs[5].clone().unwrap());
-        // dbg!(Pallet::<Test>::mmr_root());
 
         // when generate historical proofs for all leaves
         let historical_proofs = (0_u64..=num)

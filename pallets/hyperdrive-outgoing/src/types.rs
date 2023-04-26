@@ -142,6 +142,7 @@ pub trait TargetChainConfig {
         + sp_std::hash::Hash
         + AsRef<[u8]>
         + AsMut<[u8]>
+        + Ord
         + Copy
         + Default
         + codec::Codec

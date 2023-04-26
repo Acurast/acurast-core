@@ -52,6 +52,7 @@ impl frame_system::Config for Test {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
+    const TEMP_INDEXING_PREFIX: &'static [u8] = b"mmr-tez-temp-";
     type TargetChainConfig = DefaultTezosConfig;
     type OnNewRoot = ();
     type WeightInfo = ();

@@ -84,12 +84,15 @@ impl NodesUtils {
     /// Build offchain key from `parent_hash` of block that originally added node `pos` to MMR.
     ///
     /// This combination makes the offchain (key,value) entry resilient to chain forks.
-    pub fn node_temp_offchain_key<H: Header>(
+    pub fn node_temp_offchain_key<H: Header, ForkUnique: Encode>(
         prefix: &[u8],
         pos: NodeIndex,
         parent_hash: H::Hash,
+        unique: ForkUnique,
     ) -> Vec<u8> {
-        (prefix, pos, parent_hash).encode()
+        // The order will be important when the offchain Index supports pruning (deletion) by
+        // subset prefix of the partial keys, such as delete((prefix, parent_hash))
+        (prefix, parent_hash, pos, unique).encode()
     }
 
     /// Build canonical offchain key for node `pos` in MMR.
