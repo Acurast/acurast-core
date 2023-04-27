@@ -27,7 +27,7 @@ use jsonrpsee::{
 };
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use sp_runtime::traits::MaybeSerializeDeserialize;
+use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 
 use crate::{HyperdriveApi, LeafIndex, MMRError, SnapshotNumber, TargetChainProof};
@@ -83,17 +83,17 @@ impl<C, B> Mmr<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, Hash> MmrApiServer<<Block as BlockT>::Hash, Hash> for Mmr<Client, (Block, Hash)>
+impl<Client, Block, MmrHash> MmrApiServer<HashFor<Block>, MmrHash> for Mmr<Client, (Block, MmrHash)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: HyperdriveApi<Block, Hash>,
-    Hash: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
+    Client::Api: HyperdriveApi<Block, MmrHash>,
+    MmrHash: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
     fn snapshot_roots(
         &self,
         next_expected_snapshot_number: SnapshotNumber,
-    ) -> RpcResult<Vec<(SnapshotNumber, Hash)>> {
+    ) -> RpcResult<Vec<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let roots = api
             .snapshot_roots(
@@ -108,7 +108,7 @@ where
     fn snapshot_root(
         &self,
         next_expected_snapshot_number: SnapshotNumber,
-    ) -> RpcResult<Option<(SnapshotNumber, Hash)>> {
+    ) -> RpcResult<Option<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let root = api
             .snapshot_root(
@@ -125,7 +125,7 @@ where
         next_message_number: LeafIndex,
         maximum_messages: Option<u64>,
         latest_known_snapshot_number: SnapshotNumber,
-    ) -> RpcResult<Option<TargetChainProof<Hash>>> {
+    ) -> RpcResult<Option<TargetChainProof<MmrHash>>> {
         let api = self.client.runtime_api();
 
         let proof = api

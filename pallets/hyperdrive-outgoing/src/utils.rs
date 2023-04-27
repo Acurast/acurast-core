@@ -18,10 +18,11 @@
 //! Merkle Mountain Range utilities.
 
 use codec::Encode;
-use mmr_lib;
 use sp_runtime::traits::Header;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::Vec;
+
+use mmr_lib;
 
 use crate::{LeafIndex, NodeIndex};
 

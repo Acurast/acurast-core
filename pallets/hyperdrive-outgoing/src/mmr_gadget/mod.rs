@@ -37,240 +37,271 @@
 
 #![warn(missing_docs)]
 
-mod aux_schema;
-mod offchain_mmr;
-#[cfg(test)]
-pub mod test_utils;
+use std::{marker::PhantomData, sync::Arc};
 
-use offchain_mmr::OffchainMmr;
+use codec::Codec;
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use sc_client_api::{Backend, BlockchainEvents, FinalityNotifications};
 use sc_offchain::OffchainDb;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HeaderBackend, HeaderMetadata};
-use crate::{utils, LeafIndex, HyperdriveApi};
 use sp_runtime::{
-	generic::BlockId,
-	traits::{Block, Header, NumberFor},
+    generic::BlockId,
+    traits::{Block, Header},
 };
-use std::{marker::PhantomData, sync::Arc};
-use codec::Codec;
+
+use offchain_mmr::OffchainMmr;
+
+use crate::{HyperdriveApi, LeafIndex};
+
+mod aux_schema;
+mod offchain_mmr;
+#[cfg(test)]
+pub mod test_utils;
 
 /// Logging target for the mmr gadget.
 pub const LOG_TARGET: &str = "mmr";
 
-struct OffchainMmrBuilder<B: Block, BE: Backend<B>, C, MmrHash: codec::Codec> {
-	backend: Arc<BE>,
-	client: Arc<C>,
-	offchain_db: OffchainDb<BE::OffchainStorage>,
-	indexing_prefix: Vec<u8>,
+struct OffchainMmrBuilder<B: Block, BE: Backend<B>, C, MmrHash: Codec> {
+    backend: Arc<BE>,
+    client: Arc<C>,
+    offchain_db: OffchainDb<BE::OffchainStorage>,
+    indexing_prefix: Vec<u8>,
+    temp_indexing_prefix: Vec<u8>,
 
-	_phantom: PhantomData<(B, MmrHash)>,
+    _phantom: PhantomData<(B, MmrHash)>,
 }
 
 impl<B, BE, C, MmrHash> OffchainMmrBuilder<B, BE, C, MmrHash>
-	where
-		B: Block,
-		BE: Backend<B>,
-		C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
-		MmrHash: Codec,
-		C::Api: HyperdriveApi<B, MmrHash>,
+where
+    B: Block,
+    BE: Backend<B>,
+    C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
+    MmrHash: Codec + Clone,
+    C::Api: HyperdriveApi<B, MmrHash>,
 {
-	async fn try_build(
-		self,
-		finality_notifications: &mut FinalityNotifications<B>,
-	) -> Option<OffchainMmr<B, BE, C>> {
-		while let Some(notification) = finality_notifications.next().await {
-			let best_block = *notification.header.number();
-			match self.client.runtime_api().mmr_leaf_count(&BlockId::number(best_block)) {
-				Ok(Ok(mmr_leaf_count)) => {
-					debug!(
-						target: LOG_TARGET,
-						"pallet-mmr detected at block {:?} with mmr size {:?}",
-						best_block,
-						mmr_leaf_count
-					);
-					match utils::first_mmr_block_num::<B::Header>(best_block, mmr_leaf_count) {
-						Ok(first_mmr_block) => {
-							debug!(
-								target: LOG_TARGET,
-								"pallet-mmr genesis computed at block {:?}", first_mmr_block,
-							);
-							let best_canonicalized =
-								match offchain_mmr::load_or_init_best_canonicalized::<B, BE>(
-									&*self.backend,
-									first_mmr_block,
-								) {
-									Ok(best) => best,
-									Err(e) => {
-										error!(
-											target: LOG_TARGET,
-											"Error loading state from aux db: {:?}", e
-										);
-										return None
-									},
-								};
-							let mut offchain_mmr = OffchainMmr {
-								backend: self.backend,
-								client: self.client,
-								offchain_db: self.offchain_db,
-								indexing_prefix: self.indexing_prefix,
-								first_mmr_block,
-								best_canonicalized,
-							};
-							// We need to make sure all blocks leading up to current notification
-							// have also been canonicalized.
-							offchain_mmr.canonicalize_catch_up(&notification);
-							// We have to canonicalize and prune the blocks in the finality
-							// notification that lead to building the offchain-mmr as well.
-							offchain_mmr.canonicalize_and_prune(notification);
-							return Some(offchain_mmr)
-						},
-						Err(e) => {
-							error!(
-								target: LOG_TARGET,
-								"Error calculating the first mmr block: {:?}", e
-							);
-						},
-					}
-				},
-				_ => {
-					trace!(
-						target: LOG_TARGET,
-						"Waiting for MMR pallet to become available... (best finalized {:?})",
-						notification.header.number()
-					);
-				},
-			}
-		}
+    async fn try_build(
+        self,
+        finality_notifications: &mut FinalityNotifications<B>,
+    ) -> Option<OffchainMmr<B, BE, C, MmrHash>> {
+        while let Some(notification) = finality_notifications.next().await {
+            let best_block = *notification.header.number();
+            match self
+                .client
+                .runtime_api()
+                .first_mmr_block_number(&BlockId::number(best_block))
+            {
+                Ok(Some(first_mmr_block)) => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "pallet-mmr's first block is {:?} detected at block {:?} with mmr size {:?}",
+                        first_mmr_block,
+                        best_block,
+                        self.client
+                            .runtime_api()
+                            .number_of_leaves(&BlockId::number(best_block))
+                    );
+                    let best_canonicalized =
+                        match offchain_mmr::load_or_init_best_canonicalized::<B, BE>(
+                            &*self.backend,
+                            first_mmr_block,
+                        ) {
+                            Ok(best) => best,
+                            Err(e) => {
+                                error!(
+                                    target: LOG_TARGET,
+                                    "Error loading state from aux db: {:?}", e
+                                );
+                                return None;
+                            }
+                        };
+                    let mut offchain_mmr = OffchainMmr::new(
+                        self.backend,
+                        self.client,
+                        self.offchain_db,
+                        self.indexing_prefix,
+                        self.temp_indexing_prefix,
+                        first_mmr_block,
+                        best_canonicalized,
+                    );
+                    // We need to make sure all blocks leading up to current notification
+                    // have also been canonicalized.
+                    offchain_mmr.canonicalize_catch_up(&notification);
+                    // We have to canonicalize and prune the blocks in the finality
+                    // notification that lead to building the offchain-mmr as well.
+                    offchain_mmr.canonicalize_and_prune(notification);
+                    return Some(offchain_mmr);
+                }
+                Ok(None) => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Waiting for MMR pallet to become available... (best finalized {:?})",
+                        notification.header.number()
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Error calculating the first mmr block: {:?}", e
+                    );
+                }
+            }
+        }
 
-		error!(
-			target: LOG_TARGET,
-			"Finality notifications stream closed unexpectedly. \
+        error!(
+            target: LOG_TARGET,
+            "Finality notifications stream closed unexpectedly. \
 			Couldn't build the canonicalization engine",
-		);
-		None
-	}
+        );
+        None
+    }
 }
 
 /// A MMR Gadget.
 pub struct MmrGadget<B: Block, BE: Backend<B>, C, MmrHash: Codec> {
-	finality_notifications: FinalityNotifications<B>,
+    finality_notifications: FinalityNotifications<B>,
 
-	_phantom: PhantomData<(B, BE, C, MmrHash)>,
+    _phantom: PhantomData<(B, BE, C, MmrHash)>,
 }
 
 impl<B, BE, C, MmrHash> MmrGadget<B, BE, C, MmrHash>
-	where
-		B: Block,
-		<B::Header as Header>::Number: Into<LeafIndex>,
-		BE: Backend<B>,
-		C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
-		MmrHash: Codec,
-		C::Api: HyperdriveApi<B, MmrHash>,
+where
+    B: Block,
+    <B::Header as Header>::Number: Into<LeafIndex>,
+    BE: Backend<B>,
+    C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
+    MmrHash: Codec + Clone,
+    C::Api: HyperdriveApi<B, MmrHash>,
 {
-	async fn run(mut self, builder: OffchainMmrBuilder<B, BE, C, MmrHash>) {
-		let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {
-			Some(offchain_mmr) => offchain_mmr,
-			None => return,
-		};
+    async fn run(mut self, builder: OffchainMmrBuilder<B, BE, C, MmrHash>) {
+        let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {
+            Some(offchain_mmr) => offchain_mmr,
+            None => return,
+        };
 
-		while let Some(notification) = self.finality_notifications.next().await {
-			offchain_mmr.canonicalize_and_prune(notification);
-		}
-	}
+        while let Some(notification) = self.finality_notifications.next().await {
+            offchain_mmr.canonicalize_and_prune(notification);
+        }
+    }
 
-	/// Create and run the MMR gadget.
-	pub async fn start(client: Arc<C>, backend: Arc<BE>, indexing_prefix: Vec<u8>) {
-		let offchain_db = match backend.offchain_storage() {
-			Some(offchain_storage) => OffchainDb::new(offchain_storage),
-			None => {
-				warn!(
-					target: LOG_TARGET,
-					"Can't spawn a MmrGadget for a node without offchain storage."
-				);
-				return
-			},
-		};
+    /// Create and run the MMR gadget.
+    pub async fn start(
+        client: Arc<C>,
+        backend: Arc<BE>,
+        indexing_prefix: Vec<u8>,
+        temp_indexing_prefix: Vec<u8>,
+    ) {
+        let offchain_db = match backend.offchain_storage() {
+            Some(offchain_storage) => OffchainDb::new(offchain_storage),
+            None => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Can't spawn a MmrGadget for a node without offchain storage."
+                );
+                return;
+            }
+        };
 
-		let mmr_gadget = MmrGadget::<B, BE, C, MmrHash> {
-			finality_notifications: client.finality_notification_stream(),
+        let mmr_gadget = MmrGadget::<B, BE, C, MmrHash> {
+            finality_notifications: client.finality_notification_stream(),
 
-			_phantom: Default::default(),
-		};
-		mmr_gadget
-			.run(OffchainMmrBuilder {
-				backend,
-				client,
-				offchain_db,
-				indexing_prefix,
-				_phantom: Default::default(),
-			})
-			.await
-	}
+            _phantom: Default::default(),
+        };
+        mmr_gadget
+            .run(OffchainMmrBuilder {
+                backend,
+                client,
+                offchain_db,
+                indexing_prefix,
+                temp_indexing_prefix,
+                _phantom: Default::default(),
+            })
+            .await
+    }
 }
 
 #[cfg(test)]
 mod tests {
-	use crate::mmr_gadget::test_utils::run_test_with_mmr_gadget;
-	use sp_runtime::generic::BlockId;
-	use std::time::Duration;
+    use std::time::Duration;
 
-	#[test]
-	fn mmr_first_block_is_computed_correctly() {
-		// Check the case where the first block is also the first block with MMR.
-		run_test_with_mmr_gadget(|client| async move {
-			// G -> A1 -> A2
-			//      |
-			//      | -> first mmr block
+    use sp_runtime::generic::BlockId;
 
-			let a1 = client.import_block(&BlockId::Number(0), b"a1", Some(0)).await;
-			let a2 = client.import_block(&BlockId::Hash(a1.hash()), b"a2", Some(1)).await;
+    use crate::mmr_gadget::test_utils::run_test_with_mmr_gadget;
 
-			client.finalize_block(a1.hash(), Some(1));
-			tokio::time::sleep(Duration::from_millis(200)).await;
-			// expected finalized heads: a1
-			client.assert_canonicalized(&[&a1]);
-			client.assert_not_pruned(&[&a2]);
-		});
+    #[test]
+    fn mmr_first_block_is_computed_correctly() {
+        // Check the case where the first block is also the first block with MMR.
+        run_test_with_mmr_gadget(|client| async move {
+            // G -> A1 -> A2
+            //      |
+            //      | -> first mmr block
 
-		// Check the case where the first block with MMR comes later.
-		run_test_with_mmr_gadget(|client| async move {
-			// G -> A1 -> A2 -> A3 -> A4 -> A5 -> A6
-			//                        |
-			//                        | -> first mmr block
+            let a1 = client
+                .import_block(&BlockId::Number(0), b"a1", vec![0])
+                .await;
+            let a2 = client
+                .import_block(&BlockId::Hash(a1.hash()), b"a2", vec![1])
+                .await;
 
-			let a1 = client.import_block(&BlockId::Number(0), b"a1", None).await;
-			let a2 = client.import_block(&BlockId::Hash(a1.hash()), b"a2", None).await;
-			let a3 = client.import_block(&BlockId::Hash(a2.hash()), b"a3", None).await;
-			let a4 = client.import_block(&BlockId::Hash(a3.hash()), b"a4", Some(0)).await;
-			let a5 = client.import_block(&BlockId::Hash(a4.hash()), b"a5", Some(1)).await;
-			let a6 = client.import_block(&BlockId::Hash(a5.hash()), b"a6", Some(2)).await;
+            client.finalize_block(a1.hash());
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            // expected finalized heads: a1
+            client.assert_canonicalized(&[&a1]);
+            client.assert_not_pruned(&[&a2]);
+        });
 
-			client.finalize_block(a5.hash(), Some(2));
-			tokio::time::sleep(Duration::from_millis(200)).await;
-			// expected finalized heads: a4, a5
-			client.assert_canonicalized(&[&a4, &a5]);
-			client.assert_not_pruned(&[&a6]);
-		});
-	}
+        // Check the case where the first block with MMR comes later.
+        run_test_with_mmr_gadget(|client| async move {
+            // G -> A1 -> A2 -> A3 -> A4 -> A5 -> A6
+            //                        |
+            //                        | -> first mmr block
 
-	#[test]
-	fn does_not_panic_on_invalid_num_mmr_blocks() {
-		run_test_with_mmr_gadget(|client| async move {
-			// G -> A1
-			//      |
-			//      | -> first mmr block
+            let a1 = client
+                .import_block(&BlockId::Number(0), b"a1", vec![])
+                .await;
+            let a2 = client
+                .import_block(&BlockId::Hash(a1.hash()), b"a2", vec![])
+                .await;
+            let a3 = client
+                .import_block(&BlockId::Hash(a2.hash()), b"a3", vec![])
+                .await;
+            let a4 = client
+                .import_block(&BlockId::Hash(a3.hash()), b"a4", vec![0])
+                .await;
+            let a5 = client
+                .import_block(&BlockId::Hash(a4.hash()), b"a5", vec![1])
+                .await;
+            let a6 = client
+                .import_block(&BlockId::Hash(a5.hash()), b"a6", vec![2])
+                .await;
 
-			let a1 = client.import_block(&BlockId::Number(0), b"a1", Some(0)).await;
+            client.finalize_block(a5.hash());
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            // expected finalized heads: a4, a5
+            client.assert_canonicalized(&[&a4, &a5]);
+            client.assert_not_pruned(&[&a6]);
+        });
+    }
 
-			// Simulate the case where the runtime says that there are 2 mmr_blocks when in fact
-			// there is only 1.
-			client.finalize_block(a1.hash(), Some(2));
-			tokio::time::sleep(Duration::from_millis(200)).await;
-			// expected finalized heads: -
-			client.assert_not_canonicalized(&[&a1]);
-		});
-	}
+    #[test]
+    fn does_not_panic_on_invalid_num_mmr_blocks() {
+        run_test_with_mmr_gadget(|client| async move {
+            // G -> A1
+            //      |
+            //      | -> first mmr block
+
+            let a1 = client
+                .import_block(&BlockId::Number(0), b"a1", vec![0])
+                .await;
+
+            // Simulate the case where the runtime says that there are 2 mmr_blocks when in fact
+            // there is only 1.
+            client.runtime_api_params.lock().num_blocks = 2;
+            client.finalize_block(a1.hash());
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            // expected finalized heads: -
+            client.assert_canonicalized(&[&a1]);
+        });
+    }
 }

@@ -22,11 +22,13 @@ use core::ops::AddAssign;
 
 use frame_support::dispatch::{Pays, PostDispatchInfo};
 use frame_support::ensure;
-use mmr_lib::leaf_index_to_pos;
 use sp_core::Get;
+use sp_runtime::traits::Block as BlockT;
+use sp_runtime::traits::NumberFor;
 use sp_runtime::traits::Saturating;
 use sp_std::prelude::*;
 
+use mmr_lib::leaf_index_to_pos;
 pub use pallet::*;
 pub use types::{
     Action, Leaf, LeafEncoder, LeafIndex, MMRError, Message, NodeIndex, OnNewRoot, Proof,
@@ -51,9 +53,9 @@ mod benchmarking;
 mod default_weights;
 mod mmr;
 #[cfg(feature = "std")]
-pub mod rpc;
-#[cfg(feature = "std")]
 pub mod mmr_gadget;
+#[cfg(feature = "std")]
+pub mod rpc;
 pub mod tezos;
 mod types;
 pub mod utils;
@@ -149,6 +151,12 @@ pub mod pallet {
     pub type MessageNumbers<T: Config<I>, I: 'static = ()> =
         StorageValue<_, (LeafIndex, LeafIndex), ValueQuery>;
 
+    /// The block where the first MMR node was inserted.
+    #[pallet::storage]
+    #[pallet::getter(fn first_mmr_block_number)]
+    pub type FirstMmrBlockNumber<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, BlockNumberFor<T>, OptionQuery>;
+
     /// An index `leaf_index -> (parent_block_hash, root_hash)`, where `root_hash` is the new root hash produced
     /// as a result of inserting leaf with `leaf_index`.
     ///
@@ -163,6 +171,15 @@ pub mod pallet {
         (<T as frame_system::Config>::Hash, HashOf<T, I>),
         OptionQuery,
     >;
+
+    /// Index for `block -> last_message_excl`.
+    ///
+    /// Allows to retrieve the last message sent/leaf inserted during a (historic) block.
+    /// Also allows to derive the range of messages/leaves insert during a (historic) block.
+    #[pallet::storage]
+    #[pallet::getter(fn block_leaf_index)]
+    pub type BlockLeafIndex<T: Config<I>, I: 'static = ()> =
+        StorageMap<_, Identity, BlockNumberFor<T>, LeafIndex, OptionQuery>;
 
     /// Next snapshot number. The latest completed snapshot is the stored value - 1.
     #[pallet::storage]
@@ -192,7 +209,7 @@ pub mod pallet {
 
     /// Current size of the MMR (number of leaves).
     #[pallet::storage]
-    #[pallet::getter(fn mmr_leaves)]
+    #[pallet::getter(fn number_of_leaves)]
     pub type NumberOfLeaves<T, I = ()> = StorageValue<_, LeafIndex, ValueQuery>;
 
     /// Hashes of the nodes in the MMR.
@@ -223,6 +240,13 @@ pub mod pallet {
                     (RootHash::<T, I>::get(), current_block, next_message_number),
                 );
                 MessageNumbers::<T, I>::put((next_message_number, next_message_number));
+            }
+
+            // alsways update the block-leaf-index (also when not taking a snapshot)
+            BlockLeafIndex::<T, I>::insert(current_block, next_message_number);
+
+            if Self::first_mmr_block_number() == None {
+                <FirstMmrBlockNumber<T, I>>::put(current_block);
             }
         }
 
@@ -275,7 +299,7 @@ pub mod pallet {
 impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// Sends a message with the given [`Action`] over Hyperdrive.
     pub fn send_message(action: Action) -> Result<PostDispatchInfo, MMRError> {
-        let leaves = Self::mmr_leaves();
+        let leaves = Self::number_of_leaves();
         // used to calculate actual weight, see below
         let peaks_before = NodesUtils::new(leaves).number_of_peaks();
 
@@ -416,7 +440,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         )?;
         proof
             .map(|(leaves, proof)| {
-                let mmr_size = NodesUtils::new(Self::mmr_leaves()).size();
+                let mmr_size = NodesUtils::new(Self::number_of_leaves()).size();
                 let leaf_positions: Vec<NodeIndex> = proof
                     .leaf_indices
                     .iter()
@@ -471,7 +495,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// and an `Err(..)` if MMR is inconsistent (some leaves are missing)
     /// or the proof is invalid.
     pub fn verify_proof(leaves: Vec<Leaf>, proof: Proof<HashOf<T, I>>) -> Result<(), MMRError> {
-        if proof.leaf_count > Self::mmr_leaves()
+        if proof.leaf_count > Self::number_of_leaves()
             || proof.leaf_count == 0
             || (proof.items.len().saturating_add(leaves.len())) as u64 > proof.leaf_count
         {
@@ -515,13 +539,19 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
-    pub trait HyperdriveApi<Hash: codec::Codec> {
+    pub trait HyperdriveApi<MmrHash: codec::Codec> {
         /// Return the number of MMR leaves/messages on-chain.
-		fn mmr_leaf_count() -> Result<LeafIndex, MMRError>;
+        fn number_of_leaves() -> LeafIndex;
 
-        fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, Hash)>, MMRError>;
+        fn first_mmr_block_number() -> Option<NumberFor<Block>>;
 
-        fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, Hash)>, MMRError>;
+        fn leaf_meta(leaf_index: LeafIndex) -> Option<(<Block as BlockT>::Hash, MmrHash)>;
+
+        fn last_message_excl_by_block(block_number: NumberFor<Block>) -> Option<LeafIndex>;
+
+        fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, MmrHash)>, MMRError>;
+
+        fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, MmrHash)>, MMRError>;
 
         /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
         /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
@@ -531,6 +561,6 @@ sp_api::decl_runtime_apis! {
             next_message_number: LeafIndex,
             maximum_messages: Option<u64>,
             latest_known_snapshot_number: SnapshotNumber,
-        ) -> Result<Option<TargetChainProof<Hash>>, MMRError>;
+        ) -> Result<Option<TargetChainProof<MmrHash>>, MMRError>;
     }
 }
