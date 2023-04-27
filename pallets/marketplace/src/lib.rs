@@ -1002,7 +1002,7 @@ pub mod pallet {
                     .iter(start_delay)
                     .ok_or(Error::<T>::CalculationOverflow)?
                     .map(|start| {
-                        let end = start.checked_add(schedule.interval)?;
+                        let end = start.checked_add(schedule.duration)?;
                         Some((start, end))
                     });
                 let other_it = other
@@ -1010,7 +1010,7 @@ pub mod pallet {
                     .iter(assignment.start_delay)
                     .ok_or(Error::<T>::CalculationOverflow)?
                     .map(|start| {
-                        let end = start.checked_add(other.schedule.interval)?;
+                        let end = start.checked_add(other.schedule.duration)?;
                         Some((start, end))
                     });
 

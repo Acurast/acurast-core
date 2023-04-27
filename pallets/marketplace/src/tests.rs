@@ -22,7 +22,7 @@ fn test_match() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
     let asset_id = ad.pricing[0].reward_asset;
-    let registration = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationFor::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -32,6 +32,28 @@ fn test_match() {
             end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
             interval: 1_800_000,           // 30min
             max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        required_modules: JobModules::default(),
+        extra: JobRequirements {
+            slots: 1,
+            reward: asset(3_000_000 * 2),
+            min_reputation: None,
+            instant_match: None,
+        },
+    };
+    let registration2 = JobRegistrationFor::<Test> {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 10_000,
         },
         memory: 5_000u32,
         network_requests: 5,
@@ -83,7 +105,11 @@ fn test_match() {
 
         assert_ok!(Acurast::register(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            registration.clone(),
+            registration1.clone(),
+        ));
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration2.clone(),
         ));
         assert_eq!(
             Some(JobStatus::Open),
@@ -97,46 +123,56 @@ fn test_match() {
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
-        let job_id = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
-        let job_match = Match {
-            job_id: job_id.clone(),
+        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+        let job_match1 = Match {
+            job_id: job_id1.clone(),
             sources: vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],
         };
+        let job_id2 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 2);
+        let job_match2 = Match {
+            job_id: job_id2.clone(),
+            sources: vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 5_000,
+            }],
+        };
 
         assert_ok!(AcurastMarketplace::propose_matching(
             RuntimeOrigin::signed(charlie_account_id()).into(),
-            vec![job_match.clone()].try_into().unwrap(),
+            vec![job_match1.clone(), job_match2.clone()]
+                .try_into()
+                .unwrap(),
         ));
         assert_eq!(
             Some(JobStatus::Matched),
-            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1)
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1)
         );
         assert_eq!(
-            Some(80_000),
+            Some(60_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
         assert_ok!(AcurastMarketplace::acknowledge_match(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone(),
+            job_id1.clone(),
             PubKeys::default(),
         ));
         assert_eq!(
             Some(JobStatus::Assigned(1)),
-            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1)
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1)
         );
 
         // pretend time moved on
         assert_eq!(1, System::block_number());
-        later(registration.schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
+        later(registration1.schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
         assert_eq!(2, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone(),
+            job_id1.clone(),
             ExecutionResult::Success(operation_hash())
         ));
         // average reward only updated at end of job
@@ -162,48 +198,48 @@ fn test_match() {
                 sla: SLA { total: 2, met: 1 },
                 pub_keys: PubKeys::default(),
             }),
-            AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
+            AcurastMarketplace::stored_matches(processor_account_id(), job_id1.clone()),
         );
         // Job still assigned after one execution
         assert_eq!(
             Some(JobStatus::Assigned(1)),
-            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1),
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
         assert_eq!(
-            Some(80000),
+            Some(60000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
         // pretend time moved on
-        later(registration.schedule.range(0).unwrap().1 - 2000);
+        later(registration1.schedule.range(0).unwrap().1 - 2000);
         assert_eq!(3, System::block_number());
 
         assert_ok!(AcurastMarketplace::report(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone(),
+            job_id1.clone(),
             ExecutionResult::Success(operation_hash())
         ));
 
         // pretend time moved on
-        later(registration.schedule.end_time + 1);
+        later(registration1.schedule.end_time + 1);
         assert_eq!(4, System::block_number());
 
         assert_ok!(AcurastMarketplace::finalize_job(
             RuntimeOrigin::signed(processor_account_id()).into(),
-            job_id.clone()
+            job_id1.clone()
         ));
 
         assert_eq!(
             None,
-            AcurastMarketplace::stored_matches(processor_account_id(), job_id.clone()),
+            AcurastMarketplace::stored_matches(processor_account_id(), job_id1.clone()),
         );
         assert_eq!(
-            Some(1),
+            Some(2),
             AcurastMarketplace::total_assigned(asset_id.clone())
         );
         // average reward only updated at end of job
         assert_eq!(
-            Some(6000000),
+            Some(3000000),
             AcurastMarketplace::average_reward(asset_id.clone())
         );
         // reputation increased
@@ -218,10 +254,11 @@ fn test_match() {
         // Job no longer assigned after last execution
         assert_eq!(
             None,
-            AcurastMarketplace::stored_job_status(&job_id.0, &job_id.1),
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
         assert_eq!(
-            Some(100_000),
+            // only job2 is still blocking memory
+            Some(80_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
@@ -241,16 +278,25 @@ fn test_match() {
                     amount: 12_000_000
                 })),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
-                    registration.clone(),
-                    job_id.clone(),
+                    registration1.clone(),
+                    job_id1.clone(),
                 )),
-                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
+                    id: 0,
+                    amount: 12_000_000
+                })),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration2.clone(),
+                    job_id2.clone(),
+                )),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match1)),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match2)),
                 RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
                     id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
+                    amount: 3_920_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
                 })),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationAssigned(
-                    job_id.clone(),
+                    job_id1.clone(),
                     processor_account_id(),
                     Assignment {
                         slot: 0,
@@ -269,11 +315,11 @@ fn test_match() {
                     amount: 5_020_000
                 })),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
-                    job_id.clone(),
+                    job_id1.clone(),
                     operation_hash()
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
-                    job_id.clone(),
+                    job_id1.clone(),
                     processor_account_id(),
                     Assignment {
                         slot: 0,
@@ -292,11 +338,11 @@ fn test_match() {
                     amount: 5_020_000
                 })),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
-                    job_id.clone(),
+                    job_id1.clone(),
                     operation_hash()
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::Reported(
-                    job_id.clone(),
+                    job_id1.clone(),
                     processor_account_id(),
                     Assignment {
                         slot: 0,
@@ -310,7 +356,7 @@ fn test_match() {
                         pub_keys: PubKeys::default(),
                     }
                 )),
-                RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id.clone(),)),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id1.clone(),)),
             ]
         );
     });
