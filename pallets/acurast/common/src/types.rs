@@ -126,8 +126,12 @@ pub struct Schedule {
     /// End time in milliseconds since Unix Epoch.
     ///
     /// Represents the end time (exclusive) in milliseconds since Unix Epoch
-    /// of the period in which a job execution can start, independent of `duration` and `start_delay`.
-    /// Hence all executions fit into `[start_time, end_time + duration + start_delay]`.
+    /// of the period in which a job execution can start, relative to `start_delay == 0`, independent of `duration`.
+    ///
+    /// Hence the latest possible start time is `end_time + start_delay - 1`.
+    /// and all executions fit into `[start_time + start_delay, end_time + duration + start_delay]`.
+    ///
+    /// (start_delay is the actual start delay chosen within `[0, max_start_delay]` during assigning the job to an available processor)
     pub end_time: u64,
     /// Interval at which to repeat execution in milliseconds.
     pub interval: u64,
