@@ -63,28 +63,28 @@ pub mod test_utils;
 /// Logging target for the mmr gadget.
 pub const LOG_TARGET: &str = "mmr";
 
-struct OffchainMmrBuilder<B: Block, BE: Backend<B>, C, MmrHash: Codec> {
+struct OffchainMmrBuilder<I, B: Block, BE: Backend<B>, C, MmrHash: Codec> {
     backend: Arc<BE>,
     client: Arc<C>,
     offchain_db: OffchainDb<BE::OffchainStorage>,
     indexing_prefix: Vec<u8>,
     temp_indexing_prefix: Vec<u8>,
 
-    _phantom: PhantomData<(B, MmrHash)>,
+    _phantom: PhantomData<(I, B, MmrHash)>,
 }
 
-impl<B, BE, C, MmrHash> OffchainMmrBuilder<B, BE, C, MmrHash>
+impl<I, B, BE, C, MmrHash> OffchainMmrBuilder<I, B, BE, C, MmrHash>
 where
     B: Block,
     BE: Backend<B>,
     C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash>,
+    C::Api: HyperdriveApi<B, MmrHash, I>,
 {
     async fn try_build(
         self,
         finality_notifications: &mut FinalityNotifications<B>,
-    ) -> Option<OffchainMmr<B, BE, C, MmrHash>> {
+    ) -> Option<OffchainMmr<I, B, BE, C, MmrHash>> {
         while let Some(notification) = finality_notifications.next().await {
             let best_block = *notification.header.number();
             match self
@@ -159,22 +159,22 @@ where
 }
 
 /// A MMR Gadget.
-pub struct MmrGadget<B: Block, BE: Backend<B>, C, MmrHash: Codec> {
+pub struct MmrGadget<I, B: Block, BE: Backend<B>, C, MmrHash: Codec> {
     finality_notifications: FinalityNotifications<B>,
 
-    _phantom: PhantomData<(B, BE, C, MmrHash)>,
+    _phantom: PhantomData<(I, B, BE, C, MmrHash)>,
 }
 
-impl<B, BE, C, MmrHash> MmrGadget<B, BE, C, MmrHash>
+impl<I, B, BE, C, MmrHash> MmrGadget<I, B, BE, C, MmrHash>
 where
     B: Block,
     <B::Header as Header>::Number: Into<LeafIndex>,
     BE: Backend<B>,
     C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash>,
+    C::Api: HyperdriveApi<B, MmrHash, I>,
 {
-    async fn run(mut self, builder: OffchainMmrBuilder<B, BE, C, MmrHash>) {
+    async fn run(mut self, builder: OffchainMmrBuilder<I, B, BE, C, MmrHash>) {
         let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {
             Some(offchain_mmr) => offchain_mmr,
             None => return,
@@ -203,7 +203,7 @@ where
             }
         };
 
-        let mmr_gadget = MmrGadget::<B, BE, C, MmrHash> {
+        let mmr_gadget = MmrGadget::<I, B, BE, C, MmrHash> {
             finality_notifications: client.finality_notification_stream(),
 
             _phantom: Default::default(),
