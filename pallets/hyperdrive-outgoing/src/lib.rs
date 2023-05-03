@@ -363,15 +363,15 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     ///
     /// This function should be combined with a check (not included!) if there was at least one new message to snapshot.
     fn maximum_blocks_before_snapshot_reached(current_block: T::BlockNumber) -> bool {
-        // check if we should create new snapshot
-        let (_root_hash, last_block, _last_message_excl): (_, T::BlockNumber, LeafIndex) =
-            Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1)).unwrap_or((
-                Default::default(),
-                0u32.into(),
-                0,
-            ));
-
-        current_block.saturating_sub(last_block) >= T::MaximumBlocksBeforeSnapshot::get().into()
+        if let Some(first_block_number) = Self::first_mmr_block_number() {
+            // there was at least one message/leaf inserted (not necessarily snapshotted)
+            let last_block = Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))
+                .map(|(_root_hash, last_block, _last_message_excl)| last_block)
+                .unwrap_or(first_block_number);
+            current_block.saturating_sub(last_block) >= T::MaximumBlocksBeforeSnapshot::get().into()
+        } else {
+            false
+        }
     }
 
     /// Generates a MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
@@ -539,7 +539,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
-    pub trait HyperdriveApi<MmrHash: codec::Codec> {
+    pub trait HyperdriveApi<MmrHash: codec::Codec, I = ()> {
         /// Return the number of MMR leaves/messages on-chain.
         fn number_of_leaves() -> LeafIndex;
 
