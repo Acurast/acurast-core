@@ -1,5 +1,6 @@
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::*;
+use hex_literal::hex;
 use mmr_lib::helper;
 use sp_core::{
     offchain::{testing::TestOffchainExt, OffchainDbExt, OffchainWorkerExt},
@@ -91,12 +92,12 @@ fn should_start_empty() {
         assert_eq!(
             crate::Nodes::<Test>::get(0),
             Some(hex(
-                "6df988525d7cae0d6792c151417ccaecd2ee43ff07c565aa9841436ad4f94c03"
+                "a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc"
             ))
         );
         assert_eq!(
             crate::RootHash::<Test>::get(),
-            hex("6df988525d7cae0d6792c151417ccaecd2ee43ff07c565aa9841436ad4f94c03")
+            hex("a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc")
         );
         assert!(weight != Weight::zero());
     });
@@ -107,6 +108,8 @@ fn should_append_to_mmr_when_send_message_is_called() {
     let _ = env_logger::try_init();
     let mut ext = new_test_ext();
 
+    let root_0 = hex("a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc");
+    let root_1 = hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07");
     let (parent_b1, parent_b2) = ext.execute_with(|| {
         // when
         next_block();
@@ -123,10 +126,10 @@ fn should_append_to_mmr_when_send_message_is_called() {
             ),
             (
                 Some(hex(
-                    "6df988525d7cae0d6792c151417ccaecd2ee43ff07c565aa9841436ad4f94c03"
+                    "a14b339d37d944319637d6f0676e652f1c7c979dd06860fcc0dc4bbc1ea287fc"
                 )),
                 None,
-                hex("6df988525d7cae0d6792c151417ccaecd2ee43ff07c565aa9841436ad4f94c03"),
+                root_0,
             )
         );
 
@@ -151,10 +154,10 @@ fn should_append_to_mmr_when_send_message_is_called() {
                 None,
                 None,
                 Some(hex(
-                    "ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf"
+                    "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"
                 )),
                 None,
-                hex("ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf"),
+                root_1,
             )
         );
 
@@ -167,29 +170,41 @@ fn should_append_to_mmr_when_send_message_is_called() {
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(0, parent_b1))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                0, parent_b1, root_0
+            ))
             .map(decode_node),
         Some(Node::Data(message(0)))
     );
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(1, parent_b2))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                1, parent_b2, root_1
+            ))
             .map(decode_node),
         Some(Node::Data(message(1)))
     );
 
     assert_eq!(
         offchain_db
-            .get(&HyperdriveOutgoing::node_temp_offchain_key(2, parent_b2))
+            .get(&HyperdriveOutgoing::node_temp_offchain_key(
+                2,
+                parent_b2,
+                hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07")
+            ))
             .map(decode_node),
         Some(Node::Hash(hex(
-            "ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf",
+            "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07",
         )))
     );
 
     assert_eq!(
-        offchain_db.get(&HyperdriveOutgoing::node_temp_offchain_key(3, parent_b2)),
+        offchain_db.get(&HyperdriveOutgoing::node_temp_offchain_key(
+            3,
+            parent_b2,
+            hex("35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07")
+        )),
         None
     );
 }
@@ -217,15 +232,15 @@ fn should_construct_larger_mmr_correctly() {
             ),
             (
                 Some(hex(
-                    "53db3d426fa99eff2cc6ef1f07a226c2e5b32d9ccc2b67411d52e8d2b0de8d13"
+                    "5a19197f209a00d04a69d6f415d63daf771332ecc2bdd1d872e3b143606478ab"
                 )),
                 Some(hex(
-                    "584ce0dcb115c68b9cb49102572fe6c7fa7e874a4f5b8e06ebd3f25fc6804acb"
+                    "4f815ba60f512a92d199c973bcee1654860eddfe91c3fcc558275d3d4d58fea4"
                 )),
                 Some(hex(
-                    "c994b73af258f7b79aade16663ddb39dc1615c90f05f9f018baa8f9dba14091c"
+                    "e2aea6053f32d247e0419488bbda90be685e8bd7270e06fd0beef0d2a401e31c"
                 )),
-                hex("f9ff75def54e55e0e7267f360278c6ced1afc8e5aa3c7ccdbdea92104898642c"),
+                hex("a034de86489a86b6b833b69856d2dd39635148719d4c593d1d60060e5cf7da62"),
             )
         );
     });
@@ -296,9 +311,6 @@ fn should_generate_verify_proofs_correctly() {
             })
             .collect::<Vec<_>>();
 
-        // dbg!(target_chain_proofs[5].clone().unwrap());
-        // dbg!(Pallet::<Test>::mmr_root());
-
         // when generate historical proofs for all leaves
         let historical_proofs = (0_u64..=num)
             .into_iter()
@@ -367,7 +379,7 @@ fn should_generate_verify_proofs_correctly() {
                     leaf_indices: vec![2, 3, 4, 5, 6],
                     leaf_count: 7,
                     items: vec![hex(
-                        "ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf"
+                        "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"
                     ),],
                 }
             ))
@@ -389,7 +401,7 @@ fn should_generate_verify_proofs_correctly() {
                     leaf_indices: vec![2],
                     leaf_count: 3,
                     items: vec![hex(
-                        "ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf"
+                        "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"
                     )],
                 }
             )))
@@ -414,7 +426,7 @@ fn should_generate_verify_proofs_correctly() {
                     leaf_indices: vec![2, 3, 4],
                     leaf_count: 5,
                     items: vec![hex(
-                        "ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf"
+                        "35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07"
                     ),],
                 }
             )))
@@ -437,8 +449,8 @@ fn should_generate_verify_proofs_correctly() {
                     leaf_indices: vec![3, 4, 5, 6],
                     leaf_count: 7,
                     items: vec![
-                        hex("c95a535d9976b4d97bfde84a8688ab305ed932a57ff0dbb81b166d5f384a7105"),
-                        hex("ab71dfb00c40e471d4c528ed17af8a1a98c9975370bc146e19e39c847e44dadf")
+                        hex("0x258ff0aa07802204fc15c478ff72d4f6caafdf31b05f814f4ec5106afa454a8e"),
+                        hex("0x35c28b0a4291ceb22f054934109750d531f296271e260819eb41170a34af8b07")
                     ],
                 }
             ))
@@ -599,4 +611,42 @@ fn does_not_panic_when_generating_historical_proofs() {
         // when no new message because maximum_messages==0
         assert_eq!(Pallet::<Test>::generate_proof(5, Some(0), 0), Ok(None));
     });
+}
+
+/// Tests serialization for proof:
+/// ```txt
+/// k_index: 1, position: 8, message 05070700050707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000502000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b
+/// k_index: 0, position: 10, message 05070700060707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000602000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b
+///
+/// mmr_size: 11
+///
+/// items: [0x53db3d426fa99eff2cc6ef1f07a226c2e5b32d9ccc2b67411d52e8d2b0de8d13,
+///         0xbca5ce83486f6bd8be90523d0e9bcefd812fbd451337b584d32f8203dbf340c7]
+/// ```
+#[test]
+fn should_serialize_target_chain_proof() {
+    // given
+    let proof = TargetChainProof {
+        leaves: vec![TargetChainProofLeaf{
+            k_index: 1,
+            position: 8,
+            message: hex!("05070700050707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000502000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b").into(),
+        },
+                     TargetChainProofLeaf{
+                         k_index: 0,
+                         position: 10,
+                         message: hex!("05070700060707010000000641535349474e0a000000460507070a000000100000000000000000000000000000000602000000290a00000024747a316834457347756e48325565315432754e73386d664b5a38585a6f516a693348634b").into(),
+                     }],
+        mmr_size:11,
+        items: vec![hex!("53db3d426fa99eff2cc6ef1f07a226c2e5b32d9ccc2b67411d52e8d2b0de8d13"), hex!("bca5ce83486f6bd8be90523d0e9bcefd812fbd451337b584d32f8203dbf340c7")],
+    };
+
+    // when
+    let actual = serde_json::to_string(&proof).unwrap();
+
+    // then
+    assert_eq!(
+        actual,
+        r#"{"leaves":[{"kIndex":1,"position":8,"message":[5,7,7,0,5,7,7,1,0,0,0,6,65,83,83,73,71,78,10,0,0,0,70,5,7,7,10,0,0,0,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,2,0,0,0,41,10,0,0,0,36,116,122,49,104,52,69,115,71,117,110,72,50,85,101,49,84,50,117,78,115,56,109,102,75,90,56,88,90,111,81,106,105,51,72,99,75]},{"kIndex":0,"position":10,"message":[5,7,7,0,6,7,7,1,0,0,0,6,65,83,83,73,71,78,10,0,0,0,70,5,7,7,10,0,0,0,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,2,0,0,0,41,10,0,0,0,36,116,122,49,104,52,69,115,71,117,110,72,50,85,101,49,84,50,117,78,115,56,109,102,75,90,56,88,90,111,81,106,105,51,72,99,75]}],"mmrSize":11,"items":[[83,219,61,66,111,169,158,255,44,198,239,31,7,162,38,194,229,179,45,156,204,43,103,65,29,82,232,210,176,222,141,19],[188,165,206,131,72,111,107,216,190,144,82,61,14,155,206,253,129,47,189,69,19,55,181,132,211,47,130,3,219,243,64,199]]}"#
+    );
 }

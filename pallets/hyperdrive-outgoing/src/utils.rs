@@ -1,10 +1,28 @@
+// This file is part of Substrate.
+
+// Copyright (C) 2020-2022 Parity Technologies (UK) Ltd.
+// SPDX-License-Identifier: Apache-2.0
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! Merkle Mountain Range utilities.
 
 use codec::Encode;
-use mmr_lib;
 use sp_runtime::traits::Header;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::Vec;
+
+use mmr_lib;
 
 use crate::{LeafIndex, NodeIndex};
 
@@ -37,11 +55,11 @@ impl NodesUtils {
     /// Calculate `LeafIndex` for the leaf that added `node_index` to the MMR.
     pub fn leaf_index_that_added_node(node_index: NodeIndex) -> LeafIndex {
         let rightmost_leaf_pos = Self::rightmost_leaf_node_index_from_pos(node_index);
-        Self::leaf_node_index_to_leaf_index(rightmost_leaf_pos)
+        Self::leaf_node_pos_to_leaf_index(rightmost_leaf_pos)
     }
 
-    // Translate a _leaf_ `NodeIndex` to its `LeafIndex`.
-    fn leaf_node_index_to_leaf_index(pos: NodeIndex) -> LeafIndex {
+    /// Translate a leaf's [`NodeIndex`] to its `LeafIndex`.
+    fn leaf_node_pos_to_leaf_index(pos: NodeIndex) -> LeafIndex {
         if pos == 0 {
             return 0;
         }
@@ -67,12 +85,15 @@ impl NodesUtils {
     /// Build offchain key from `parent_hash` of block that originally added node `pos` to MMR.
     ///
     /// This combination makes the offchain (key,value) entry resilient to chain forks.
-    pub fn node_temp_offchain_key<H: Header>(
+    pub fn node_temp_offchain_key<H: Header, ForkUnique: Encode>(
         prefix: &[u8],
         pos: NodeIndex,
         parent_hash: H::Hash,
+        unique: ForkUnique,
     ) -> Vec<u8> {
-        (prefix, pos, parent_hash).encode()
+        // The order will be important when the offchain Index supports pruning (deletion) by
+        // subset prefix of the partial keys, such as delete((prefix, parent_hash))
+        (prefix, parent_hash, pos, unique).encode()
     }
 
     /// Build canonical offchain key for node `pos` in MMR.
@@ -95,7 +116,7 @@ mod tests {
     fn should_calculate_node_index_from_leaf_index() {
         for index in 0..100000 {
             let pos = leaf_index_to_pos(index);
-            assert_eq!(NodesUtils::leaf_node_index_to_leaf_index(pos), index);
+            assert_eq!(NodesUtils::leaf_node_pos_to_leaf_index(pos), index);
         }
     }
 
@@ -125,7 +146,7 @@ mod tests {
     fn should_calculate_rightmost_leaf_node_index_from_pos() {
         for pos in 0..100000 {
             let leaf_pos = NodesUtils::rightmost_leaf_node_index_from_pos(pos);
-            let leaf_index = NodesUtils::leaf_node_index_to_leaf_index(leaf_pos);
+            let leaf_index = NodesUtils::leaf_node_pos_to_leaf_index(leaf_pos);
             assert!(NodesUtils::right_branch_ending_in_leaf(leaf_index).contains(&pos));
         }
     }

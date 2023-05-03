@@ -1,3 +1,20 @@
+// This file is part of Substrate.
+
+// Copyright (C) 2020-2022 Parity Technologies (UK) Ltd.
+// SPDX-License-Identifier: Apache-2.0
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! An MMR storage implementation.
 
 use codec::Encode;
@@ -6,15 +23,15 @@ use mmr_lib;
 use mmr_lib::helper;
 use sp_core::offchain::StorageKind;
 use sp_io::offchain_index;
-use sp_std::iter::Peekable;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::*;
+use sp_std::{iter::Peekable, vec};
 
 use crate::types::TargetChainNodeHasher;
 use crate::utils::NodesUtils;
 use crate::{
     mmr::{Node, NodeOf},
-    Config, HasherOf, LeafIndexToParentBlockHash, NodeIndex, Nodes, NumberOfLeaves, Pallet,
+    Config, HashOf, LeafMeta, NodeIndex, Nodes, NumberOfLeaves, Pallet, TargetChainConfigOf,
 };
 
 /// A marker type for runtime-specific storage implementation.
@@ -52,7 +69,7 @@ where
 {
 }
 
-impl<T, I> mmr_lib::MMRStore<NodeOf<T, I>> for Storage<OffchainStorage, T, I>
+impl<T, I> mmr_lib::MMRStoreReadOps<NodeOf<T, I>> for Storage<OffchainStorage, T, I>
 where
     T: Config<I>,
     I: 'static,
@@ -75,11 +92,12 @@ where
         }
 
         // Fall through to searching node using fork-specific key.
+        // query index the parent hash for the block that added `leaf_index` to the MMR, and the root produced as a result of adding leaf
         let temp_key = {
-            // query index the parent number for the block that added `leaf_index` to the MMR.
-            let ancestor_parent_hash = Pallet::<T, I>::leaf_index_to_parent_block_hash(leaf_index)
-                .ok_or(mmr_lib::Error::InconsistentStore)?;
-            let temp_key = Pallet::<T, I>::node_temp_offchain_key(pos, ancestor_parent_hash);
+            let (ancestor_parent_hash, root_hash) =
+                Pallet::<T, I>::leaf_meta(leaf_index).ok_or(mmr_lib::Error::InconsistentStore)?;
+            let temp_key =
+                Pallet::<T, I>::node_temp_offchain_key(pos, ancestor_parent_hash, root_hash);
             debug!(
                 target: "runtime::mmr::offchain",
                 "offchain db get {}: leaf idx {:?}, hash {:?}, temp key {:?}",
@@ -87,19 +105,16 @@ where
             );
             temp_key
         };
+
         // Retrieve the element from Off-chain DB.
         Ok(
             sp_io::offchain::local_storage_get(StorageKind::PERSISTENT, &temp_key)
                 .and_then(|v| codec::Decode::decode(&mut &*v).ok()),
         )
     }
-
-    fn append(&mut self, _: NodeIndex, _: Vec<NodeOf<T, I>>) -> mmr_lib::Result<()> {
-        panic!("MMR must not be altered in the off-chain context.")
-    }
 }
 
-impl<T, I> mmr_lib::MMRStore<NodeOf<T, I>> for Storage<RuntimeStorage, T, I>
+impl<T, I> mmr_lib::MMRStoreReadOps<NodeOf<T, I>> for Storage<RuntimeStorage, T, I>
 where
     T: Config<I>,
     I: 'static,
@@ -107,15 +122,26 @@ where
     fn get_elem(&self, pos: NodeIndex) -> mmr_lib::Result<Option<NodeOf<T, I>>> {
         Ok(<Nodes<T, I>>::get(pos).map(Node::Hash))
     }
+}
 
-    fn append(&mut self, pos: u64, elems: Vec<NodeOf<T, I>>) -> mmr_lib::Result<()> {
+impl<T, I> mmr_lib::MMRStoreWriteOps<NodeOf<T, I>, HashOf<T, I>> for Storage<RuntimeStorage, T, I>
+where
+    T: Config<I>,
+    I: 'static,
+{
+    fn append(
+        &mut self,
+        pos: u64,
+        elems: Vec<NodeOf<T, I>>,
+        unique: HashOf<T, I>,
+    ) -> mmr_lib::Result<()> {
         if elems.is_empty() {
             return Ok(());
         }
 
         trace!(
             target: "runtime::mmr", "elems: {:?}",
-            elems.iter().map(|elem| <T as Config<I>>::Hasher::hash_node(elem)).collect::<Vec<_>>()
+            elems.iter().map(|elem| TargetChainConfigOf::<T,I>::hash_node(elem)).collect::<Vec<_>>()
         );
 
         let leaves = NumberOfLeaves::<T, I>::get();
@@ -140,12 +166,12 @@ where
             if peaks_to_store.next_if_eq(&node_index).is_some() {
                 <Nodes<T, I>>::insert(
                     node_index,
-                    HasherOf::<T, I>::hash_node(&elem)
+                    TargetChainConfigOf::<T, I>::hash_node(&elem)
                         .map_err(|_| mmr_lib::Error::StoreError("hasher failed".to_owned()))?,
                 );
             }
             // We are storing full node off-chain (using indexing API).
-            Self::store_to_offchain(leaf_index, node_index, &elem);
+            Self::store_to_offchain(leaf_index, node_index, &elem, unique);
 
             // Increase the indices.
             if let Node::Data(..) = elem {
@@ -171,25 +197,38 @@ where
     T: Config<I>,
     I: 'static,
 {
-    fn store_to_offchain(leaf_index: NodeIndex, pos: NodeIndex, node: &NodeOf<T, I>) {
-        let encoded_node = node.encode();
-        // We store this leaf offchain keyed by `(parent_hash, node_index)` to make it
-        // fork-resistant. The MMR client gadget task will "canonicalize" it on the first
-        // finality notification that follows, when we are not worried about forks anymore.
-
+    /// We store this leaf offchain keyed by `(prefix, parent_hash, pos, root_hash)` to make it
+    /// fork-resistant. The MMR client gadget task will "canonicalize" it on the first
+    /// finality notification that follows, when we are not worried about forks anymore.
+    ///
+    /// The key consists of
+    /// * The `prefix` is used to distinguish entries from different pallets, commonly it contains the name of the pallet.
+    /// * The `parent_hash` to avoid collisions with other forks
+    /// * The `pos` to avoid collision with other nodes of the MMR trie
+    /// * The `root_hash` to avoid collisions during execution of the _first_ block of a fork; in this block all other
+    ///   components of the key are the same for different forks! Technically with `root_hash` the key does not require `parent_hash`
+    ///   anymore for uniqueness, we still include it for easier deletion by only `(prefix, parent_hash)` on finality notifications.
+    fn store_to_offchain(
+        leaf_index: NodeIndex,
+        pos: NodeIndex,
+        node: &NodeOf<T, I>,
+        unique: HashOf<T, I>,
+    ) {
         // Use parent hash of block adding new nodes (this block) as extra identifier
         // in offchain DB to avoid DB collisions and overwrites in case of forks.
         let parent_hash = <frame_system::Pallet<T>>::parent_hash();
-        let temp_key = Pallet::<T, I>::node_temp_offchain_key(pos, parent_hash);
+        let temp_key = Pallet::<T, I>::node_temp_offchain_key(pos, parent_hash, unique);
         debug!(
             target: "runtime::mmr::offchain", "offchain db set: pos {} parent_hash {:?} key {:?}",
             pos, parent_hash, temp_key
         );
 
-        // Indexing API is used to store the full node content.
         // track block number in on-chain storage to recover temp_key
-        <LeafIndexToParentBlockHash<T, I>>::insert(leaf_index, parent_hash);
-        offchain_index::set(&temp_key, &encoded_node);
+        <LeafMeta<T, I>>::insert(leaf_index, (parent_hash, unique));
+
+        // Indexing API is used to store the full node content.
+        // update the map (prefix, parent_hash, pos, root_hash) -> encoded_node
+        offchain_index::set(&temp_key, &node.encode());
     }
 }
 

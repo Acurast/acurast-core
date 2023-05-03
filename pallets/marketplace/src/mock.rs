@@ -306,6 +306,7 @@ impl Config for Test {
     type AssetAmount = AssetAmount;
     type RewardManager = MockRewardManager;
     type AssetValidator = PassAllAssets;
+    type MarketplaceHooks = ();
     type WeightInfo = weights::Weights<Test>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = TestBenchmarkHelper;

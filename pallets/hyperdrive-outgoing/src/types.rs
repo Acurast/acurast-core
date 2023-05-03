@@ -1,18 +1,39 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+// This file is part of Substrate.
+
+// Copyright (C) 2020-2022 Parity Technologies (UK) Ltd.
+// SPDX-License-Identifier: Apache-2.0
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 use core::fmt::Debug;
-pub use mmr_lib;
 
+use alloc::string::String;
+use codec::alloc;
 use frame_support::pallet_prelude::*;
+pub use mmr_lib;
 use scale_info::TypeInfo;
+#[cfg(feature = "std")]
+use serde;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
 use sp_core::RuntimeDebug;
 use sp_runtime::traits;
 #[cfg(not(feature = "std"))]
 use sp_std::prelude::Vec;
 use sp_std::prelude::*;
-
-use pallet_acurast::{JobIdSequence, TezosAddressBytes};
 use strum_macros::{EnumString, IntoStaticStr};
+
+use pallet_acurast::JobIdSequence;
 
 /// A type to describe node position in the MMR (node index).
 pub type NodeIndex = u64;
@@ -44,14 +65,17 @@ impl<Hash> OnNewRoot<Hash> for () {
     RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
 )]
 pub enum RawAction {
-    #[strum(serialize = "ASSIGN")]
+    #[strum(serialize = "ASSIGN_JOB_PROCESSOR")]
     AssignJob,
+    #[strum(serialize = "NOOP")]
+    Noop,
 }
 
 impl From<&Action> for RawAction {
     fn from(action: &Action) -> Self {
         match action {
             Action::AssignJob(_, _) => RawAction::AssignJob,
+            Action::Noop => RawAction::Noop,
         }
     }
 }
@@ -62,7 +86,9 @@ pub enum Action {
     /// A subset of values expressed by [`pallet_acurast::JobId`], only for jobs created on Tezos.
     ///
     /// Consists of `(Job ID on Tezos, [processor addresses])`.
-    AssignJob(JobIdSequence, Vec<TezosAddressBytes>), // (nat, address)
+    AssignJob(JobIdSequence, String), // (nat, address)
+    /// A noop action that solely suits the purpose of testing that messages get sent.
+    Noop,
 }
 
 /// Message that is transferred to target chains.
@@ -89,30 +115,61 @@ impl<H: traits::Hash> From<Leaf> for Node<H> {
     }
 }
 
-/// Extension trait for [`traits::Hash`] that adds hashing with previsously encoded value, using an encoding supported on target chain.
-pub trait TargetChainHasher: traits::Hash {
+/// A bundled config of encoder/hasher for the target chain.
+///
+/// Extends traits [`traits::Hash`] and adds hashing with previsously encoded value, using an encoding supported on target chain.
+pub trait TargetChainConfig {
     type TargetChainEncoder: LeafEncoder;
 
-    /// Produce the hash of some encodable value, using an encoding supported on target chain.
+    /// A hasher type for MMR.
+    ///
+    /// To construct trie nodes that result in merging (bagging) two peaks, depending on the
+    /// node kind we take either:
+    /// - The node (hash) itself if it's an inner node.
+    /// - The hash of [`Self::LeafEncoder`]-encoded leaf data if it's a leaf node.
+    ///
+    /// Then we create a tuple of these two hashes (concatenate them) and
+    /// hash, to obtain a new MMR inner node - the new peak.
+    type Hasher: traits::Hash<Output = Self::Hash>;
+
+    /// The hashing output type.
+    ///
+    /// This type is actually going to be stored in the MMR.
+    /// Required to be provided separatly from [`Self::Hasher`], to satisfy trait bounds for storage items.
+    type Hash: Member
+        + MaybeSerializeDeserialize
+        + sp_std::fmt::Debug
+        + sp_std::hash::Hash
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + Ord
+        + Copy
+        + Default
+        + codec::Codec
+        + codec::EncodeLike
+        + scale_info::TypeInfo
+        + MaxEncodedLen;
+
+    /// Produce the hash of some encodable value.
     fn hash_for_target(
         leaf: &Leaf,
-    ) -> Result<Self::Output, <Self::TargetChainEncoder as LeafEncoder>::Error> {
-        Ok(<Self as traits::Hash>::hash(
+    ) -> Result<Self::Hash, <Self::TargetChainEncoder as LeafEncoder>::Error> {
+        Ok(<Self::Hasher as traits::Hash>::hash(
             Self::TargetChainEncoder::encode(leaf)?.as_slice(),
         ))
     }
 }
 
 /// Hashing used for the pallet.
-pub(crate) trait TargetChainNodeHasher<Hash> {
+pub trait TargetChainNodeHasher<Hash> {
     type Error;
     fn hash_node(node: &Node<Hash>) -> Result<Hash, Self::Error>;
 }
 
 /// Implements node hashing for all nodes that contain leaves that support target chain hashing.
-impl<H: TargetChainHasher> TargetChainNodeHasher<H::Output> for H {
+impl<H: TargetChainConfig> TargetChainNodeHasher<H::Hash> for H {
     type Error = <H::TargetChainEncoder as LeafEncoder>::Error;
-    fn hash_node(node: &Node<H::Output>) -> Result<H::Output, Self::Error> {
+    fn hash_node(node: &Node<H::Hash>) -> Result<H::Hash, Self::Error> {
         match *node {
             Node::Data(ref leaf) => H::hash_for_target(leaf),
             Node::Hash(ref hash) => Ok(*hash),
@@ -141,22 +198,26 @@ pub struct Proof<Hash> {
 }
 
 /// A self-contained MMR proof for a group of leaves, containing messages encoded for target chain.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
 pub struct TargetChainProof<Hash> {
     /// The indices of the leaves the proof is for.
     pub leaves: Vec<TargetChainProofLeaf>,
     /// Number of leaves in MMR, when the proof was generated.
-    pub leaf_count: NodeIndex,
+    pub mmr_size: NodeIndex,
     /// Proof elements (hashes of siblings of inner nodes on the path to the leaf).
     /// Excluding MMR root.
     pub items: Vec<Hash>,
 }
 
 /// A leaf of a self-contained MMR [`TargetChainProof`].
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
 pub struct TargetChainProofLeaf {
-    /// The index of this leaf.
-    pub leaf_index: LeafIndex,
+    /// The k-index of this leaf.
+    pub k_index: NodeIndex,
     /// The position of this leaf.
     pub position: NodeIndex,
     /// The encoded message on this leaf.
@@ -176,6 +237,12 @@ pub enum MMRError {
     /// Error committing changes.
     #[cfg_attr(feature = "std", error("Error committing changes"))]
     Commit,
+    /// Error when snapshot meta index became inconsistent.
+    #[cfg_attr(
+        feature = "std",
+        error("Snapshot meta index is inconsistent: missing snapshot that should be there")
+    )]
+    InconsistentSnapshotMeta,
     /// Error during proof generation.
     #[cfg_attr(feature = "std", error("Error generating proof"))]
     GenerateProof,
@@ -227,50 +294,5 @@ impl MMRError {
             e,
         );
         self
-    }
-}
-
-sp_api::decl_runtime_apis! {
-    /// API to interact with MMR pallet.
-    pub trait HyperdriveApi<Hash: codec::Codec, BlockNumber: codec::Codec> {
-        /// Return the on-chain MMR root hash.
-        fn snapshot_mmr_root() -> Result<Hash, MMRError>;
-
-        /// Return the number of MMR blocks in the chain.
-        fn mmr_leaf_count() -> Result<LeafIndex, MMRError>;
-
-        /// Generates a MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
-        fn generate_proof(
-            next_message_number: LeafIndex,
-            maximum_messages: Option<u64>,
-            latest_known_snapshot_number: SnapshotNumber,
-        ) -> Result<Option<(Vec<Leaf>, Proof<Hash>)>, MMRError>;
-
-        /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
-        /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
-        ///
-        /// This function wraps [`Self::generate_proof`] and converts result to [`TargetChainProof`].
-        fn generate_target_chain_proof(
-            next_message_number: LeafIndex,
-            maximum_messages: Option<u64>,
-            latest_known_snapshot_number: SnapshotNumber,
-        ) -> Result<Option<TargetChainProof<Hash>>, MMRError>;
-
-        /// Verify MMR proof against on-chain MMR for a batch of leaves.
-        ///
-        /// Note this function will use on-chain MMR root hash and check if the proof matches the hash.
-        /// Note, the leaves should be sorted such that corresponding leaves and leaf indices have the
-        /// same position in both the `leaves` vector and the `leaf_indices` vector contained in the [Proof]
-        fn verify_proof(leaves: Vec<Leaf>, proof: Proof<Hash>) -> Result<(), MMRError>;
-
-        /// Verify MMR proof against given root hash for a batch of leaves.
-        ///
-        /// Note this function does not require any on-chain storage - the
-        /// proof is verified against given MMR root hash.
-        ///
-        /// Note, the leaves should be sorted such that corresponding leaves and leaf indices have the
-        /// same position in both the `leaves` vector and the `leaf_indices` vector contained in the [Proof]
-        fn verify_proof_stateless(root: Hash, leaves: Vec<Leaf>, proof: Proof<Hash>)
-            -> Result<(), MMRError>;
     }
 }

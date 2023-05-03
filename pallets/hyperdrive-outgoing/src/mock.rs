@@ -4,14 +4,11 @@ use frame_support::{
 };
 use sp_core::H256;
 use sp_runtime::traits::AccountIdLookup;
-use sp_runtime::{
-    generic,
-    traits::{BlakeTwo256, Keccak256},
-};
+use sp_runtime::{generic, traits::BlakeTwo256};
 
 use stub::*;
 
-use crate::tezos::TezosEncoder;
+use crate::tezos::DefaultTezosConfig;
 use crate::*;
 
 frame_support::construct_runtime!(
@@ -21,7 +18,7 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic<Test>,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
-        HyperdriveOutgoing: crate::{Pallet, Storage, Event<T>},
+        HyperdriveOutgoing: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -55,26 +52,14 @@ impl frame_system::Config for Test {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
-    type Hasher = Keccak256;
-    type Hash = H256;
+    const TEMP_INDEXING_PREFIX: &'static [u8] = b"mmr-tez-temp-";
+    type TargetChainConfig = DefaultTezosConfig;
     type OnNewRoot = ();
     type WeightInfo = ();
     type MaximumBlocksBeforeSnapshot = MaximumBlocksBeforeSnapshot;
 }
 
-impl TargetChainHasher for Keccak256 {
-    type TargetChainEncoder = TezosEncoder;
-}
-
 impl WeightInfo for () {
-    fn check_snapshot() -> Weight {
-        DbWeight::get().reads_writes(3, 3)
-    }
-
-    fn create_snapshot() -> Weight {
-        DbWeight::get().reads_writes(3, 3)
-    }
-
     fn send_message() -> Weight {
         DbWeight::get().reads_writes(3, 3)
     }
