@@ -156,7 +156,6 @@ pub(crate) mod tests {
                 client.assert_canonicalized(&[&a1, &a2, &a3]);
             },
         );
-
         // verify previous progress was persisted and run the gadget again
         run_test_with_mmr_gadget_pre_post_using_client(
             client.clone(),

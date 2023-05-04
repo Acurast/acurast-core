@@ -57,8 +57,8 @@ log = { version = "0.4.17", default-features = false }
 
 # for mmr-gadget
 futures = { version = "0.3", optional = true }
-sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false, optional = true }
-sc-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false, optional = true }
+sc-client-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false, optional = true }
+sc-offchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false, optional = true }
 
 [dev-dependencies]
 hex-literal = "0.3"
@@ -70,10 +70,10 @@ itertools = "0.10.3"
 
 # for mmr-gadget tests
 parking_lot = "0.12.1"
-sc-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-sp-tracing = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
-substrate-test-runtime-client = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.36", default-features = false }
+sc-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+sp-tracing = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+substrate-test-runtime-client = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
 tokio = "1.17.0"
 
 [features]

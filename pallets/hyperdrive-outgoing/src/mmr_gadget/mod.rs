@@ -46,10 +46,7 @@ use sc_client_api::{Backend, BlockchainEvents, FinalityNotifications};
 use sc_offchain::OffchainDb;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HeaderBackend, HeaderMetadata};
-use sp_runtime::{
-    generic::BlockId,
-    traits::{Block, Header},
-};
+use sp_runtime::traits::{Block, Header};
 
 use offchain_mmr::OffchainMmr;
 
@@ -86,21 +83,20 @@ where
         finality_notifications: &mut FinalityNotifications<B>,
     ) -> Option<OffchainMmr<I, B, BE, C, MmrHash>> {
         while let Some(notification) = finality_notifications.next().await {
-            let best_block = *notification.header.number();
             match self
                 .client
                 .runtime_api()
-                .first_mmr_block_number(&BlockId::number(best_block))
+                .first_mmr_block_number(notification.hash)
             {
                 Ok(Some(first_mmr_block)) => {
                     debug!(
                         target: LOG_TARGET,
                         "pallet-mmr's first block is {:?} detected at block {:?} with mmr size {:?}",
                         first_mmr_block,
-                        best_block,
+                        *notification.header.number(),
                         self.client
                             .runtime_api()
-                            .number_of_leaves(&BlockId::number(best_block))
+                            .number_of_leaves(notification.hash)
                     );
                     let best_canonicalized =
                         match offchain_mmr::load_or_init_best_canonicalized::<B, BE>(
