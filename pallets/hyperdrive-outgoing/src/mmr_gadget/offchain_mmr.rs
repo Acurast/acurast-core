@@ -69,7 +69,7 @@ where
 }
 
 /// `OffchainMMR` exposes MMR offchain canonicalization and pruning logic.
-pub struct OffchainMmr<B: Block, BE: Backend<B>, C, MmrHash> {
+pub struct OffchainMmr<I, B: Block, BE: Backend<B>, C, MmrHash> {
     pub backend: Arc<BE>,
     pub client: Arc<C>,
     pub offchain_db: OffchainDb<BE::OffchainStorage>,
@@ -77,16 +77,16 @@ pub struct OffchainMmr<B: Block, BE: Backend<B>, C, MmrHash> {
     pub temp_indexing_prefix: Vec<u8>,
     pub first_mmr_block: NumberFor<B>,
     pub best_canonicalized: NumberFor<B>,
-    _marker: PhantomData<MmrHash>,
+    _marker: PhantomData<(I, MmrHash)>,
 }
 
-impl<B, BE, C, MmrHash> OffchainMmr<B, BE, C, MmrHash>
+impl<I, B, BE, C, MmrHash> OffchainMmr<I, B, BE, C, MmrHash>
 where
     C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
     BE: Backend<B>,
     B: Block,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash>,
+    C::Api: HyperdriveApi<B, MmrHash, I>,
 {
     /// Create new [`OffchainMmr`] with the given arguments.
     pub fn new(

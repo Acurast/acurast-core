@@ -67,12 +67,12 @@ pub trait MmrApi<BlockHash, MmrHash: MaybeSerializeDeserialize> {
 }
 
 /// MMR RPC methods.
-pub struct Mmr<Client, Block> {
+pub struct Mmr<I, Client, Block> {
     client: Arc<Client>,
-    _marker: PhantomData<Block>,
+    _marker: PhantomData<(I, Block)>,
 }
 
-impl<C, B> Mmr<C, B> {
+impl<I, C, B> Mmr<I, C, B> {
     /// Create new `Mmr` with the given reference to the client.
     pub fn new(client: Arc<C>) -> Self {
         Self {
@@ -83,11 +83,12 @@ impl<C, B> Mmr<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, MmrHash> MmrApiServer<HashFor<Block>, MmrHash> for Mmr<Client, (Block, MmrHash)>
+impl<I: Send + Sync + 'static, Client, Block, MmrHash> MmrApiServer<HashFor<Block>, MmrHash>
+    for Mmr<I, Client, (Block, MmrHash)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: HyperdriveApi<Block, MmrHash>,
+    Client::Api: HyperdriveApi<Block, MmrHash, I>,
     MmrHash: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
     fn snapshot_roots(
