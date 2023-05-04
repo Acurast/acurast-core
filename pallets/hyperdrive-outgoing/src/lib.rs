@@ -51,6 +51,7 @@ mod tests;
 mod benchmarking;
 
 mod default_weights;
+pub mod instances;
 mod mmr;
 #[cfg(feature = "std")]
 pub mod mmr_gadget;
