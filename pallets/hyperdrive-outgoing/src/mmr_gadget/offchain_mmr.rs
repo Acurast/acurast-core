@@ -31,7 +31,6 @@ use sc_offchain::OffchainDb;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{CachedHeaderMetadata, ForkBackend, HeaderBackend, HeaderMetadata};
 use sp_core::offchain::{DbExternalities, StorageKind};
-use sp_runtime::generic::BlockId;
 use sp_runtime::{
     traits::{Block, NumberFor, One},
     Saturating,
@@ -148,12 +147,13 @@ where
     fn right_branch_ending_in_block_or_log(
         &self,
         block_num: NumberFor<B>,
+        block_hash: B::Hash,
         action: &str,
     ) -> Result<Option<(LeafIndex, Vec<NodeIndex>)>, String> {
         let last_message_excl = self
             .client
             .runtime_api()
-            .last_message_excl_by_block(&BlockId::number(block_num), block_num);
+            .last_message_excl_by_block(block_hash, block_num);
         match last_message_excl {
             Ok(Some(0)) => {
                 // nothing to do until first message got sent
@@ -225,7 +225,7 @@ where
         // We "canonicalize" the leaf associated with the provided block
         // and all the nodes added by that leaf.
         let (leaf_index, to_canon_nodes) =
-            match self.right_branch_ending_in_block_or_log(header.number, action) {
+            match self.right_branch_ending_in_block_or_log(header.number, block_hash, action) {
                 Ok(Some(res)) => res,
                 Ok(None) => {
                     // Nothing to do
@@ -241,11 +241,7 @@ where
                 }
             };
 
-        let root_hash = match self
-            .client
-            .runtime_api()
-            .leaf_meta(&BlockId::number(header.number), leaf_index)
-        {
+        let root_hash = match self.client.runtime_api().leaf_meta(block_hash, leaf_index) {
             Ok(Some((_block_hash, root_hash))) => root_hash,
             Ok(None) => {
                 error!(target: LOG_TARGET, "Got no leaf_meta from runtime API");

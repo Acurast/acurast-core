@@ -26,8 +26,8 @@ use jsonrpsee::{
 };
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
+use sp_runtime::traits::Block as BlockT;
 use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
-use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 
 use crate::{HyperdriveApi, LeafIndex, MMRError, SnapshotNumber, TargetChainProof};
 
@@ -444,10 +444,7 @@ where
     ) -> RpcResult<Vec<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let roots = api
-            .snapshot_roots(
-                &BlockId::number(self.client.info().best_number),
-                next_expected_snapshot_number,
-            )
+            .snapshot_roots(self.client.info().best_hash, next_expected_snapshot_number)
             .map_err(runtime_error_into_rpc_error)?
             .map_err(mmr_error_into_rpc_error)?;
         Ok(roots)
@@ -459,10 +456,7 @@ where
     ) -> RpcResult<Option<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let root = api
-            .snapshot_root(
-                &BlockId::number(self.client.info().best_number),
-                next_expected_snapshot_number,
-            )
+            .snapshot_root(self.client.info().best_hash, next_expected_snapshot_number)
             .map_err(runtime_error_into_rpc_error)?
             .map_err(mmr_error_into_rpc_error)?;
         Ok(root)
@@ -478,7 +472,7 @@ where
 
         let proof = api
             .generate_target_chain_proof(
-                &BlockId::number(self.client.info().best_number),
+                self.client.info().best_hash,
                 next_message_number,
                 maximum_messages,
                 latest_known_snapshot_number,

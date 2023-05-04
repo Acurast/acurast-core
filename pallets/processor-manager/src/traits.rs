@@ -39,26 +39,26 @@ pub trait WeightInfo {
 
 impl WeightInfo for () {
     fn create_manager() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn update_processor_pairings() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn pair_with_manager() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn recover_funds() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn heartbeat() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 
     fn advertise_for() -> Weight {
-        Weight::from_ref_time(10_000)
+        Weight::from_parts(10_000, 0)
     }
 }

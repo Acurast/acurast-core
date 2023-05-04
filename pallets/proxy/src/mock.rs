@@ -138,8 +138,8 @@ pub mod acurast_runtime {
     use xcm::latest::prelude::*;
     use xcm_builder::{
         AccountId32Aliases, AllowUnpaidExecutionFrom, CurrencyAdapter as XcmCurrencyAdapter,
-        EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, IsConcrete, LocationInverter,
-        NativeAsset, ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
+        EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, IsConcrete, NativeAsset,
+        ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
         SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::XcmExecutor;
@@ -226,8 +226,11 @@ pub mod acurast_runtime {
     }
     parameter_types! {
         pub const UnitWeightCost: u64 = 1;
-        pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
+        pub KsmPerSecond: (AssetId, u128, u128) = (Concrete(Parent.into()), 1, 0);
         pub const MaxInstructions: u32 = 100;
+        pub UniversalLocation: InteriorMultiLocation = Parachain(ParachainInfo::parachain_id().into()).into();
+        pub const MaxAssetsIntoHolding: u32 = 64;
+        pub ReachableDest: Option<MultiLocation> = Some(Parent.into());
     }
 
     pub struct XcmConfig;
@@ -239,7 +242,7 @@ pub mod acurast_runtime {
         type OriginConverter = XcmOriginToCallOrigin;
         type IsReserve = NativeAsset;
         type IsTeleporter = ();
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type Barrier = Barrier;
         type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
@@ -247,6 +250,15 @@ pub mod acurast_runtime {
         type AssetTrap = ();
         type AssetClaims = ();
         type SubscriptionService = ();
+        type AssetLocker = ();
+        type AssetExchanger = ();
+        type PalletInstancesInfo = AllPalletsWithSystem;
+        type MaxAssetsIntoHolding = MaxAssetsIntoHolding;
+        type FeeManager = ();
+        type MessageExporter = ();
+        type UniversalAliases = Nothing;
+        type CallDispatcher = RuntimeCall;
+        type SafeCallFilter = Everything;
     }
 
     impl pallet_balances::Config for Runtime {
@@ -315,6 +327,7 @@ pub mod acurast_runtime {
         type Extra = ();
         type WeightInfo = ();
         type RemoveItemsLimit = ();
+        type CallbackHandle = ();
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper = TestBenchmarkHelper;
     }
@@ -429,11 +442,19 @@ pub mod acurast_runtime {
         type XcmTeleportFilter = Nothing;
         type XcmReserveTransferFilter = Everything;
         type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type RuntimeOrigin = RuntimeOrigin;
         type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
+        type Currency = Balances;
+        type CurrencyMatcher = ();
+        type TrustedLockers = ();
+        type SovereignAccountOf = LocationToAccountId;
+        type MaxLockers = ConstU32<8>;
+        type WeightInfo = pallet_xcm::TestWeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type ReachableDest = ReachableDest;
     }
 
     impl super::mock_msg_queue::Config for Runtime {
@@ -455,8 +476,8 @@ pub mod proxy_runtime {
     use xcm::latest::prelude::*;
     use xcm_builder::{
         AccountId32Aliases, AllowUnpaidExecutionFrom, CurrencyAdapter as XcmCurrencyAdapter,
-        EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, IsConcrete, LocationInverter,
-        NativeAsset, ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
+        EnsureXcmOrigin, FixedRateOfFungible, FixedWeightBounds, IsConcrete, NativeAsset,
+        ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
         SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::{Config, XcmExecutor};
@@ -499,7 +520,7 @@ pub mod proxy_runtime {
         type OriginConverter = XcmOriginToCallOrigin;
         type IsReserve = NativeAsset;
         type IsTeleporter = ();
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type Barrier = Barrier;
         type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
@@ -507,6 +528,15 @@ pub mod proxy_runtime {
         type AssetTrap = ();
         type AssetClaims = ();
         type SubscriptionService = ();
+        type AssetLocker = ();
+        type AssetExchanger = ();
+        type PalletInstancesInfo = AllPalletsWithSystem;
+        type MaxAssetsIntoHolding = MaxAssetsIntoHolding;
+        type FeeManager = ();
+        type MessageExporter = ();
+        type UniversalAliases = Nothing;
+        type CallDispatcher = RuntimeCall;
+        type SafeCallFilter = Everything;
     }
 
     pub const MILLISECS_PER_BLOCK: u64 = 12000;
@@ -519,6 +549,7 @@ pub mod proxy_runtime {
             UncheckedExtrinsic = UncheckedExtrinsic,
         {
             System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
+            ParachainInfo: parachain_info,
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
             MsgQueue: super::mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
@@ -527,7 +558,9 @@ pub mod proxy_runtime {
     );
 
     parameter_types! {
-    pub const BlockHashCount: u64 = 250;
+        pub const BlockHashCount: u64 = 250;
+        pub UniversalLocation: InteriorMultiLocation = Parachain(ParachainInfo::parachain_id().into()).into();
+        pub const MaxAssetsIntoHolding: u32 = 64;
     }
     parameter_types! {
         pub ExistentialDeposit: AcurastAssetAmount = 1;
@@ -541,7 +574,7 @@ pub mod proxy_runtime {
     }
     parameter_types! {
         pub const UnitWeightCost: u64 = 1;
-        pub KsmPerSecond: (AssetId, u128) = (Concrete(Parent.into()), 1);
+        pub KsmPerSecond: (AssetId, u128, u128) = (Concrete(Parent.into()), 1, 0);
         pub const MaxInstructions: u32 = 100;
     }
     parameter_types! {
@@ -553,7 +586,10 @@ pub mod proxy_runtime {
         pub const KsmLocation: MultiLocation = MultiLocation::parent();
         pub const RelayNetwork: NetworkId = NetworkId::Kusama;
         pub Ancestry: MultiLocation = Parachain(MsgQueue::parachain_id().into()).into();
+        pub ReachableDest: Option<MultiLocation> = Some(Parent.into());
     }
+
+    impl parachain_info::Config for Runtime {}
 
     impl frame_system::Config for Runtime {
         type BaseCallFilter = Everything;
@@ -609,11 +645,19 @@ pub mod proxy_runtime {
         type XcmTeleportFilter = Nothing;
         type XcmReserveTransferFilter = Everything;
         type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type RuntimeOrigin = RuntimeOrigin;
         type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
+        type Currency = Balances;
+        type CurrencyMatcher = ();
+        type TrustedLockers = ();
+        type SovereignAccountOf = LocationToAccountId;
+        type MaxLockers = ConstU32<8>;
+        type WeightInfo = pallet_xcm::TestWeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type ReachableDest = ReachableDest;
     }
 
     impl crate::Config for Runtime {
@@ -677,16 +721,16 @@ pub mod relay_chain {
         sp_runtime::{testing::Header, traits::IdentityLookup, AccountId32},
         traits::{Everything, Nothing},
     };
-    use polkadot_parachain::primitives::Id as ParaId;
+    use polkadot_parachain::primitives::{Id as ParaId, Sibling};
     use polkadot_runtime_parachains::{configuration, origin, shared, ump};
-    use sp_core::H256;
+    use sp_core::{ConstU32, H256};
     use xcm::latest::prelude::*;
     use xcm_builder::{
         AccountId32Aliases, AllowUnpaidExecutionFrom, ChildParachainAsNative,
         ChildParachainConvertsVia, ChildSystemParachainAsSuperuser,
         CurrencyAdapter as XcmCurrencyAdapter, FixedRateOfFungible, FixedWeightBounds, IsConcrete,
-        LocationInverter, SignedAccountId32AsNative, SignedToAccountId32,
-        SovereignSignedViaLocation,
+        ParentIsPreset, SiblingParachainConvertsVia, SignedAccountId32AsNative,
+        SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::{Config, XcmExecutor};
 
@@ -720,7 +764,7 @@ pub mod relay_chain {
         type OriginConverter = LocalOriginConverter;
         type IsReserve = ();
         type IsTeleporter = ();
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type Barrier = Barrier;
         type Weigher = FixedWeightBounds<BaseXcmWeight, RuntimeCall, MaxInstructions>;
         type Trader = FixedRateOfFungible<KsmPerSecond, ()>;
@@ -728,6 +772,15 @@ pub mod relay_chain {
         type AssetTrap = ();
         type AssetClaims = ();
         type SubscriptionService = ();
+        type AssetLocker = ();
+        type AssetExchanger = ();
+        type PalletInstancesInfo = AllPalletsWithSystem;
+        type MaxAssetsIntoHolding = MaxAssetsIntoHolding;
+        type FeeManager = ();
+        type MessageExporter = ();
+        type UniversalAliases = Nothing;
+        type CallDispatcher = RuntimeCall;
+        type SafeCallFilter = Everything;
     }
 
     construct_runtime!(
@@ -737,6 +790,7 @@ pub mod relay_chain {
             UncheckedExtrinsic = UncheckedExtrinsic,
         {
             System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
+            ParachainInfo: parachain_info,
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
             ParasOrigin: origin::{Pallet, Origin},
             ParasUmp: ump::{Pallet, Call, Storage, Event},
@@ -745,15 +799,17 @@ pub mod relay_chain {
     );
 
     parameter_types! {
-        pub const KsmLocation: MultiLocation = Here.into();
+        pub const KsmLocation: MultiLocation = MultiLocation { parents: 0, interior: Here };
         pub const KusamaNetwork: NetworkId = NetworkId::Kusama;
-        pub const AnyNetwork: NetworkId = NetworkId::Any;
         pub Ancestry: MultiLocation = Here.into();
         pub UnitWeightCost: u64 = 1_000;
+        pub UniversalLocation: InteriorMultiLocation = Parachain(ParachainInfo::parachain_id().into()).into();
+        pub const MaxAssetsIntoHolding: u32 = 64;
+        pub const RelayNetwork: NetworkId = NetworkId::Kusama;
     }
     parameter_types! {
         pub const BaseXcmWeight: u64 = 1_000;
-        pub KsmPerSecond: (AssetId, u128) = (Concrete(KsmLocation::get()), 1);
+        pub KsmPerSecond: (AssetId, u128, u128) = (Concrete(KsmLocation::get()), 1, 0);
         pub const MaxInstructions: u32 = 100;
     }
     parameter_types! {
@@ -766,6 +822,7 @@ pub mod relay_chain {
     }
     parameter_types! {
         pub const BlockHashCount: u64 = 250;
+        pub ReachableDest: Option<MultiLocation> = Some(Parent.into());
     }
 
     impl frame_system::Config for Runtime {
@@ -795,6 +852,8 @@ pub mod relay_chain {
         type MaxConsumers = frame_support::traits::ConstU32<16>;
     }
 
+    impl parachain_info::Config for Runtime {}
+
     impl pallet_balances::Config for Runtime {
         type Balance = AcurastAssetAmount;
         type DustRemoval = ();
@@ -813,6 +872,12 @@ pub mod relay_chain {
         type WeightInfo = configuration::TestWeightInfo;
     }
 
+    pub type LocationToAccountId = (
+        ParentIsPreset<AccountId>,
+        SiblingParachainConvertsVia<Sibling, AccountId>,
+        AccountId32Aliases<RelayNetwork, AccountId>,
+    );
+
     impl pallet_xcm::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type SendXcmOrigin = xcm_builder::EnsureXcmOrigin<RuntimeOrigin, LocalOriginToLocation>;
@@ -824,11 +889,19 @@ pub mod relay_chain {
         type XcmTeleportFilter = Everything;
         type XcmReserveTransferFilter = Everything;
         type Weigher = FixedWeightBounds<BaseXcmWeight, RuntimeCall, MaxInstructions>;
-        type LocationInverter = LocationInverter<Ancestry>;
+        type UniversalLocation = UniversalLocation;
         type RuntimeOrigin = RuntimeOrigin;
         type RuntimeCall = RuntimeCall;
         const VERSION_DISCOVERY_QUEUE_SIZE: u32 = 100;
         type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
+        type Currency = Balances;
+        type CurrencyMatcher = ();
+        type TrustedLockers = ();
+        type SovereignAccountOf = LocationToAccountId;
+        type MaxLockers = ConstU32<8>;
+        type WeightInfo = pallet_xcm::TestWeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type ReachableDest = ReachableDest;
     }
 
     impl ump::Config for Runtime {
@@ -852,7 +925,7 @@ pub mod mock_msg_queue {
     use xcm::latest::{ExecuteXcm, Outcome, Parent, Xcm};
     use xcm::prelude::{Parachain, XcmError};
     use xcm::VersionedXcm;
-    use xcm_simulator::{ParaId, RelayBlockNumber};
+    use xcm_simulator::{MultiLocation, ParaId, RelayBlockNumber};
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -864,7 +937,6 @@ pub mod mock_msg_queue {
     impl<T: Config> Pallet<T> {}
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub (super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
@@ -921,17 +993,13 @@ pub mod mock_msg_queue {
             let hash = Encode::using_encoded(&xcm, T::Hashing::hash);
             let (result, event) = match Xcm::<T::RuntimeCall>::try_from(xcm) {
                 Ok(xcm) => {
-                    let location = (1, Parachain(sender.into()));
-                    match T::XcmExecutor::execute_xcm(location, xcm, max_weight.ref_time()) {
+                    let location = MultiLocation::new(1, Parachain(sender.into()));
+                    match T::XcmExecutor::execute_xcm(location, xcm, [0; 32], max_weight) {
                         Outcome::Error(e) => (Err(e.clone()), Event::Fail(Some(hash), e)),
-                        Outcome::Complete(w) => {
-                            (Ok(Weight::from_ref_time(w)), Event::Success(Some(hash)))
-                        }
+                        Outcome::Complete(w) => (Ok(w), Event::Success(Some(hash))),
                         // As far as the caller is concerned, this was dispatched without error, so
                         // we just report the weight used.
-                        Outcome::Incomplete(w, e) => {
-                            (Ok(Weight::from_ref_time(w)), Event::Fail(Some(hash), e))
-                        }
+                        Outcome::Incomplete(w, e) => (Ok(w), Event::Fail(Some(hash), e)),
                     }
                 }
                 Err(()) => (
@@ -994,7 +1062,7 @@ pub mod mock_msg_queue {
                     }
                     Ok(Ok(x)) => {
                         let outcome =
-                            T::XcmExecutor::execute_xcm(Parent, x.clone(), limit.ref_time());
+                            T::XcmExecutor::execute_xcm(Parent, x.clone(), [0; 32], limit);
                         <ReceivedDmp<T>>::append(x);
                         Self::deposit_event(Event::ExecutedDownward(id, outcome));
                     }

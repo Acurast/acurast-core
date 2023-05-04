@@ -45,7 +45,6 @@ pub mod pallet {
 
     /// A instantiable pallet for receiving secure state synchronizations into Acurast.
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
@@ -370,7 +369,7 @@ pub mod pallet {
 
         /// Updates the target chain owner (contract address) in storage. Can only be called by a privileged/root account.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_ref_time(10_000).saturating_add(T::DbWeight::get().reads_writes(1, 0)))]
+        #[pallet::weight(Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 0)))]
         pub fn update_target_chain_owner(
             origin: OriginFor<T>,
             owner: StateOwner,

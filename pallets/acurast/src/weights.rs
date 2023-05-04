@@ -34,18 +34,18 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 	// Storage: System Account (r:1 w:1)
 	// Storage: Acurast StoredJobRegistration (r:0 w:1)
 	fn register() -> Weight {
-		Weight::from_ref_time(45_000_000 as u64)
+		Weight::from_parts(45_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(4 as u64))
 			.saturating_add(T::DbWeight::get().writes(5 as u64))
 	}
 	// Storage: Acurast StoredJobRegistration (r:0 w:1)
 	fn deregister() -> Weight {
-		Weight::from_ref_time(13_000_000 as u64)
+		Weight::from_parts(13_000_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Acurast StoredJobRegistration (r:1 w:1)
 	fn update_allowed_sources() -> Weight {
-		Weight::from_ref_time(22_000_000 as u64)
+		Weight::from_parts(22_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -53,13 +53,13 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 	// Storage: Acurast StoredRevokedCertificate (r:4 w:0)
 	// Storage: Acurast StoredAttestation (r:0 w:1)
 	fn submit_attestation() -> Weight {
-		Weight::from_ref_time(10_046_000_000 as u64)
+		Weight::from_parts(10_046_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(5 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Acurast StoredRevokedCertificate (r:0 w:1)
 	fn update_certificate_revocation_list() -> Weight {
-		Weight::from_ref_time(12_000_000 as u64)
+		Weight::from_parts(12_000_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 }

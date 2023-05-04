@@ -41,7 +41,7 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
     // Storage: Acurast StoredJobRegistration (r:0 w:1)
     fn register() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(155_697_000)
+        Weight::from_parts(155_697_000, 0)
             .saturating_add(T::DbWeight::get().reads(8))
             .saturating_add(T::DbWeight::get().writes(8))
     }
@@ -49,7 +49,7 @@ impl<T: frame_system::Config + pallet_acurast::Config, W: pallet_acurast::Weight
     // Storage: Acurast StoredJobRegistration (r:0 w:1)
     fn deregister() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(50_437_000)
+        Weight::from_parts(50_437_000, 0)
             .saturating_add(T::DbWeight::get().reads(1))
             .saturating_add(T::DbWeight::get().writes(2))
     }

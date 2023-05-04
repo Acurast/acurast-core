@@ -45,7 +45,7 @@ impl<T: frame_system::Config> WeightInfo for Weights<T> {
     // Storage: AcurastMarketplace StoredCapacity (r:0 w:1)
     fn advertise() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(118_168_000)
+        Weight::from_parts(118_168_000, 0)
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(3))
     }
@@ -54,31 +54,31 @@ impl<T: frame_system::Config> WeightInfo for Weights<T> {
     // Storage: AcurastMarketplace StoredCapacity (r:0 w:1)
     fn delete_advertisement() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(129_864_000)
+        Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(3))
     }
     fn propose_matching() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(129_864_000)
+        Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(3))
     }
     fn acknowledge_match() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(129_864_000)
+        Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(3))
     }
     fn report() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(129_864_000)
+        Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(3))
     }
     fn finalize_job() -> Weight {
         // Minimum execution time:  nanoseconds.
-        Weight::from_ref_time(129_864_000)
+        Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(6))
             .saturating_add(T::DbWeight::get().writes(7))
     }

@@ -9,7 +9,7 @@ use frame_support::{
     Never, PalletId, Parameter,
 };
 use pallet_acurast_assets_manager::traits::AssetValidator;
-use xcm::{prelude::AssetId, v2::AssetId::Concrete};
+use xcm::prelude::AssetId;
 
 pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
 
@@ -90,7 +90,7 @@ trait IsNativeAsset {
 impl IsNativeAsset for AssetId {
     fn is_native_asset(&self) -> bool {
         match self {
-            Concrete(multi_location) => multi_location.is_here(),
+            AssetId::Concrete(multi_location) => multi_location.is_here(),
             _ => false,
         }
     }

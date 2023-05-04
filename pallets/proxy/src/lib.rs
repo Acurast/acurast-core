@@ -21,14 +21,12 @@ pub mod pallet {
     use frame_support::inherent::Vec;
     use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
-    use xcm::v2::prelude::*;
-    use xcm::v2::Instruction::{DescendOrigin, Transact};
-    use xcm::v2::{
+    use xcm::prelude::{
+        Instruction::{DescendOrigin, Transact},
         Junction::{AccountId32, Parachain},
         Junctions::X1,
-        SendXcm, Xcm,
+        MultiLocation, OriginKind, SendError, SendXcm, Xcm,
     };
-    use xcm::v2::{OriginKind, SendError};
 
     #[cfg(feature = "runtime-benchmarks")]
     use crate::benchmarking::BenchmarkHelper;
@@ -127,22 +125,27 @@ pub mod pallet {
 
         // before calling transact, we want to use not the parachain origin, but a user's account
         xcm_message.push(DescendOrigin(X1(AccountId32 {
-            network: NetworkId::Any,
+            network: None,
             id: account_bytes,
         })));
 
         // put our transact message in the vector of instructions
         xcm_message.push(Transact {
-            origin_type: OriginKind::Xcm,
-            require_weight_at_most: 1_000_000_000u64,
+            origin_kind: OriginKind::Xcm,
+            require_weight_at_most: 1_000_000_000u64.into(),
             call: encoded_call.into(),
         });
 
+        let mut destination = Some(MultiLocation::new(
+            1,
+            X1(Parachain(T::AcurastParachainId::get())),
+        ));
+        let mut message = Some(Xcm(xcm_message));
+
         // use router to send the xcm message
-        return match T::XcmSender::send_xcm(
-            (1, X1(Parachain(T::AcurastParachainId::get()))),
-            Xcm(xcm_message),
-        ) {
+        let ticket = T::XcmSender::validate(&mut destination, &mut message)
+            .map_err(|_| Error::<T>::XcmError)?;
+        return match T::XcmSender::deliver(ticket.0) {
             Ok(_) => {
                 Pallet::<T>::deposit_event(Event::XcmSent { extrinsic, caller });
                 Ok(())
@@ -159,7 +162,6 @@ pub mod pallet {
     }
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
 
     #[pallet::event]

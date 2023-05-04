@@ -87,7 +87,6 @@ pub mod pallet {
     use super::*;
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub (super) trait Store)]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     /// This pallet's configuration trait

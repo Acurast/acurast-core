@@ -63,21 +63,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Asset (r:1 w:1)
 	fn create() -> Weight {
 		// Minimum execution time: 33_241 nanoseconds.
-		Weight::from_ref_time(33_873_000 as u64)
+		Weight::from_parts(33_873_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn force_create() -> Weight {
 		// Minimum execution time: 19_883 nanoseconds.
-		Weight::from_ref_time(20_651_000 as u64)
+		Weight::from_parts(20_651_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 
 	// Storage: Assets Asset (r:1 w:1)
 	fn start_destroy() -> Weight {
-		Weight::from_ref_time(31_000_000 as u64)
+		Weight::from_parts(31_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -87,9 +87,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System Account (r:20 w:20)
 	/// The range of component `c` is `[0, 1000]`.
 	fn destroy_accounts(c: u32, ) -> Weight {
-		Weight::from_ref_time(37_000_000 as u64)
+		Weight::from_parts(37_000_000, 0)
 			// Standard Error: 19_301
-			.saturating_add(Weight::from_ref_time(25_467_908 as u64).saturating_mul(c as u64))
+			.saturating_add(Weight::from_parts(25_467_908, 0).saturating_mul(c as u64))
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().reads((2 as u64).saturating_mul(c as u64)))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
@@ -100,9 +100,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Approvals (r:1 w:0)
 	/// The range of component `a` is `[0, 1000]`.
 	fn destroy_approvals(a: u32, ) -> Weight {
-		Weight::from_ref_time(39_000_000 as u64)
+		Weight::from_parts(39_000_000, 0)
 			// Standard Error: 14_298
-			.saturating_add(Weight::from_ref_time(27_632_144 as u64).saturating_mul(a as u64))
+			.saturating_add(Weight::from_parts(27_632_144, 0).saturating_mul(a as u64))
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().reads((1 as u64).saturating_mul(a as u64)))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
@@ -112,7 +112,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Asset (r:1 w:1)
 	// Storage: Assets Metadata (r:1 w:0)
 	fn finish_destroy() -> Weight {
-		Weight::from_ref_time(33_000_000 as u64)
+		Weight::from_parts(33_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -121,7 +121,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Account (r:1 w:1)
 	fn mint() -> Weight {
 		// Minimum execution time: 36_782 nanoseconds.
-		Weight::from_ref_time(37_340_000 as u64)
+		Weight::from_parts(37_340_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(2 as u64))
 	}
@@ -129,7 +129,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Account (r:1 w:1)
 	fn burn() -> Weight {
 		// Minimum execution time: 44_425 nanoseconds.
-		Weight::from_ref_time(45_485_000 as u64)
+		Weight::from_parts(45_485_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(2 as u64))
 	}
@@ -138,7 +138,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System Account (r:1 w:1)
 	fn transfer() -> Weight {
 		// Minimum execution time: 58_294 nanoseconds.
-		Weight::from_ref_time(59_447_000 as u64)
+		Weight::from_parts(59_447_000, 0)
 			.saturating_add(T::DbWeight::get().reads(4 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
@@ -147,7 +147,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System Account (r:1 w:1)
 	fn transfer_keep_alive() -> Weight {
 		// Minimum execution time: 46_704 nanoseconds.
-		Weight::from_ref_time(47_521_000 as u64)
+		Weight::from_parts(47_521_000, 0)
 			.saturating_add(T::DbWeight::get().reads(4 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
@@ -156,7 +156,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System Account (r:1 w:1)
 	fn force_transfer() -> Weight {
 		// Minimum execution time: 57_647 nanoseconds.
-		Weight::from_ref_time(58_417_000 as u64)
+		Weight::from_parts(58_417_000, 0)
 			.saturating_add(T::DbWeight::get().reads(4 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
@@ -164,7 +164,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Account (r:1 w:1)
 	fn freeze() -> Weight {
 		// Minimum execution time: 26_827 nanoseconds.
-		Weight::from_ref_time(27_373_000 as u64)
+		Weight::from_parts(27_373_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -172,21 +172,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Account (r:1 w:1)
 	fn thaw() -> Weight {
 		// Minimum execution time: 26_291 nanoseconds.
-		Weight::from_ref_time(26_854_000 as u64)
+		Weight::from_parts(26_854_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn freeze_asset() -> Weight {
 		// Minimum execution time: 22_694 nanoseconds.
-		Weight::from_ref_time(23_613_000 as u64)
+		Weight::from_parts(23_613_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn thaw_asset() -> Weight {
 		// Minimum execution time: 22_572 nanoseconds.
-		Weight::from_ref_time(24_121_000 as u64)
+		Weight::from_parts(24_121_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -194,14 +194,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Metadata (r:1 w:0)
 	fn transfer_ownership() -> Weight {
 		// Minimum execution time: 23_949 nanoseconds.
-		Weight::from_ref_time(24_347_000 as u64)
+		Weight::from_parts(24_347_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn set_team() -> Weight {
 		// Minimum execution time: 23_102 nanoseconds.
-		Weight::from_ref_time(23_518_000 as u64)
+		Weight::from_parts(23_518_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -211,9 +211,9 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// The range of component `s` is `[0, 50]`.
 	fn set_metadata(_n: u32, s: u32, ) -> Weight {
 		// Minimum execution time: 41_032 nanoseconds.
-		Weight::from_ref_time(42_845_624 as u64)
+		Weight::from_parts(42_845_624, 0)
 			// Standard Error: 1_274
-			.saturating_add(Weight::from_ref_time(1_875 as u64).saturating_mul(s as u64))
+			.saturating_add(Weight::from_parts(1_875, 0).saturating_mul(s as u64))
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -221,7 +221,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Metadata (r:1 w:1)
 	fn clear_metadata() -> Weight {
 		// Minimum execution time: 42_570 nanoseconds.
-		Weight::from_ref_time(42_957_000 as u64)
+		Weight::from_parts(42_957_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -231,11 +231,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// The range of component `s` is `[0, 50]`.
 	fn force_set_metadata(n: u32, s: u32, ) -> Weight {
 		// Minimum execution time: 22_768 nanoseconds.
-		Weight::from_ref_time(23_868_816 as u64)
+		Weight::from_parts(23_868_816, 0)
 			// Standard Error: 612
-			.saturating_add(Weight::from_ref_time(1_602 as u64).saturating_mul(n as u64))
+			.saturating_add(Weight::from_parts(1_602, 0).saturating_mul(n as u64))
 			// Standard Error: 612
-			.saturating_add(Weight::from_ref_time(2_097 as u64).saturating_mul(s as u64))
+			.saturating_add(Weight::from_parts(2_097, 0).saturating_mul(s as u64))
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -243,14 +243,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Metadata (r:1 w:1)
 	fn force_clear_metadata() -> Weight {
 		// Minimum execution time: 41_863 nanoseconds.
-		Weight::from_ref_time(42_643_000 as u64)
+		Weight::from_parts(42_643_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn force_asset_status() -> Weight {
 		// Minimum execution time: 21_747 nanoseconds.
-		Weight::from_ref_time(22_595_000 as u64)
+		Weight::from_parts(22_595_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1 as u64))
 			.saturating_add(T::DbWeight::get().writes(1 as u64))
 	}
@@ -258,7 +258,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn approve_transfer() -> Weight {
 		// Minimum execution time: 45_602 nanoseconds.
-		Weight::from_ref_time(46_004_000 as u64)
+		Weight::from_parts(46_004_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(2 as u64))
 	}
@@ -268,7 +268,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System Account (r:1 w:1)
 	fn transfer_approved() -> Weight {
 		// Minimum execution time: 70_944 nanoseconds.
-		Weight::from_ref_time(71_722_000 as u64)
+		Weight::from_parts(71_722_000, 0)
 			.saturating_add(T::DbWeight::get().reads(5 as u64))
 			.saturating_add(T::DbWeight::get().writes(5 as u64))
 	}
@@ -276,7 +276,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn cancel_approval() -> Weight {
 		// Minimum execution time: 46_316 nanoseconds.
-		Weight::from_ref_time(46_910_000 as u64)
+		Weight::from_parts(46_910_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(2 as u64))
 	}
@@ -284,7 +284,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn force_cancel_approval() -> Weight {
 		// Minimum execution time: 47_145 nanoseconds.
-		Weight::from_ref_time(47_611_000 as u64)
+		Weight::from_parts(47_611_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2 as u64))
 			.saturating_add(T::DbWeight::get().writes(2 as u64))
 	}
@@ -295,21 +295,21 @@ impl WeightInfo for () {
 	// Storage: Assets Asset (r:1 w:1)
 	fn create() -> Weight {
 		// Minimum execution time: 33_241 nanoseconds.
-		Weight::from_ref_time(33_873_000 as u64)
+		Weight::from_parts(33_873_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn force_create() -> Weight {
 		// Minimum execution time: 19_883 nanoseconds.
-		Weight::from_ref_time(20_651_000 as u64)
+		Weight::from_parts(20_651_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 
 	// Storage: Assets Asset (r:1 w:1)
 	fn start_destroy() -> Weight {
-		Weight::from_ref_time(31_000_000 as u64)
+		Weight::from_parts(31_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -319,9 +319,9 @@ impl WeightInfo for () {
 	// Storage: System Account (r:20 w:20)
 	/// The range of component `c` is `[0, 1000]`.
 	fn destroy_accounts(c: u32, ) -> Weight {
-		Weight::from_ref_time(37_000_000 as u64)
+		Weight::from_parts(37_000_000, 0)
 			// Standard Error: 19_301
-			.saturating_add(Weight::from_ref_time(25_467_908 as u64).saturating_mul(c as u64))
+			.saturating_add(Weight::from_parts(25_467_908, 0).saturating_mul(c as u64))
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().reads((2 as u64).saturating_mul(c as u64)))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
@@ -332,9 +332,9 @@ impl WeightInfo for () {
 	// Storage: Assets Approvals (r:1 w:0)
 	/// The range of component `a` is `[0, 1000]`.
 	fn destroy_approvals(a: u32, ) -> Weight {
-		Weight::from_ref_time(39_000_000 as u64)
+		Weight::from_parts(39_000_000, 0)
 			// Standard Error: 14_298
-			.saturating_add(Weight::from_ref_time(27_632_144 as u64).saturating_mul(a as u64))
+			.saturating_add(Weight::from_parts(27_632_144, 0).saturating_mul(a as u64))
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().reads((1 as u64).saturating_mul(a as u64)))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
@@ -344,7 +344,7 @@ impl WeightInfo for () {
 	// Storage: Assets Asset (r:1 w:1)
 	// Storage: Assets Metadata (r:1 w:0)
 	fn finish_destroy() -> Weight {
-		Weight::from_ref_time(33_000_000 as u64)
+		Weight::from_parts(33_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -353,7 +353,7 @@ impl WeightInfo for () {
 	// Storage: Assets Account (r:1 w:1)
 	fn mint() -> Weight {
 		// Minimum execution time: 36_782 nanoseconds.
-		Weight::from_ref_time(37_340_000 as u64)
+		Weight::from_parts(37_340_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(2 as u64))
 	}
@@ -361,7 +361,7 @@ impl WeightInfo for () {
 	// Storage: Assets Account (r:1 w:1)
 	fn burn() -> Weight {
 		// Minimum execution time: 44_425 nanoseconds.
-		Weight::from_ref_time(45_485_000 as u64)
+		Weight::from_parts(45_485_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(2 as u64))
 	}
@@ -370,7 +370,7 @@ impl WeightInfo for () {
 	// Storage: System Account (r:1 w:1)
 	fn transfer() -> Weight {
 		// Minimum execution time: 58_294 nanoseconds.
-		Weight::from_ref_time(59_447_000 as u64)
+		Weight::from_parts(59_447_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(4 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
@@ -379,7 +379,7 @@ impl WeightInfo for () {
 	// Storage: System Account (r:1 w:1)
 	fn transfer_keep_alive() -> Weight {
 		// Minimum execution time: 46_704 nanoseconds.
-		Weight::from_ref_time(47_521_000 as u64)
+		Weight::from_parts(47_521_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(4 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
@@ -388,7 +388,7 @@ impl WeightInfo for () {
 	// Storage: System Account (r:1 w:1)
 	fn force_transfer() -> Weight {
 		// Minimum execution time: 57_647 nanoseconds.
-		Weight::from_ref_time(58_417_000 as u64)
+		Weight::from_parts(58_417_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(4 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
@@ -396,7 +396,7 @@ impl WeightInfo for () {
 	// Storage: Assets Account (r:1 w:1)
 	fn freeze() -> Weight {
 		// Minimum execution time: 26_827 nanoseconds.
-		Weight::from_ref_time(27_373_000 as u64)
+		Weight::from_parts(27_373_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -404,21 +404,21 @@ impl WeightInfo for () {
 	// Storage: Assets Account (r:1 w:1)
 	fn thaw() -> Weight {
 		// Minimum execution time: 26_291 nanoseconds.
-		Weight::from_ref_time(26_854_000 as u64)
+		Weight::from_parts(26_854_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn freeze_asset() -> Weight {
 		// Minimum execution time: 22_694 nanoseconds.
-		Weight::from_ref_time(23_613_000 as u64)
+		Weight::from_parts(23_613_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn thaw_asset() -> Weight {
 		// Minimum execution time: 22_572 nanoseconds.
-		Weight::from_ref_time(24_121_000 as u64)
+		Weight::from_parts(24_121_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -426,14 +426,14 @@ impl WeightInfo for () {
 	// Storage: Assets Metadata (r:1 w:0)
 	fn transfer_ownership() -> Weight {
 		// Minimum execution time: 23_949 nanoseconds.
-		Weight::from_ref_time(24_347_000 as u64)
+		Weight::from_parts(24_347_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn set_team() -> Weight {
 		// Minimum execution time: 23_102 nanoseconds.
-		Weight::from_ref_time(23_518_000 as u64)
+		Weight::from_parts(23_518_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -443,9 +443,9 @@ impl WeightInfo for () {
 	/// The range of component `s` is `[0, 50]`.
 	fn set_metadata(_n: u32, s: u32, ) -> Weight {
 		// Minimum execution time: 41_032 nanoseconds.
-		Weight::from_ref_time(42_845_624 as u64)
+		Weight::from_parts(42_845_624, 0)
 			// Standard Error: 1_274
-			.saturating_add(Weight::from_ref_time(1_875 as u64).saturating_mul(s as u64))
+			.saturating_add(Weight::from_parts(1_875, 0).saturating_mul(s as u64))
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -453,7 +453,7 @@ impl WeightInfo for () {
 	// Storage: Assets Metadata (r:1 w:1)
 	fn clear_metadata() -> Weight {
 		// Minimum execution time: 42_570 nanoseconds.
-		Weight::from_ref_time(42_957_000 as u64)
+		Weight::from_parts(42_957_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -463,11 +463,11 @@ impl WeightInfo for () {
 	/// The range of component `s` is `[0, 50]`.
 	fn force_set_metadata(n: u32, s: u32, ) -> Weight {
 		// Minimum execution time: 22_768 nanoseconds.
-		Weight::from_ref_time(23_868_816 as u64)
+		Weight::from_parts(23_868_816, 0)
 			// Standard Error: 612
-			.saturating_add(Weight::from_ref_time(1_602 as u64).saturating_mul(n as u64))
+			.saturating_add(Weight::from_parts(1_602, 0).saturating_mul(n as u64))
 			// Standard Error: 612
-			.saturating_add(Weight::from_ref_time(2_097 as u64).saturating_mul(s as u64))
+			.saturating_add(Weight::from_parts(2_097, 0).saturating_mul(s as u64))
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -475,14 +475,14 @@ impl WeightInfo for () {
 	// Storage: Assets Metadata (r:1 w:1)
 	fn force_clear_metadata() -> Weight {
 		// Minimum execution time: 41_863 nanoseconds.
-		Weight::from_ref_time(42_643_000 as u64)
+		Weight::from_parts(42_643_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
 	// Storage: Assets Asset (r:1 w:1)
 	fn force_asset_status() -> Weight {
 		// Minimum execution time: 21_747 nanoseconds.
-		Weight::from_ref_time(22_595_000 as u64)
+		Weight::from_parts(22_595_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1 as u64))
 			.saturating_add(RocksDbWeight::get().writes(1 as u64))
 	}
@@ -490,7 +490,7 @@ impl WeightInfo for () {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn approve_transfer() -> Weight {
 		// Minimum execution time: 45_602 nanoseconds.
-		Weight::from_ref_time(46_004_000 as u64)
+		Weight::from_parts(46_004_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(2 as u64))
 	}
@@ -500,7 +500,7 @@ impl WeightInfo for () {
 	// Storage: System Account (r:1 w:1)
 	fn transfer_approved() -> Weight {
 		// Minimum execution time: 70_944 nanoseconds.
-		Weight::from_ref_time(71_722_000 as u64)
+		Weight::from_parts(71_722_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(5 as u64))
 			.saturating_add(RocksDbWeight::get().writes(5 as u64))
 	}
@@ -508,7 +508,7 @@ impl WeightInfo for () {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn cancel_approval() -> Weight {
 		// Minimum execution time: 46_316 nanoseconds.
-		Weight::from_ref_time(46_910_000 as u64)
+		Weight::from_parts(46_910_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(2 as u64))
 	}
@@ -516,7 +516,7 @@ impl WeightInfo for () {
 	// Storage: Assets Approvals (r:1 w:1)
 	fn force_cancel_approval() -> Weight {
 		// Minimum execution time: 47_145 nanoseconds.
-		Weight::from_ref_time(47_611_000 as u64)
+		Weight::from_parts(47_611_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2 as u64))
 			.saturating_add(RocksDbWeight::get().writes(2 as u64))
 	}

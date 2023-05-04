@@ -30,7 +30,7 @@ parameter_types! {
     pub const RootAccountId: AccountId = alice_account_id();
 }
 parameter_types! {
-    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
+    pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights::simple_max(Weight::from_parts(1024, 0));
     pub const MinimumPeriod: u64 = 2000;
     pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
 }

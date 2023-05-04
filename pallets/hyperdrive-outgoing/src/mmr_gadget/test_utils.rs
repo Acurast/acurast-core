@@ -142,8 +142,14 @@ impl MockClient {
         leaf_indices: Vec<LeafIndex>,
     ) -> MmrBlock {
         let mut client = self.client.lock();
-
-        let mut block_builder = client.new_block_at(at, Default::default(), false).unwrap();
+        let parent = client.block_hash_from_id(at).unwrap();
+        let mut block_builder = if let Some(parent) = parent {
+            client
+                .new_block_at(parent, Default::default(), false)
+                .unwrap()
+        } else {
+            client.new_block(Default::default()).unwrap()
+        };
         // Make sure the block has a different hash than its siblings
         block_builder
             .push_storage_change(b"name".to_vec(), Some(name.to_vec()))
@@ -268,25 +274,25 @@ impl HeaderMetadata<Block> for MockClient {
     }
 
     fn insert_header_metadata(&self, _hash: Hash, _header_metadata: CachedHeaderMetadata<Block>) {
-        todo!()
+        unimplemented!()
     }
 
     fn remove_header_metadata(&self, _hash: Hash) {
-        todo!()
+        unimplemented!()
     }
 }
 
 impl HeaderBackend<Block> for MockClient {
-    fn header(&self, id: BlockId<Block>) -> sc_client_api::blockchain::Result<Option<Header>> {
-        self.client.lock().header(&id)
+    fn header(&self, hash: Hash) -> sc_client_api::blockchain::Result<Option<Header>> {
+        self.client.lock().header(hash)
     }
 
     fn info(&self) -> Info<Block> {
         self.client.lock().info()
     }
 
-    fn status(&self, id: BlockId<Block>) -> sc_client_api::blockchain::Result<BlockStatus> {
-        self.client.lock().status(id)
+    fn status(&self, hash: Hash) -> sc_client_api::blockchain::Result<BlockStatus> {
+        self.client.lock().status(hash)
     }
 
     fn number(&self, hash: Hash) -> sc_client_api::blockchain::Result<Option<BlockNumber>> {
@@ -312,6 +318,10 @@ impl BlockchainEvents<Block> for MockClient {
         _filter_keys: Option<&[StorageKey]>,
         _child_filter_keys: Option<&[(StorageKey, Option<Vec<StorageKey>>)]>,
     ) -> sc_client_api::blockchain::Result<StorageEventStream<Hash>> {
+        unimplemented!()
+    }
+
+    fn every_import_notification_stream(&self) -> ImportNotifications<Block> {
         unimplemented!()
     }
 }

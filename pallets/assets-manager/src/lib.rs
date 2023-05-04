@@ -35,7 +35,6 @@ pub mod pallet {
     use xcm_executor::traits::Convert;
 
     #[pallet::pallet]
-    #[pallet::generate_store(pub(super) trait Store)]
     #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
