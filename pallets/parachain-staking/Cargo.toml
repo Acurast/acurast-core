@@ -1,0 +1,44 @@
+[package]
+name = "pallet-parachain-staking"
+description = "parachain staking pallet for collator selection and reward distribution"
+edition = "2021"
+version = "3.0.0"
+
+[dependencies]
+log = { version = "0.4", default-features = false }
+serde = { version = "1.0", default-features = false, optional = true }
+
+# Substrate
+frame-benchmarking = { git = "https://github.com/paritytech/substrate.git", default-features = false, optional = true,  branch = "polkadot-v0.9.41" }
+frame-support = { git = "https://github.com/paritytech/substrate.git", default-features = false, branch = "polkadot-v0.9.41" }
+frame-system = { git = "https://github.com/paritytech/substrate.git", default-features = false, branch = "polkadot-v0.9.41" }
+parity-scale-codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive"], default-features = false }
+scale-info = { version = "2.2.0", default-features = false, features = ["derive"] }
+sp-runtime = { git = "https://github.com/paritytech/substrate.git", default-features = false, branch = "polkadot-v0.9.41" }
+sp-std = { git = "https://github.com/paritytech/substrate.git", default-features = false, branch = "polkadot-v0.9.41" }
+substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
+
+# Nimbus
+nimbus-primitives = { git = "https://github.com/acurast/nimbus", default-features = false, branch = "polkadot-v0.9.41" }
+
+[dev-dependencies]
+pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+similar-asserts = "1.1.0"
+sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.41" }
+sp-io = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.41" }
+
+[features]
+default = [ "std" ]
+std = [
+	"frame-benchmarking/std",
+	"frame-support/std",
+	"frame-system/std",
+	"nimbus-primitives/std",
+	"parity-scale-codec/std",
+	"scale-info/std",
+	"serde",
+	"sp-runtime/std",
+	"sp-std/std",
+]
+runtime-benchmarks = [ "frame-benchmarking" ]
+try-runtime = [ "frame-support/try-runtime" ]
