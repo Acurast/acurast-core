@@ -78,7 +78,8 @@ pub fn annual_to_round<T: Config>(annual: Range<Perbill>) -> Range<Perbill> {
 
 /// Compute round issuance range from round inflation range and current total issuance
 pub fn round_issuance_range<T: Config>(round: Range<Perbill>) -> Range<BalanceOf<T>> {
-    let circulating = T::Currency::total_issuance();
+    // TODO : Should `total_issuance` be used instead of `active_issuance` ?
+    let circulating = T::Currency::active_issuance();
     Range {
         min: round.min * circulating,
         ideal: round.ideal * circulating,
