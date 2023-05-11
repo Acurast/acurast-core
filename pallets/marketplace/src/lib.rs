@@ -486,7 +486,9 @@ pub mod pallet {
 
             match T::ManagerProvider::manager_of(&who) {
                 Ok(manager) => {
-                    T::RewardManager::pay_reward(&assignment.fee_per_execution, &manager)?;
+                    if let MultiOrigin::Acurast(_who) = job_id.clone().0 {
+                        T::RewardManager::pay_reward(&assignment.fee_per_execution, &manager)?;
+                    }
 
                     match execution_result {
                         ExecutionResult::Success(operation_hash) => Self::deposit_event(
@@ -619,7 +621,6 @@ pub mod pallet {
         /// Registers a job in the marketplace by providing a [JobRegistration].
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
-            who: &MultiOrigin<T::AccountId>,
             job_id: &JobId<T::AccountId>,
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
@@ -673,13 +674,13 @@ pub mod pallet {
             }
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
-            if let MultiOrigin::Acurast(who) = who {
+            if let MultiOrigin::Acurast(who) = &job_id.0 {
                 // reward is understood per slot and execution
                 let mut reward = requirements.reward;
                 reward
                     .with_amount(Self::total_reward_amount(registration)?.into())
                     .map_err(|_| Error::<T>::RewardConversionFailed)?;
-                T::RewardManager::lock_reward(&reward, &who)?;
+                T::RewardManager::lock_reward(&reward, who)?;
             }
 
             Ok(().into())
