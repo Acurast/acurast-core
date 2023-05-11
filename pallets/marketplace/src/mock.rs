@@ -294,6 +294,16 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
     }
 }
 
+pub struct ManagerOf;
+
+impl ManagerProvider<Test> for ManagerOf {
+    fn manager_of(
+        owner: &<Test as frame_system::Config>::AccountId,
+    ) -> Result<<Test as frame_system::Config>::AccountId, DispatchError> {
+        Ok(owner.clone())
+    }
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
@@ -303,6 +313,7 @@ impl Config for Test {
     type ReportTolerance = ReportTolerance;
     type AssetId = AssetId;
     type AssetAmount = AssetAmount;
+    type ManagerProvider = ManagerOf;
     type RewardManager = MockRewardManager;
     type AssetValidator = PassAllAssets;
     type MarketplaceHooks = ();

@@ -3,6 +3,7 @@
 pub use functions::*;
 pub use pallet::*;
 pub use payments::*;
+pub use traits::*;
 pub use types::*;
 
 #[cfg(test)]
@@ -18,6 +19,7 @@ pub mod benchmarking;
 mod functions;
 mod migration;
 pub mod payments;
+pub mod traits;
 pub mod types;
 mod utils;
 pub mod weights;
@@ -47,6 +49,7 @@ pub mod pallet {
     use pallet_acurast_assets_manager::traits::AssetValidator;
 
     use crate::payments::{Reward, RewardFor};
+    use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
     use crate::weights::WeightInfo;
@@ -89,6 +92,7 @@ pub mod pallet {
             + Ord
             + Clone
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
+        type ManagerProvider: ManagerProvider<Self>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type AssetValidator: AssetValidator<Self::AssetId>;
@@ -479,19 +483,25 @@ pub mod pallet {
             );
 
             // pay only after all other steps succeeded without errors because paying reward is not revertable
-            T::RewardManager::pay_reward(&assignment.fee_per_execution, &who)?;
 
-            match execution_result {
-                ExecutionResult::Success(operation_hash) => {
-                    Self::deposit_event(Event::ExecutionSuccess(job_id.clone(), operation_hash))
+            match T::ManagerProvider::manager_of(&who) {
+                Ok(manager) => {
+                    T::RewardManager::pay_reward(&assignment.fee_per_execution, &manager)?;
+
+                    match execution_result {
+                        ExecutionResult::Success(operation_hash) => Self::deposit_event(
+                            Event::ExecutionSuccess(job_id.clone(), operation_hash),
+                        ),
+                        ExecutionResult::Failure(message) => {
+                            Self::deposit_event(Event::ExecutionFailure(job_id.clone(), message))
+                        }
+                    }
+
+                    Self::deposit_event(Event::Reported(job_id, who, assignment.clone()));
+                    Ok(().into())
                 }
-                ExecutionResult::Failure(message) => {
-                    Self::deposit_event(Event::ExecutionFailure(job_id.clone(), message))
-                }
+                Err(err_result) => Err(err_result.into()),
             }
-
-            Self::deposit_event(Event::Reported(job_id, who, assignment.clone()));
-            Ok(().into())
         }
 
         /// Called processors when the assigned job can be finalized.
