@@ -130,6 +130,10 @@ pub mod acurast_runtime {
         traits::{AsEnsureOriginWithArg, Everything, Nothing},
         PalletId,
     };
+    pub use pallet_acurast::{self, CU32};
+    use pallet_acurast_assets_manager::traits::AssetValidator;
+    pub use pallet_acurast_marketplace;
+    use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
     use sp_core::*;
@@ -143,11 +147,6 @@ pub mod acurast_runtime {
         SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::XcmExecutor;
-
-    pub use pallet_acurast::{self, CU32};
-    use pallet_acurast_assets_manager::traits::AssetValidator;
-    pub use pallet_acurast_marketplace;
-    use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
 
     use super::{AcurastAsset, AcurastAssetAmount, AcurastAssetId, InternalAssetId};
 
@@ -405,6 +404,16 @@ pub mod acurast_runtime {
         }
     }
 
+    pub struct ManagerOf;
+
+    impl pallet_acurast_marketplace::ManagerProvider<Runtime> for ManagerOf {
+        fn manager_of(
+            owner: &<Runtime as frame_system::Config>::AccountId,
+        ) -> Result<<Runtime as frame_system::Config>::AccountId, DispatchError> {
+            Ok(owner.clone())
+        }
+    }
+
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
@@ -414,6 +423,7 @@ pub mod acurast_runtime {
         type ReportTolerance = ReportTolerance;
         type AssetId = AcurastAssetId;
         type AssetAmount = AcurastAssetAmount;
+        type ManagerProvider = ManagerOf;
         type RewardManager =
             AssetRewardManager<AcurastAsset, FeeManagerImpl, Balances, AcurastAssets>;
         type AssetValidator = PassAllAssets;
