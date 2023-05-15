@@ -4,8 +4,8 @@
 //! Test utilities
 use crate as pallet_parachain_staking;
 use crate::{
-    pallet, AwardedPts, Config, Event as ParachainStakingEvent, InflationInfo, Points, Range,
-    COLLATOR_LOCK_ID, DELEGATOR_LOCK_ID,
+    pallet, AwardedPts, Config, Event as ParachainStakingEvent, InflationInfoWithoutRound, Points,
+    Range, COLLATOR_LOCK_ID, DELEGATOR_LOCK_ID,
 };
 use frame_support::{
     construct_runtime, parameter_types,
@@ -126,6 +126,7 @@ impl Config for Test {
     type MinCandidateStk = MinCandidateStk;
     type MinDelegatorStk = MinDelegatorStk;
     type MinDelegation = MinDelegation;
+    type DefaultInflationConfig = ();
     type BlockAuthor = BlockAuthor;
     type OnCollatorPayout = ();
     type PayoutCollatorReward = ();
@@ -141,7 +142,7 @@ pub(crate) struct ExtBuilder {
     // [delegator, collator, delegation_amount, auto_compound_percent]
     delegations: Vec<(AccountId, AccountId, Balance, Percent)>,
     // inflation config
-    inflation: InflationInfo<Balance>,
+    inflation: InflationInfoWithoutRound,
 }
 
 impl Default for ExtBuilder {
@@ -150,23 +151,13 @@ impl Default for ExtBuilder {
             balances: vec![],
             delegations: vec![],
             collators: vec![],
-            inflation: InflationInfo {
-                expect: Range {
-                    min: 700,
-                    ideal: 700,
-                    max: 700,
-                },
+            inflation: InflationInfoWithoutRound {
+                ideal_staked: Perbill::from_percent(70),
+                decay_rate: Perbill::from_percent(5),
                 // not used
                 annual: Range {
                     min: Perbill::from_percent(50),
                     ideal: Perbill::from_percent(50),
-                    max: Perbill::from_percent(50),
-                },
-                // unrealistically high parameterization, only for testing
-                round: Range {
-                    min: Perbill::from_percent(5),
-                    ideal: Perbill::from_percent(5),
-                    max: Perbill::from_percent(5),
                 },
             },
         }
@@ -204,7 +195,7 @@ impl ExtBuilder {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn with_inflation(mut self, inflation: InflationInfo<Balance>) -> Self {
+    pub(crate) fn with_inflation(mut self, inflation: InflationInfoWithoutRound) -> Self {
         self.inflation = inflation;
         self
     }
