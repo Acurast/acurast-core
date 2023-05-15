@@ -83,12 +83,12 @@ pub fn round_issuance<T: Config>(
     let staked_percentage = Perbill::from_rational(staked, circulating);
     let round = inflation_info.round;
 
-    let inflation = pallet_staking_reward_fn::compute_inflation(
+    let inflation_factor = pallet_staking_reward_fn::compute_inflation(
         staked_percentage,
         inflation_info.ideal_staked,
         inflation_info.decay_rate,
     );
-    let round_inflation = round.min + (round.ideal - round.min) * inflation;
+    let round_inflation = round.min + (round.ideal - round.min) * inflation_factor;
     round_inflation * circulating
 }
 
