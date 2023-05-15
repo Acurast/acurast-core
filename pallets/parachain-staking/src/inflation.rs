@@ -14,7 +14,7 @@ use substrate_fixed::transcendental::pow as floatpow;
 use substrate_fixed::types::I64F64;
 
 const SECONDS_PER_YEAR: u32 = 31557600;
-const SECONDS_PER_BLOCK: u32 = 12;
+const SECONDS_PER_BLOCK: u32 = 12; // TODO: Important (This should be in pallet config)
 pub const BLOCKS_PER_YEAR: u32 = SECONDS_PER_YEAR / SECONDS_PER_BLOCK;
 
 fn rounds_per_year<T: Config>() -> u32 {
@@ -29,12 +29,11 @@ fn rounds_per_year<T: Config>() -> u32 {
 pub struct Range<T> {
     pub min: T,
     pub ideal: T,
-    pub max: T,
 }
 
 impl<T: Ord> Range<T> {
     pub fn is_valid(&self) -> bool {
-        self.max >= self.ideal && self.ideal >= self.min
+        self.ideal >= self.min
     }
 }
 
@@ -43,7 +42,6 @@ impl<T: Ord + Copy> From<T> for Range<T> {
         Range {
             min: other,
             ideal: other,
-            max: other,
         }
     }
 }
@@ -67,7 +65,6 @@ pub fn perbill_annual_to_perbill_round(
     Range {
         min: annual_to_round(annual.min),
         ideal: annual_to_round(annual.ideal),
-        max: annual_to_round(annual.max),
     }
 }
 /// Convert annual inflation rate range to round inflation range
@@ -76,37 +73,60 @@ pub fn annual_to_round<T: Config>(annual: Range<Perbill>) -> Range<Perbill> {
     perbill_annual_to_perbill_round(annual, periods)
 }
 
-/// Compute round issuance range from round inflation range and current total issuance
-pub fn round_issuance_range<T: Config>(round: Range<Perbill>) -> Range<BalanceOf<T>> {
-    // TODO : Should `total_issuance` be used instead of `active_issuance` ?
-    let circulating = T::Currency::active_issuance();
-    Range {
-        min: round.min * circulating,
-        ideal: round.ideal * circulating,
-        max: round.max * circulating,
-    }
+/// Compute round issuance from inflation info and current circulating supply
+pub fn round_issuance<T: Config>(
+    inflation_info: InflationInfo,
+    staked: BalanceOf<T>,
+) -> BalanceOf<T> {
+    let circulating = T::Currency::total_issuance();
+
+    let staked_percentage = Perbill::from_rational(staked, circulating);
+    let round = inflation_info.round;
+
+    let inflation = pallet_staking_reward_fn::compute_inflation(
+        staked_percentage,
+        inflation_info.ideal_staked,
+        inflation_info.decay_rate,
+    );
+    let round_inflation = round.min + (round.ideal - round.min) * inflation;
+    round_inflation * circulating
 }
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Eq, PartialEq, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
-pub struct InflationInfo<Balance> {
+pub struct InflationInfo {
     /// Staking expectations
-    pub expect: Range<Balance>,
+    pub ideal_staked: Perbill,
     /// Annual inflation range
     pub annual: Range<Perbill>,
     /// Round inflation range
     pub round: Range<Perbill>,
+    /// A decay rate used so that the inflation rate decreases by at most `decay_rate` when staked
+    /// balance is bigger than `ideal_staked`.
+    /// This is an disincentive to make sure there is always enough liquidity.
+    pub decay_rate: Perbill,
 }
 
-impl<Balance> InflationInfo<Balance> {
-    pub fn new<T: Config>(
-        annual: Range<Perbill>,
-        expect: Range<Balance>,
-    ) -> InflationInfo<Balance> {
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
+pub struct InflationInfoWithoutRound {
+    /// Staking expectations
+    pub ideal_staked: Perbill,
+    /// Annual inflation range
+    pub annual: Range<Perbill>,
+    /// A decay rate used so that the inflation rate decreases by at most `decay_rate` when staked
+    /// balance is bigger than `ideal_staked`.
+    /// This is an disincentive to make sure there is always enough liquidity.
+    pub decay_rate: Perbill,
+}
+
+impl InflationInfo {
+    pub fn new<T: Config>(info: InflationInfoWithoutRound) -> InflationInfo {
         InflationInfo {
-            expect,
-            annual,
-            round: annual_to_round::<T>(annual),
+            ideal_staked: info.ideal_staked,
+            annual: info.annual,
+            round: annual_to_round::<T>(info.annual),
+            decay_rate: info.decay_rate,
         }
     }
     /// Set round inflation range according to input annual inflation range
@@ -117,10 +137,6 @@ impl<Balance> InflationInfo<Balance> {
     pub fn reset_round(&mut self, new_length: u32) {
         let periods = BLOCKS_PER_YEAR / new_length;
         self.round = perbill_annual_to_perbill_round(self.annual, periods);
-    }
-    /// Set staking expectations
-    pub fn set_expectations(&mut self, expect: Range<Balance>) {
-        self.expect = expect;
     }
 }
 
@@ -139,7 +155,6 @@ mod tests {
         Range {
             min: round.min * circulating,
             ideal: round.ideal * circulating,
-            max: round.max * circulating,
         }
     }
     #[test]
@@ -150,12 +165,10 @@ mod tests {
         let expected_round_issuance_range: Range<u128> = Range {
             min: 48_909,
             ideal: 48_909,
-            max: 48_909,
         };
         let schedule = Range {
             min: Perbill::from_percent(5),
             ideal: Perbill::from_percent(5),
-            max: Perbill::from_percent(5),
         };
         assert_eq!(
             expected_round_issuance_range,
@@ -170,12 +183,10 @@ mod tests {
         let expected_round_issuance_range: Range<u128> = Range {
             min: 29_603,
             ideal: 39298,
-            max: 48_909,
         };
         let schedule = Range {
             min: Perbill::from_percent(3),
             ideal: Perbill::from_percent(4),
-            max: Perbill::from_percent(5),
         };
         assert_eq!(
             expected_round_issuance_range,
@@ -184,15 +195,10 @@ mod tests {
     }
     #[test]
     fn expected_parameterization() {
-        let expected_round_schedule: Range<u128> = Range {
-            min: 45,
-            ideal: 56,
-            max: 56,
-        };
+        let expected_round_schedule: Range<u128> = Range { min: 45, ideal: 56 };
         let schedule = Range {
             min: Perbill::from_percent(4),
             ideal: Perbill::from_percent(5),
-            max: Perbill::from_percent(5),
         };
         assert_eq!(
             expected_round_schedule,
@@ -204,7 +210,6 @@ mod tests {
         let schedule = Range {
             min: Perbill::from_percent(100),
             ideal: Perbill::from_percent(100),
-            max: Perbill::from_percent(100),
         };
         mock_round_issuance_range(u32::MAX.into(), mock_annual_to_round(schedule, u32::MAX));
         mock_round_issuance_range(u64::MAX.into(), mock_annual_to_round(schedule, u32::MAX));

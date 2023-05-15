@@ -52,7 +52,7 @@ mod set;
 mod tests;
 
 use frame_support::pallet;
-pub use inflation::{InflationInfo, Range};
+pub use inflation::{InflationInfo, InflationInfoWithoutRound, Range};
 use weights::WeightInfo;
 
 pub use auto_compound::{AutoCompoundConfig, AutoCompoundDelegations};
@@ -67,7 +67,10 @@ pub mod pallet {
     use crate::delegation_requests::{
         CancelledScheduledRequest, DelegationAction, ScheduledRequest,
     };
-    use crate::{set::OrderedSet, traits::*, types::*, InflationInfo, Range, WeightInfo};
+    use crate::{
+        inflation, set::OrderedSet, traits::*, types::*, InflationInfo, InflationInfoWithoutRound,
+        Range, WeightInfo,
+    };
     use crate::{AutoCompoundConfig, AutoCompoundDelegations};
     use frame_support::pallet_prelude::*;
     use frame_support::traits::{
@@ -147,6 +150,9 @@ pub mod pallet {
         /// Minimum stake for any registered on-chain account to be a delegator
         #[pallet::constant]
         type MinDelegatorStk: Get<BalanceOf<Self>>;
+        /// Default inflation configuration
+        #[pallet::constant]
+        type DefaultInflationConfig: Get<InflationInfoWithoutRound>;
         /// Get the current block author
         type BlockAuthor: Get<Self::AccountId>;
         /// Handler to notify the runtime when a collator is paid.
@@ -370,16 +376,13 @@ pub mod pallet {
         InflationSet {
             annual_min: Perbill,
             annual_ideal: Perbill,
-            annual_max: Perbill,
             round_min: Perbill,
             round_ideal: Perbill,
-            round_max: Perbill,
         },
-        /// Staking expectations set.
-        StakeExpectationsSet {
-            expect_min: BalanceOf<T>,
-            expect_ideal: BalanceOf<T>,
-            expect_max: BalanceOf<T>,
+        /// Staking expectation set.
+        StakeExpectationSet {
+            ideal_staked: Perbill,
+            decay_rate: Option<Perbill>,
         },
         /// Set total selected candidates to this value.
         TotalSelectedSet { old: u32, new: u32 },
@@ -393,7 +396,6 @@ pub mod pallet {
             new: u32,
             new_per_round_inflation_min: Perbill,
             new_per_round_inflation_ideal: Perbill,
-            new_per_round_inflation_max: Perbill,
         },
         /// Auto-compounding reward percent was set for a delegation.
         AutoCompoundSet {
@@ -575,10 +577,16 @@ pub mod pallet {
     /// Total counted stake for selected candidates in the round
     pub type Staked<T: Config> = StorageMap<_, Twox64Concat, RoundIndex, BalanceOf<T>, ValueQuery>;
 
+    #[pallet::type_value]
+    pub fn DefaultInflationConfig<T: Config>() -> InflationInfo {
+        InflationInfo::new::<T>(T::DefaultInflationConfig::get())
+    }
+
     #[pallet::storage]
     #[pallet::getter(fn inflation_config)]
     /// Inflation configuration
-    pub type InflationConfig<T: Config> = StorageValue<_, InflationInfo<BalanceOf<T>>, ValueQuery>;
+    pub type InflationConfig<T: Config> =
+        StorageValue<_, InflationInfo, ValueQuery, DefaultInflationConfig<T>>;
 
     #[pallet::storage]
     #[pallet::getter(fn points)]
@@ -606,7 +614,7 @@ pub mod pallet {
         /// `(delegator AccountId, collator AccountId, delegation Amount, auto-compounding Percent)`
         pub delegations: Vec<(T::AccountId, T::AccountId, BalanceOf<T>, Percent)>,
         /// Inflation configuration
-        pub inflation_config: InflationInfo<BalanceOf<T>>,
+        pub inflation_config: InflationInfoWithoutRound,
         /// Default fixed percent a collator takes off the top of due rewards
         pub collator_commission: Perbill,
         /// Default percent of inflation set aside for parachain bond every round
@@ -636,7 +644,6 @@ pub mod pallet {
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
             assert!(self.blocks_per_round > 0, "Blocks per round must be > 0");
-            <InflationConfig<T>>::put(self.inflation_config.clone());
             let mut candidate_count = 0u32;
             // Initialize the candidates
             for &(ref candidate, balance) in &self.candidates {
@@ -732,6 +739,8 @@ pub mod pallet {
             <Round<T>>::put(round);
             // Snapshot total stake
             <Staked<T>>::insert(1u32, <Total<T>>::get());
+            // Calculate round inflation
+            <InflationConfig<T>>::put(InflationInfo::new::<T>(self.inflation_config.clone()));
             <Pallet<T>>::deposit_event(Event::NewRound {
                 starting_block: T::BlockNumber::zero(),
                 round: 1u32,
@@ -743,26 +752,28 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Set the expectations for total staked. These expectations determine the issuance for
+        /// Set the expectation for total staked. The expectation determines the issuance for
         /// the round according to logic in `fn compute_issuance`
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::set_staking_expectations())]
-        pub fn set_staking_expectations(
+        pub fn set_staking_expectation(
             origin: OriginFor<T>,
-            expectations: Range<BalanceOf<T>>,
+            ideal_staked: Perbill,
+            decay_rate: Option<Perbill>,
         ) -> DispatchResultWithPostInfo {
             T::MonetaryGovernanceOrigin::ensure_origin(origin)?;
-            ensure!(expectations.is_valid(), Error::<T>::InvalidSchedule);
             let mut config = <InflationConfig<T>>::get();
             ensure!(
-                config.expect != expectations,
+                config.ideal_staked != ideal_staked,
                 Error::<T>::NoWritingSameValue
             );
-            config.set_expectations(expectations);
-            Self::deposit_event(Event::StakeExpectationsSet {
-                expect_min: config.expect.min,
-                expect_ideal: config.expect.ideal,
-                expect_max: config.expect.max,
+            config.ideal_staked = ideal_staked;
+            if let Some(decay) = decay_rate {
+                config.decay_rate = decay;
+            }
+            Self::deposit_event(Event::StakeExpectationSet {
+                ideal_staked,
+                decay_rate,
             });
             <InflationConfig<T>>::put(config);
             Ok(().into())
@@ -784,10 +795,8 @@ pub mod pallet {
             Self::deposit_event(Event::InflationSet {
                 annual_min: config.annual.min,
                 annual_ideal: config.annual.ideal,
-                annual_max: config.annual.max,
                 round_min: config.round.min,
                 round_ideal: config.round.ideal,
-                round_max: config.round.max,
             });
             <InflationConfig<T>>::put(config);
             Ok(().into())
@@ -902,7 +911,6 @@ pub mod pallet {
                 new: new,
                 new_per_round_inflation_min: inflation_config.round.min,
                 new_per_round_inflation_ideal: inflation_config.round.ideal,
-                new_per_round_inflation_max: inflation_config.round.max,
             });
             <InflationConfig<T>>::put(inflation_config);
             Ok(().into())
@@ -1485,17 +1493,9 @@ pub mod pallet {
             <CandidatePool<T>>::put(candidates);
         }
         /// Compute round issuance based on total staked for the given round
-        fn compute_issuance(staked: BalanceOf<T>) -> BalanceOf<T> {
+        pub fn compute_issuance(staked: BalanceOf<T>) -> BalanceOf<T> {
             let config = <InflationConfig<T>>::get();
-            let round_issuance = crate::inflation::round_issuance_range::<T>(config.round);
-            // TODO: consider interpolation instead of bounded range
-            if staked < config.expect.min {
-                round_issuance.min
-            } else if staked > config.expect.max {
-                round_issuance.max
-            } else {
-                round_issuance.ideal
-            }
+            inflation::round_issuance::<T>(config, staked)
         }
         /// Remove delegation from candidate state
         /// Amount input should be retrieved from delegator and it informs the storage lookups
@@ -1631,8 +1631,11 @@ pub mod pallet {
                 // 'extra_weight' tracks weight returned from fns that we delegate to which can't be
                 // known ahead of time.
                 let mut extra_weight = Weight::zero();
+                // Percentage due (the collator share in a round)
                 let pct_due = Perbill::from_rational(pts, total_points);
+                // The amount to be paid from the remaining rewards
                 let total_paid = pct_due * payout_info.total_staking_reward;
+                // Paid amount accumulator
                 let mut amt_due = total_paid;
 
                 let num_delegators = state.delegations.len();
@@ -1652,6 +1655,7 @@ pub mod pallet {
                 } else {
                     // pay collator first; commission + due_portion
                     let collator_pct = Perbill::from_rational(state.bond, state.total);
+                    // Collator share from collator commission
                     let commission = pct_due * collator_issuance;
                     amt_due = amt_due.saturating_sub(commission);
                     let collator_reward = (collator_pct * amt_due).saturating_add(commission);
