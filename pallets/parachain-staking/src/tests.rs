@@ -18,7 +18,7 @@ use crate::mock::{
 use crate::{
     assert_events_emitted, assert_events_emitted_match, assert_events_eq, assert_no_events,
     AtStake, Bond, CollatorStatus, DelegationScheduledRequests, DelegatorAdded, DelegatorState,
-    DelegatorStatus, Error, Event, Range, DELEGATOR_LOCK_ID,
+    DelegatorStatus, Error, Event, InflationConfig, Range, DELEGATOR_LOCK_ID,
 };
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::{traits::Zero, DispatchError, ModuleError, Perbill, Percent};
@@ -254,8 +254,7 @@ fn set_blocks_per_round_event_emits_correctly() {
             old: 5,
             new: 6,
             new_per_round_inflation_min: Perbill::from_parts(926),
-            new_per_round_inflation_ideal: Perbill::from_parts(926),
-            new_per_round_inflation_max: Perbill::from_parts(926),
+            new_per_round_inflation_ideal: Perbill::from_parts(926)
         });
     });
 }
@@ -335,13 +334,10 @@ fn round_immediately_jumps_if_current_duration_exceeds_new_blocks_per_round() {
 fn invalid_monetary_origin_fails() {
     ExtBuilder::default().build().execute_with(|| {
         assert_noop!(
-            ParachainStaking::set_staking_expectations(
+            ParachainStaking::set_staking_expectation(
                 RuntimeOrigin::signed(45),
-                Range {
-                    min: 3u32.into(),
-                    ideal: 4u32.into(),
-                    max: 5u32.into()
-                }
+                Perbill::from_percent(70),
+                None
             ),
             sp_runtime::DispatchError::BadOrigin
         );
@@ -351,7 +347,6 @@ fn invalid_monetary_origin_fails() {
                 Range {
                     min: Perbill::from_percent(3),
                     ideal: Perbill::from_percent(4),
-                    max: Perbill::from_percent(5)
                 }
             ),
             sp_runtime::DispatchError::BadOrigin
@@ -361,8 +356,7 @@ fn invalid_monetary_origin_fails() {
                 RuntimeOrigin::signed(45),
                 Range {
                     min: Perbill::from_percent(3),
-                    ideal: Perbill::from_percent(4),
-                    max: Perbill::from_percent(5)
+                    ideal: Perbill::from_percent(4)
                 }
             ),
             sp_runtime::DispatchError::BadOrigin
@@ -386,19 +380,21 @@ fn invalid_monetary_origin_fails() {
 #[test]
 fn set_staking_event_emits_event_correctly() {
     ExtBuilder::default().build().execute_with(|| {
-        // valid call succeeds
-        assert_ok!(ParachainStaking::set_staking_expectations(
-            RuntimeOrigin::root(),
-            Range {
-                min: 3u128,
-                ideal: 4u128,
-                max: 5u128,
+        InflationConfig::<Test>::mutate(|cfg| {
+            cfg.round = Range {
+                min: Perbill::from_percent(5),
+                ideal: Perbill::from_percent(5),
             }
+        });
+        // valid call succeeds
+        assert_ok!(ParachainStaking::set_staking_expectation(
+            RuntimeOrigin::root(),
+            Perbill::from_percent(75),
+            Some(Perbill::from_percent(5))
         ));
-        assert_events_eq!(Event::StakeExpectationsSet {
-            expect_min: 3u128,
-            expect_ideal: 4u128,
-            expect_max: 5u128,
+        assert_events_eq!(Event::StakeExpectationSet {
+            ideal_staked: Perbill::from_percent(75),
+            decay_rate: Some(Perbill::from_percent(5))
         });
     });
 }
@@ -407,46 +403,17 @@ fn set_staking_event_emits_event_correctly() {
 fn set_staking_updates_storage_correctly() {
     ExtBuilder::default().build().execute_with(|| {
         assert_eq!(
-            ParachainStaking::inflation_config().expect,
-            Range {
-                min: 700,
-                ideal: 700,
-                max: 700
-            }
+            ParachainStaking::inflation_config().ideal_staked,
+            Perbill::from_percent(70)
         );
-        assert_ok!(ParachainStaking::set_staking_expectations(
+        assert_ok!(ParachainStaking::set_staking_expectation(
             RuntimeOrigin::root(),
-            Range {
-                min: 3u128,
-                ideal: 4u128,
-                max: 5u128,
-            }
+            Perbill::from_percent(60),
+            None
         ));
         assert_eq!(
-            ParachainStaking::inflation_config().expect,
-            Range {
-                min: 3u128,
-                ideal: 4u128,
-                max: 5u128
-            }
-        );
-    });
-}
-
-#[test]
-fn cannot_set_invalid_staking_expectations() {
-    ExtBuilder::default().build().execute_with(|| {
-        // invalid call fails
-        assert_noop!(
-            ParachainStaking::set_staking_expectations(
-                RuntimeOrigin::root(),
-                Range {
-                    min: 5u128,
-                    ideal: 4u128,
-                    max: 3u128
-                }
-            ),
-            Error::<Test>::InvalidSchedule
+            ParachainStaking::inflation_config().ideal_staked,
+            Perbill::from_percent(60)
         );
     });
 }
@@ -454,22 +421,16 @@ fn cannot_set_invalid_staking_expectations() {
 #[test]
 fn cannot_set_same_staking_expectations() {
     ExtBuilder::default().build().execute_with(|| {
-        assert_ok!(ParachainStaking::set_staking_expectations(
+        assert_ok!(ParachainStaking::set_staking_expectation(
             RuntimeOrigin::root(),
-            Range {
-                min: 3u128,
-                ideal: 4u128,
-                max: 5u128
-            }
+            Perbill::from_percent(60),
+            None
         ));
         assert_noop!(
-            ParachainStaking::set_staking_expectations(
+            ParachainStaking::set_staking_expectation(
                 RuntimeOrigin::root(),
-                Range {
-                    min: 3u128,
-                    ideal: 4u128,
-                    max: 5u128
-                }
+                Perbill::from_percent(60),
+                None
             ),
             Error::<Test>::NoWritingSameValue
         );
@@ -481,22 +442,16 @@ fn cannot_set_same_staking_expectations() {
 #[test]
 fn set_inflation_event_emits_correctly() {
     ExtBuilder::default().build().execute_with(|| {
-        let (min, ideal, max): (Perbill, Perbill, Perbill) = (
-            Perbill::from_percent(3),
-            Perbill::from_percent(4),
-            Perbill::from_percent(5),
-        );
+        let (min, ideal): (Perbill, Perbill) = (Perbill::from_percent(3), Perbill::from_percent(4));
         assert_ok!(ParachainStaking::set_inflation(
             RuntimeOrigin::root(),
-            Range { min, ideal, max }
+            Range { min, ideal }
         ));
         assert_events_eq!(Event::InflationSet {
             annual_min: min,
             annual_ideal: ideal,
-            annual_max: max,
             round_min: Perbill::from_parts(57),
-            round_ideal: Perbill::from_parts(75),
-            round_max: Perbill::from_parts(93),
+            round_ideal: Perbill::from_parts(75)
         });
     });
 }
@@ -504,41 +459,40 @@ fn set_inflation_event_emits_correctly() {
 #[test]
 fn set_inflation_storage_updates_correctly() {
     ExtBuilder::default().build().execute_with(|| {
-        let (min, ideal, max): (Perbill, Perbill, Perbill) = (
-            Perbill::from_percent(3),
-            Perbill::from_percent(4),
-            Perbill::from_percent(5),
-        );
+        InflationConfig::<Test>::mutate(|cfg| {
+            cfg.round = Range {
+                min: Perbill::from_percent(5),
+                ideal: Perbill::from_percent(5),
+            }
+        });
+        let (min, ideal): (Perbill, Perbill) = (Perbill::from_percent(3), Perbill::from_percent(4));
         assert_eq!(
             ParachainStaking::inflation_config().annual,
             Range {
                 min: Perbill::from_percent(50),
-                ideal: Perbill::from_percent(50),
-                max: Perbill::from_percent(50)
+                ideal: Perbill::from_percent(50)
             }
         );
         assert_eq!(
             ParachainStaking::inflation_config().round,
             Range {
                 min: Perbill::from_percent(5),
-                ideal: Perbill::from_percent(5),
-                max: Perbill::from_percent(5)
+                ideal: Perbill::from_percent(5)
             }
         );
         assert_ok!(ParachainStaking::set_inflation(
             RuntimeOrigin::root(),
-            Range { min, ideal, max }
+            Range { min, ideal }
         ),);
         assert_eq!(
             ParachainStaking::inflation_config().annual,
-            Range { min, ideal, max }
+            Range { min, ideal }
         );
         assert_eq!(
             ParachainStaking::inflation_config().round,
             Range {
                 min: Perbill::from_parts(57),
-                ideal: Perbill::from_parts(75),
-                max: Perbill::from_parts(93)
+                ideal: Perbill::from_parts(75)
             }
         );
     });
@@ -552,8 +506,7 @@ fn cannot_set_invalid_inflation() {
                 RuntimeOrigin::root(),
                 Range {
                     min: Perbill::from_percent(5),
-                    ideal: Perbill::from_percent(4),
-                    max: Perbill::from_percent(3)
+                    ideal: Perbill::from_percent(4)
                 }
             ),
             Error::<Test>::InvalidSchedule
@@ -564,17 +517,13 @@ fn cannot_set_invalid_inflation() {
 #[test]
 fn cannot_set_same_inflation() {
     ExtBuilder::default().build().execute_with(|| {
-        let (min, ideal, max): (Perbill, Perbill, Perbill) = (
-            Perbill::from_percent(3),
-            Perbill::from_percent(4),
-            Perbill::from_percent(5),
-        );
+        let (min, ideal): (Perbill, Perbill) = (Perbill::from_percent(3), Perbill::from_percent(4));
         assert_ok!(ParachainStaking::set_inflation(
             RuntimeOrigin::root(),
-            Range { min, ideal, max }
+            Range { min, ideal }
         ),);
         assert_noop!(
-            ParachainStaking::set_inflation(RuntimeOrigin::root(), Range { min, ideal, max }),
+            ParachainStaking::set_inflation(RuntimeOrigin::root(), Range { min, ideal }),
             Error::<Test>::NoWritingSameValue
         );
     });
@@ -4134,6 +4083,13 @@ fn parachain_bond_inflation_reserve_matches_config() {
         ])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             assert_eq!(Balances::free_balance(&11), 1);
             // set parachain bond account so DefaultParachainBondReservePercent = 30% of inflation
             // is allocated to this account hereafter
@@ -4767,6 +4723,13 @@ fn paid_collator_commission_matches_config() {
         .with_delegations(vec![(2, 1, 10), (3, 1, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             roll_to_round_begin(2);
             assert_ok!(ParachainStaking::join_candidates(
                 RuntimeOrigin::signed(4),
@@ -5070,6 +5033,13 @@ fn payout_distribution_to_solo_collators() {
         .with_candidates(vec![(1, 100), (2, 90), (3, 80), (4, 70)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             roll_to_round_begin(2);
             // should choose top TotalCandidatesSelected (5), in order
             assert_events_eq!(
@@ -5557,6 +5527,13 @@ fn payouts_follow_delegation_changes() {
         ])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             roll_to_round_begin(2);
             // chooses top TotalSelectedCandidates (5), in order
             assert_events_eq!(
@@ -6468,6 +6445,13 @@ fn no_rewards_paid_until_after_reward_payment_delay() {
         .with_candidates(vec![(1, 20), (2, 20), (3, 20)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             roll_to_round_begin(2);
             // payouts for round 1
             set_author(1, 1, 1);
@@ -6561,6 +6545,13 @@ fn deferred_payment_storage_items_are_cleaned_up() {
         .with_candidates(vec![(1, 20), (2, 20)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             set_author(1, 1, 1);
             set_author(1, 2, 1);
 
@@ -6806,6 +6797,13 @@ fn deferred_payment_steady_state_event_flow() {
         ])
         .build()
         .execute_with(|| {
+            <InflationConfig<Test>>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             // convenience to set the round points consistently
             let set_round_points = |round: BlockNumber| {
                 set_author(round as BlockNumber, 1, 1);
@@ -7080,6 +7078,12 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_for_previous_rounds_but_not_f
         .with_delegations(vec![(2, 1, 10), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 1, 2 and 3
             (1..=3).for_each(|round| set_author(round, 1, 1));
 
@@ -7146,6 +7150,12 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_when_request_cancelled() {
         .with_delegations(vec![(2, 1, 10), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 2, 3 and 4
             (2..=4).for_each(|round| set_author(round, 1, 1));
 
@@ -7219,6 +7229,12 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_for_previous_rounds_bu
         .with_delegations(vec![(2, 1, 20), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 1, 2 and 3
             (1..=3).for_each(|round| set_author(round, 1, 1));
 
@@ -7292,6 +7308,12 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_when_request_cancelled
         .with_delegations(vec![(2, 1, 20), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 2, 3 and 4
             (2..=4).for_each(|round| set_author(round, 1, 1));
 
@@ -7371,6 +7393,12 @@ fn test_delegator_scheduled_for_leave_is_rewarded_for_previous_rounds_but_not_fo
         .with_delegations(vec![(2, 1, 10), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 1, 2 and 3
             (1..=3).for_each(|round| set_author(round, 1, 1));
 
@@ -7435,6 +7463,12 @@ fn test_delegator_scheduled_for_leave_is_rewarded_when_request_cancelled() {
         .with_delegations(vec![(2, 1, 10), (2, 3, 10)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
             // preset rewards for rounds 2, 3 and 4
             (2..=4).for_each(|round| set_author(round, 1, 1));
 
@@ -8307,6 +8341,13 @@ fn test_rewards_do_not_auto_compound_on_payment_if_delegation_scheduled_revoke_e
         .with_delegations(vec![(2, 1, 200), (3, 1, 200)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             (2..=5).for_each(|round| set_author(round, 1, 1));
             assert_ok!(ParachainStaking::set_auto_compound(
                 RuntimeOrigin::signed(2),
@@ -8378,6 +8419,13 @@ fn test_rewards_auto_compound_on_payment_as_per_auto_compound_config() {
         .with_delegations(vec![(2, 1, 200), (3, 1, 200), (4, 1, 200), (5, 1, 200)])
         .build()
         .execute_with(|| {
+            InflationConfig::<Test>::mutate(|cfg| {
+                cfg.round = Range {
+                    min: Perbill::from_percent(5),
+                    ideal: Perbill::from_percent(5),
+                }
+            });
+
             (2..=6).for_each(|round| set_author(round, 1, 1));
             assert_ok!(ParachainStaking::set_auto_compound(
                 RuntimeOrigin::signed(2),
@@ -9026,5 +9074,56 @@ fn test_compute_top_candidates_is_stable() {
                 ParachainStaking::compute_top_candidates(),
                 vec![2, 3, 4, 5, 6]
             );
+        });
+}
+
+#[test]
+fn test_inflation() {
+    ExtBuilder::default()
+        .with_balances(vec![(1, 10000000000)])
+        .with_candidates(vec![])
+        .build()
+        .execute_with(|| {
+            assert_ok!(ParachainStaking::set_staking_expectation(
+                RuntimeOrigin::root(),
+                Perbill::from_percent(60),
+                Some(Perbill::from_percent(5))
+            ));
+            assert_ok!(ParachainStaking::set_inflation(
+                RuntimeOrigin::root(),
+                Range {
+                    min: Perbill::from_percent(2),
+                    ideal: Perbill::from_percent(5)
+                }
+            ));
+            dbg!(InflationConfig::<Test>::get());
+            let total_issuance = |staked_pct: Perbill| {
+                let supply = <Test as crate::Config>::Currency::total_issuance();
+
+                ParachainStaking::compute_issuance(staked_pct * supply)
+            };
+
+            // Both extremes should have minimum issuance
+            let issuance_at_0_stake = total_issuance(Perbill::from_percent(0));
+            let issuance_at_10_stake = total_issuance(Perbill::from_percent(10));
+            let issuance_at_20_stake = total_issuance(Perbill::from_percent(20));
+            let issuance_at_30_stake = total_issuance(Perbill::from_percent(30));
+            let issuance_at_40_stake = total_issuance(Perbill::from_percent(40));
+            let issuance_at_50_stake = total_issuance(Perbill::from_percent(50));
+            let issuance_at_60_stake = total_issuance(Perbill::from_percent(60));
+            let issuance_at_70_stake = total_issuance(Perbill::from_percent(70));
+            let issuance_at_80_stake = total_issuance(Perbill::from_percent(80));
+            let issuance_at_100_stake = total_issuance(Perbill::from_percent(100));
+            // Both extremes should have minimum issuance
+            assert_eq!(issuance_at_0_stake, issuance_at_100_stake);
+            assert!(issuance_at_0_stake < issuance_at_10_stake);
+            assert!(issuance_at_10_stake < issuance_at_20_stake);
+            assert!(issuance_at_20_stake < issuance_at_30_stake);
+            assert!(issuance_at_30_stake < issuance_at_40_stake);
+            assert!(issuance_at_40_stake < issuance_at_50_stake);
+            assert!(issuance_at_50_stake < issuance_at_60_stake);
+            assert!(issuance_at_60_stake > issuance_at_70_stake);
+            assert!(issuance_at_70_stake > issuance_at_80_stake);
+            assert!(issuance_at_80_stake > issuance_at_100_stake);
         });
 }
