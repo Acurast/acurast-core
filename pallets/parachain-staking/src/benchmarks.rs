@@ -133,22 +133,18 @@ impl Seed {
 
 benchmarks! {
     // MONETARY ORIGIN DISPATCHABLES
-    set_staking_expectations {
-        let stake_range: Range<BalanceOf<T>> = Range {
-            min: 100u32.into(),
-            ideal: 200u32.into(),
-            max: 300u32.into(),
-        };
-    }: _(RawOrigin::Root, stake_range)
+    set_staking_expectation {
+        let ideal_staked = Perbill::from_percent(75);
+        let decay_rate = None;
+    }: _(RawOrigin::Root, ideal_staked, decay_rate)
     verify {
-        assert_eq!(Pallet::<T>::inflation_config().expect, stake_range);
+        assert_eq!(Pallet::<T>::inflation_config().ideal_staked, ideal_staked);
     }
 
     set_inflation {
         let inflation_range: Range<Perbill> = Range {
             min: Perbill::from_perthousand(1),
-            ideal: Perbill::from_perthousand(2),
-            max: Perbill::from_perthousand(3),
+            ideal: Perbill::from_perthousand(2)
         };
 
     }: _(RawOrigin::Root, inflation_range)
@@ -865,8 +861,7 @@ benchmarks! {
 
         let high_inflation: Range<Perbill> = Range {
             min: Perbill::one(),
-            ideal: Perbill::one(),
-            max: Perbill::one(),
+            ideal: Perbill::one()
         };
         Pallet::<T>::set_inflation(RawOrigin::Root.into(), high_inflation.clone())?;
         Pallet::<T>::set_blocks_per_round(RawOrigin::Root.into(), 101u32)?;
@@ -911,8 +906,7 @@ benchmarks! {
 
         let high_inflation: Range<Perbill> = Range {
             min: Perbill::one(),
-            ideal: Perbill::one(),
-            max: Perbill::one(),
+            ideal: Perbill::one()
         };
         Pallet::<T>::set_inflation(RawOrigin::Root.into(), high_inflation.clone())?;
         Pallet::<T>::set_blocks_per_round(RawOrigin::Root.into(), 101u32)?;
@@ -1281,7 +1275,7 @@ mod tests {
     #[test]
     fn bench_set_staking_expectations() {
         new_test_ext().execute_with(|| {
-            assert_ok!(Pallet::<Test>::test_benchmark_set_staking_expectations());
+            assert_ok!(Pallet::<Test>::test_benchmark_set_staking_expectation());
         });
     }
 
