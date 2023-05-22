@@ -1,5 +1,5 @@
 use super::*;
-use crate::stub::alice_account_id;
+use crate::stub::bob_account_id;
 
 use frame_benchmarking::{benchmarks, whitelist_account};
 use frame_support::sp_runtime::AccountId32;
@@ -12,7 +12,7 @@ benchmarks! {
     }
 
     fulfill {
-        let caller: T::AccountId = alice_account_id().into();
+        let caller: T::AccountId = bob_account_id().into();
         whitelist_account!(caller);
         let fulfillment = Fulfillment {
             script: hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").to_vec().try_into().unwrap(),

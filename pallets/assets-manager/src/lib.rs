@@ -157,8 +157,9 @@ pub mod pallet {
             let new = Self::update_index(id, asset)?;
 
             if new {
+                use frame_support::traits::OriginTrait;
                 <pallet_assets::Pallet<T, I>>::force_create(
-                    origin,
+                    OriginFor::<T>::root(),
                     id,
                     owner,
                     is_sufficient,
