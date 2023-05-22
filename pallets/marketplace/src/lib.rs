@@ -477,7 +477,15 @@ pub mod pallet {
             ensure!(
                 registration
                     .schedule
-                    .overlaps(assignment.start_delay, now, now_max)
+                    .overlaps(
+                        assignment.start_delay,
+                        registration
+                            .schedule
+                            .range(assignment.start_delay)
+                            .ok_or(Error::<T>::CalculationOverflow)?
+                            .0,
+                        now_max
+                    )
                     .ok_or(Error::<T>::CalculationOverflow)?,
                 Error::<T>::ReportOutsideSchedule
             );
