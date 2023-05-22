@@ -215,6 +215,7 @@ pub mod pallet {
         TooLowDelegationCountToAutoCompound,
         TooLowCandidateAutoCompoundingDelegationCountToAutoCompound,
         TooLowCandidateAutoCompoundingDelegationCountToDelegate,
+        AlreadyBootstrapped,
     }
 
     #[pallet::event]
@@ -1965,6 +1966,73 @@ pub mod pallet {
             };
 
             weight
+        }
+
+        /// TODO: Remove once consensus has been migrated from PoA to PoS
+        pub fn initialize_pallet(
+            starting_block: <T as frame_system::Config>::BlockNumber,
+            candidates: Vec<T::AccountId>,
+            inflation_config: InflationInfoWithoutRound,
+            collator_commission: Perbill,
+        ) -> Result<(), Error<T>>
+        where
+            T::AccountId: From<[u8; 32]>,
+        {
+            ensure!(
+                Self::on_chain_storage_version() == 0,
+                <Error<T>>::AlreadyBootstrapped
+            );
+
+            // provided by https://docs.rs/frame-support/latest/frame_support/traits/trait.OnGenesis.html
+            // Sets STORAGE_VERSION
+            <Self as frame_support::traits::OnGenesis>::on_genesis();
+            assert_eq!(
+                Self::current_storage_version(),
+                Self::on_chain_storage_version(),
+            );
+
+            <InflationConfig<T>>::put(InflationInfo::new::<T>(inflation_config));
+            <CollatorCommission<T>>::put(collator_commission);
+
+            let mut added_candidates = 0u32;
+            for candidate in candidates {
+                if let Err(error) = <Pallet<T>>::join_candidates(
+                    T::RuntimeOrigin::from(Some(candidate.clone()).into()),
+                    T::MinCandidateStk::get(),
+                    added_candidates,
+                ) {
+                    log::warn!("Failed to add candidate: {:?}", error);
+                } else {
+                    added_candidates = added_candidates.saturating_add(1u32);
+                }
+            }
+            log::info!("Added {} candidates", added_candidates);
+
+            <ParachainBondInfo<T>>::put(ParachainBondConfig {
+                account: T::AccountId::from([0u8; 32]),
+                percent: Percent::from_percent(10),
+            });
+
+            <TotalSelected<T>>::put(T::MinSelectedCandidates::get());
+
+            let (_, v_count, _, total_staked) = <Pallet<T>>::select_top_candidates(1u32);
+
+            // Start Round 1 at the given starting block
+            let round: RoundInfo<T::BlockNumber> =
+                RoundInfo::new(1u32, starting_block, T::MinBlocksPerRound::get());
+            <Round<T>>::put(round);
+
+            // Snapshot total stake
+            <Staked<T>>::insert(1u32, <Total<T>>::get());
+
+            <Pallet<T>>::deposit_event(Event::NewRound {
+                starting_block,
+                round: 1u32,
+                selected_collators_number: v_count,
+                total_balance: total_staked,
+            });
+
+            Ok(())
         }
     }
 
