@@ -414,6 +414,16 @@ pub mod acurast_runtime {
         }
     }
 
+    pub struct ProcessorLastSeenProvider;
+
+    impl pallet_acurast_marketplace::traits::ProcessorLastSeenProvider<Runtime>
+        for ProcessorLastSeenProvider
+    {
+        fn last_seen(processor: &<Runtime as frame_system::Config>::AccountId) -> Option<u128> {
+            Some(AcurastMarketplace::now().unwrap().into())
+        }
+    }
+
     impl pallet_acurast_marketplace::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
@@ -427,6 +437,7 @@ pub mod acurast_runtime {
         type RewardManager =
             AssetRewardManager<AcurastAsset, FeeManagerImpl, Balances, AcurastAssets>;
         type AssetValidator = PassAllAssets;
+        type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
         type MarketplaceHooks = ();
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
         #[cfg(feature = "runtime-benchmarks")]

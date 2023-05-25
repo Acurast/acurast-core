@@ -304,6 +304,14 @@ impl ManagerProvider<Test> for ManagerOf {
     }
 }
 
+pub struct ProcessorLastSeenProvider;
+
+impl crate::traits::ProcessorLastSeenProvider<Test> for ProcessorLastSeenProvider {
+    fn last_seen(processor: &<Test as frame_system::Config>::AccountId) -> Option<u128> {
+        Some(AcurastMarketplace::now().unwrap().into())
+    }
+}
+
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
@@ -316,6 +324,7 @@ impl Config for Test {
     type ManagerProvider = ManagerOf;
     type RewardManager = MockRewardManager;
     type AssetValidator = PassAllAssets;
+    type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
     type WeightInfo = weights::Weights<Test>;
     #[cfg(feature = "runtime-benchmarks")]

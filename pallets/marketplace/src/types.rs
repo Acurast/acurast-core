@@ -1,7 +1,7 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin};
+use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
 
 use crate::payments::RewardFor;
 use crate::Config;
@@ -200,6 +200,33 @@ pub struct Match<AcurastAccountId> {
     pub job_id: JobId<AcurastAccountId>,
     /// The sources to match each of the job's slots with.
     pub sources: Vec<PlannedExecution<AcurastAccountId>>,
+}
+
+/// Structure representing a job registration partially specified.
+///
+/// Useful for frontend to filter for processors that would match.
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub struct PartialJobRegistration<Reward, AccountId> {
+    /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
+    pub allowed_sources: Option<Vec<AccountId>>,
+    /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
+    pub allow_only_verified_sources: bool,
+    /// The schedule describing the desired (multiple) execution(s) of the script.
+    pub schedule: Option<Schedule>,
+    /// Maximum memory bytes used during a single execution of the job.
+    pub memory: Option<u32>,
+    /// Maximum network request used during a single execution of the job.
+    pub network_requests: Option<u32>,
+    /// Maximum storage bytes used during the whole period of the job's executions.
+    pub storage: Option<u32>,
+    /// The modules required for the job.
+    pub required_modules: JobModules,
+    /// Job requirements: The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+    pub slots: Option<u8>,
+    /// Job requirements: Reward offered for each slot and scheduled execution of the job.
+    pub reward: Reward,
+    /// Job requirements: Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
+    pub min_reputation: Option<u128>,
 }
 
 /// The details for a single planned slot execution with the delay.

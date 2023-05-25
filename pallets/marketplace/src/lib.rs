@@ -93,6 +93,7 @@ pub mod pallet {
             + Clone
             + IsType<<RewardFor<Self> as Reward>::AssetAmount>;
         type ManagerProvider: ManagerProvider<Self>;
+        type ProcessorLastSeenProvider: ProcessorLastSeenProvider<Self>;
         /// Logic for locking and paying tokens for job execution
         type RewardManager: RewardManager<Self>;
         type AssetValidator: AssetValidator<Self::AssetId>;
@@ -805,30 +806,12 @@ pub mod pallet {
                     .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
 
                     // CHECK the scheduling_window allow to schedule this job
-                    match pricing.scheduling_window {
-                        SchedulingWindow::End(end) => {
-                            ensure!(
-                                end >= registration
-                                    .schedule
-                                    .end_time
-                                    .checked_add(planned_execution.start_delay)
-                                    .ok_or(Error::<T>::CalculationOverflow)?,
-                                Error::<T>::SchedulingWindowExceededInMatch
-                            );
-                        }
-                        SchedulingWindow::Delta(delta) => {
-                            ensure!(
-                                now.checked_add(delta)
-                                    .ok_or(Error::<T>::CalculationOverflow)?
-                                    >= registration
-                                        .schedule
-                                        .end_time
-                                        .checked_add(planned_execution.start_delay)
-                                        .ok_or(Error::<T>::CalculationOverflow)?,
-                                Error::<T>::SchedulingWindowExceededInMatch
-                            );
-                        }
-                    }
+                    Self::check_scheduling_window(
+                        &pricing.scheduling_window,
+                        &registration.schedule,
+                        now,
+                        planned_execution.start_delay,
+                    )?;
 
                     // CHECK memory sufficient
                     ensure!(
@@ -837,33 +820,26 @@ pub mod pallet {
                     );
 
                     // CHECK network request quota sufficient
-                    ensure!(
-                        // duration (s) * network_request_quota >= network_requests (per second)
-                        // <=>
-                        // duration (ms) / 1000 * network_request_quota >= network_requests (per second)
-                        // <=>
-                        // duration (ms) * network_request_quota >= network_requests (per second) * 1000
-                        registration
-                            .schedule
-                            .duration
-                            .checked_mul(ad.network_request_quota.into())
-                            .unwrap_or(0u64)
-                            >= registration
-                                .network_requests
-                                .saturated_into::<u64>()
-                                .checked_mul(1000u64)
-                                .unwrap_or(u64::MAX),
-                        Error::<T>::NetworkRequestQuotaExceededInMatch
-                    );
+                    Self::check_network_request_quota_sufficient(
+                        &ad,
+                        &registration.schedule,
+                        registration.network_requests,
+                    )?;
 
                     // CHECK remaining storage capacity sufficient
                     let capacity = <StoredStorageCapacity<T>>::get(&planned_execution.source)
                         .ok_or(Error::<T>::CapacityNotFound)?;
-                    ensure!(capacity > 0, Error::<T>::InsufficientStorageCapacityInMatch);
+                    ensure!(
+                        capacity >= registration.storage as i64,
+                        Error::<T>::InsufficientStorageCapacityInMatch
+                    );
 
                     // CHECK source is whitelisted
                     ensure!(
-                        is_source_whitelisted::<T>(&planned_execution.source, &registration),
+                        is_source_whitelisted::<T>(
+                            &planned_execution.source,
+                            &registration.allowed_sources
+                        ),
                         Error::<T>::SourceNotAllowedInMatch
                     );
 
@@ -874,19 +850,11 @@ pub mod pallet {
                     );
 
                     // CHECK reputation sufficient
-                    if let Some(min_reputation) = requirements.min_reputation {
-                        let beta_params =
-                            <StoredReputation<T>>::get(&planned_execution.source, &reward_asset)
-                                .ok_or(Error::<T>::ReputationNotFound)?;
-
-                        let reputation = BetaReputation::<u128>::normalize(beta_params)
-                            .ok_or(Error::<T>::CalculationOverflow)?;
-
-                        ensure!(
-                            reputation >= Permill::from_parts(min_reputation as u32),
-                            Error::<T>::InsufficientReputationInMatch
-                        );
-                    }
+                    Self::check_min_reputation(
+                        requirements.min_reputation,
+                        &planned_execution.source,
+                        &reward_asset,
+                    )?;
 
                     // CHECK schedule
                     Self::fits_schedule(
@@ -896,7 +864,11 @@ pub mod pallet {
                     )?;
 
                     // calculate fee
-                    let fee_per_execution = Self::fee_per_execution(&registration, &pricing)?;
+                    let fee_per_execution = Self::fee_per_execution(
+                        &registration.schedule,
+                        registration.storage,
+                        &pricing,
+                    )?;
 
                     // CHECK price not exceeding reward
                     ensure!(
@@ -994,6 +966,202 @@ pub mod pallet {
             }
         }
 
+        fn check_scheduling_window(
+            scheduling_window: &SchedulingWindow,
+            schedule: &Schedule,
+            now: u64,
+            start_delay: u64,
+        ) -> Result<(), DispatchError> {
+            match scheduling_window {
+                SchedulingWindow::End(end) => {
+                    ensure!(
+                        *end >= schedule
+                            .end_time
+                            .checked_add(start_delay)
+                            .ok_or(Error::<T>::CalculationOverflow)?,
+                        Error::<T>::SchedulingWindowExceededInMatch
+                    );
+                }
+                SchedulingWindow::Delta(delta) => {
+                    ensure!(
+                        now.checked_add(*delta)
+                            .ok_or(Error::<T>::CalculationOverflow)?
+                            >= schedule
+                                .end_time
+                                .checked_add(start_delay)
+                                .ok_or(Error::<T>::CalculationOverflow)?,
+                        Error::<T>::SchedulingWindowExceededInMatch
+                    );
+                }
+            }
+
+            Ok(())
+        }
+
+        fn check_network_request_quota_sufficient(
+            ad: &AdvertisementRestriction<T::AccountId>,
+            schedule: &Schedule,
+            network_requests: u32,
+        ) -> Result<(), DispatchError> {
+            // CHECK network request quota sufficient
+            ensure!(
+                // duration (s) * network_request_quota >= network_requests (per second)
+                // <=>
+                // duration (ms) / 1000 * network_request_quota >= network_requests (per second)
+                // <=>
+                // duration (ms) * network_request_quota >= network_requests (per second) * 1000
+                schedule
+                    .duration
+                    .checked_mul(ad.network_request_quota.into())
+                    .unwrap_or(0u64)
+                    >= network_requests
+                        .saturated_into::<u64>()
+                        .checked_mul(1000u64)
+                        .unwrap_or(u64::MAX),
+                Error::<T>::NetworkRequestQuotaExceededInMatch
+            );
+            Ok(())
+        }
+
+        fn check_min_reputation(
+            min_reputation: Option<u128>,
+            source: &T::AccountId,
+            reward_asset: &<T as Config>::AssetId,
+        ) -> Result<(), DispatchError> {
+            if let Some(min_reputation) = min_reputation {
+                let beta_params = <StoredReputation<T>>::get(source, reward_asset)
+                    .ok_or(Error::<T>::ReputationNotFound)?;
+
+                let reputation = BetaReputation::<u128>::normalize(beta_params)
+                    .ok_or(Error::<T>::CalculationOverflow)?;
+
+                ensure!(
+                    reputation >= Permill::from_parts(min_reputation as u32),
+                    Error::<T>::InsufficientReputationInMatch
+                );
+            }
+            Ok(())
+        }
+
+        /// Filters the given `processors` by those recently seen and matching `partial_registration`
+        /// and whitelisting `consumer` if specifying a whitelist.
+        fn filter(
+            registration: PartialJobRegistration<RewardFor<T>, T::AccountId>,
+            sources: Vec<T::AccountId>,
+            consumer: Option<MultiOrigin<T::AccountId>>,
+        ) -> Vec<T::AccountId> {
+            sources
+                .clone()
+                .into_iter()
+                .filter(|p| Self::check(&registration, &p, consumer.as_ref()).is_err())
+                .collect()
+        }
+
+        fn check(
+            registration: &PartialJobRegistration<RewardFor<T>, T::AccountId>,
+            source: &T::AccountId,
+            consumer: Option<&MultiOrigin<T::AccountId>>,
+        ) -> Result<(), DispatchError> {
+            // parse reward into asset_id and amount
+            let reward_asset: <T as Config>::AssetId = registration
+                .reward
+                .try_get_asset_id()
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                .into();
+            T::AssetValidator::validate(&reward_asset).map_err(|e| e.into())?;
+
+            let reward_amount: <T as Config>::AssetAmount = registration
+                .reward
+                .try_get_amount()
+                .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
+                .into();
+
+            // CHECK attestation
+            ensure!(
+                !registration.allow_only_verified_sources
+                    || ensure_source_verified::<T>(&source).is_ok(),
+                Error::<T>::UnverifiedSourceInMatch
+            );
+
+            let ad = <StoredAdvertisementRestriction<T>>::get(&source)
+                .ok_or(Error::<T>::AdvertisementNotFound)?;
+
+            for required_module in &registration.required_modules {
+                ensure!(
+                    ad.available_modules.contains(required_module),
+                    Error::<T>::ModuleNotAvailableInMatch
+                );
+            }
+
+            let pricing = <StoredAdvertisementPricing<T>>::get(&source, &reward_asset)
+                .ok_or(Error::<T>::AdvertisementPricingNotFound)?;
+
+            if let Some(schedule) = &registration.schedule {
+                let now = Self::now()?;
+                ensure!(now < schedule.start_time, Error::<T>::OverdueMatch);
+
+                // CHECK the scheduling_window allow to schedule this job
+                Self::check_scheduling_window(&pricing.scheduling_window, schedule, now, 0)?;
+
+                // CHECK schedule
+                Self::fits_schedule(&source, &schedule, 0)?;
+
+                // CHECK network request quota sufficient
+                if let Some(network_requests) = registration.network_requests {
+                    Self::check_network_request_quota_sufficient(&ad, &schedule, network_requests)?;
+                }
+
+                // CHECK remaining storage capacity sufficient
+                if let Some(storage) = &registration.storage {
+                    // calculate fee
+                    let fee_per_execution = Self::fee_per_execution(&schedule, *storage, &pricing)?;
+
+                    // CHECK price not exceeding reward
+                    ensure!(
+                        fee_per_execution <= reward_amount,
+                        Error::<T>::InsufficientRewardInMatch
+                    );
+                }
+            }
+
+            // CHECK memory sufficient
+            if let Some(memory) = &registration.memory {
+                ensure!(
+                    ad.max_memory >= *memory,
+                    Error::<T>::MaxMemoryExceededInMatch
+                );
+            }
+
+            // CHECK remaining storage capacity sufficient
+            if let Some(storage) = &registration.storage {
+                let capacity =
+                    <StoredStorageCapacity<T>>::get(&source).ok_or(Error::<T>::CapacityNotFound)?;
+                ensure!(
+                    capacity >= *storage as i64,
+                    Error::<T>::InsufficientStorageCapacityInMatch
+                );
+            }
+
+            // CHECK source is whitelisted
+            ensure!(
+                is_source_whitelisted::<T>(&source, &registration.allowed_sources),
+                Error::<T>::SourceNotAllowedInMatch
+            );
+
+            // CHECK consumer is whitelisted
+            if let Some(consumer) = consumer {
+                ensure!(
+                    is_consumer_whitelisted::<T>(&consumer, &ad.allowed_consumers),
+                    Error::<T>::ConsumerNotAllowedInMatch
+                );
+            }
+
+            // CHECK reputation sufficient
+            Self::check_min_reputation(registration.min_reputation, &source, &reward_asset)?;
+
+            Ok(())
+        }
+
         /// Returns true if the source has currently at least one match (not necessarily assigned).
         fn has_matches(source: &T::AccountId) -> bool {
             // NOTE we use a trick to check if map contains *any* secondary key: we use `any` to short-circuit
@@ -1072,17 +1240,19 @@ pub mod pallet {
 
         /// Calculates the fee per job execution.
         fn fee_per_execution(
-            registration: &JobRegistrationFor<T>,
+            schedule: &Schedule,
+            storage: u32,
             pricing: &PricingVariantFor<T>,
         ) -> Result<T::AssetAmount, Error<T>> {
             Ok(pricing
                 .fee_per_millisecond
-                .checked_mul(&registration.schedule.duration.into())
+                .checked_mul(&schedule.duration.into())
                 .ok_or(Error::<T>::CalculationOverflow)?
                 .checked_add(
                     &pricing
                         .fee_per_storage_byte
-                        .checked_mul(&registration.storage.into())
+                        .clone()
+                        .checked_mul(&storage.into())
                         .ok_or(Error::<T>::CalculationOverflow)?,
                 )
                 .ok_or(Error::<T>::CalculationOverflow)?
@@ -1091,7 +1261,7 @@ pub mod pallet {
         }
 
         /// Returns the current timestamp.
-        fn now() -> Result<u64, DispatchError> {
+        pub fn now() -> Result<u64, DispatchError> {
             Ok(<T as pallet_acurast::Config>::UnixTime::now()
                 .as_millis()
                 .try_into()
