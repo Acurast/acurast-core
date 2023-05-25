@@ -148,7 +148,7 @@ where
         error!(
             target: LOG_TARGET,
             "Finality notifications stream closed unexpectedly. \
-			Couldn't build the canonicalization engine",
+            Couldn't build the canonicalization engine",
         );
         None
     }

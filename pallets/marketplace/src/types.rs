@@ -3,6 +3,12 @@ use sp_std::prelude::*;
 
 use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
 
+use core::fmt::Debug;
+#[cfg(feature = "std")]
+use serde;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+
 use crate::payments::RewardFor;
 use crate::Config;
 
@@ -205,6 +211,8 @@ pub struct Match<AcurastAccountId> {
 /// Structure representing a job registration partially specified.
 ///
 /// Useful for frontend to filter for processors that would match.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub struct PartialJobRegistration<Reward, AccountId> {
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
@@ -260,5 +268,38 @@ impl<T: Config> MarketplaceHooks<T> for () {
         _pub_keys: &PubKeys,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
+    }
+}
+
+/// Runtime API error.
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq)]
+pub enum RuntimeApiError {
+    /// Error when filtering matching sources failed.
+    #[cfg_attr(feature = "std", error("Filtering matching sources failed."))]
+    FilterMatchingSources,
+}
+
+impl RuntimeApiError {
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_error(self, e: impl Debug) -> Self {
+        log::error!(
+            target: "runtime::mmr",
+            "[{:?}] MMR error: {:?}",
+            self,
+            e,
+        );
+        self
+    }
+
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_debug(self, e: impl Debug) -> Self {
+        log::debug!(
+            target: "runtime::mmr",
+            "[{:?}] MMR error: {:?}",
+            self,
+            e,
+        );
+        self
     }
 }

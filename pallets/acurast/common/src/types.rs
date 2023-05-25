@@ -7,6 +7,11 @@ pub use bounded_attestation::*;
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
+#[cfg(feature = "std")]
+use serde;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+
 pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
 pub(crate) const SCRIPT_LENGTH: u32 = 53;
 
@@ -87,6 +92,8 @@ pub struct JobRegistration<AccountId, Extra> {
 
 pub const MAX_JOB_MODULES: u32 = 1;
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq, Eq)]
 pub enum JobModule {
     DataEncryption,
@@ -117,6 +124,8 @@ pub type JobModules = BoundedVec<JobModule, ConstU32<MAX_JOB_MODULES>>;
 ///   SLOT 2: ■■■□□□□□□□__________■■■□□□□□□□__________■■■□□□□□□□
 ///   SLOT 3: □□■■■□□□□□__________□□■■■□□□□□__________□□■■■□□□□□
 ///   ```
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.

@@ -19,6 +19,8 @@ pub mod benchmarking;
 mod functions;
 mod migration;
 pub mod payments;
+#[cfg(feature = "std")]
+pub mod rpc;
 pub mod traits;
 pub mod types;
 mod utils;
@@ -26,6 +28,9 @@ pub mod weights;
 pub mod weights_with_hooks;
 
 pub(crate) use pallet::STORAGE_VERSION;
+
+use pallet_acurast::MultiOrigin;
+use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -1043,18 +1048,29 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Filters the given `processors` by those recently seen and matching `partial_registration`
+        /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
-        fn filter(
+        pub fn filter_matching_sources(
             registration: PartialJobRegistration<RewardFor<T>, T::AccountId>,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
+            latest_seen_after: Option<u128>,
         ) -> Vec<T::AccountId> {
-            sources
+            let candidates = sources
                 .clone()
                 .into_iter()
-                .filter(|p| Self::check(&registration, &p, consumer.as_ref()).is_err())
-                .collect()
+                .filter(|p| {
+                    Self::check(&registration, &p, consumer.as_ref()).is_err()
+                        && latest_seen_after
+                            .map(|latest_seen_after| {
+                                T::ProcessorLastSeenProvider::last_seen(&p)
+                                    .map(|last_seen| last_seen >= latest_seen_after)
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(true)
+                })
+                .collect::<Vec<T::AccountId>>();
+            candidates
         }
 
         fn check(
@@ -1267,5 +1283,17 @@ pub mod pallet {
                 .try_into()
                 .map_err(|_| pallet_acurast::Error::<T>::FailedTimestampConversion)?)
         }
+    }
+}
+
+sp_api::decl_runtime_apis! {
+    /// API to interact with Acurast marketplace pallet.
+    pub trait MarketplaceRuntimeApi<R: Reward + codec::Codec, AccountId: codec::Codec> {
+         fn filter_matching_sources(
+            registration: PartialJobRegistration<R, AccountId>,
+            sources: Vec<AccountId>,
+            consumer: Option<MultiOrigin<AccountId>>,
+            latest_seen_after: Option<u128>,
+        ) -> Result<Vec<AccountId>, RuntimeApiError>;
     }
 }

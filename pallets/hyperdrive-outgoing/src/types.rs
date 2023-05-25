@@ -273,7 +273,6 @@ pub enum MMRError {
 }
 
 impl MMRError {
-    #![allow(unused_variables)]
     /// Consume given error `e` with `self` and generate a native log entry with error details.
     pub fn log_error(self, e: impl Debug) -> Self {
         log::error!(

@@ -28,8 +28,16 @@ sp-std = { git = "https://github.com/paritytech/substrate", default-features = f
 sp-runtime = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+jsonrpsee = { version = "0.16.2", features = ["client-core", "server", "macros"], optional = true }
+sp-blockchain = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41", optional = true }
 pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+
+# for RPC
+sp-api = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+serde = { version = "1.0.136", features = ["derive"], optional = true }
+thiserror = "1.0"
+log = { version = "0.4.17", default-features = false }
 
 # Polkadot
 xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.41" }
@@ -49,6 +57,7 @@ acurast-reputation = { path = "./reputation", default-features = false }
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
 hex-literal = "0.3"
+serde_json = "1.0.85"
 
 sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
@@ -90,5 +99,9 @@ std = [
 	"pallet-acurast/std",
 	"pallet-acurast-assets-manager/std",
 	"acurast-reputation/std",
+	"serde",
+	"jsonrpsee",
+	"sp-blockchain",
+	"log/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
