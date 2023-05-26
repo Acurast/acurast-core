@@ -434,7 +434,7 @@ pub mod pallet {
                 &job_id,
                 |m| -> Result<(bool, AssignmentFor<T>), Error<T>> {
                     // CHECK that job was matched previously to calling source
-                    let mut assignment = m
+                    let assignment = m
                         .as_mut()
                         .ok_or(Error::<T>::CannotAcknowledgeWhenNotMatched)?;
                     let changed = !assignment.acknowledged;
