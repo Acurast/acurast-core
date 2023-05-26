@@ -18,7 +18,7 @@ use tezos_michelson::michelson::data::{
     self, try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
 use tezos_michelson::michelson::types::{
-    address, bool as bool_type, bytes, nat, option, pair, set, string,
+    address, bool as bool_type, bytes, mutez, nat, option, pair, set, string,
 };
 use tezos_michelson::Error as TezosMichelineError;
 use tezos_michelson::{
@@ -154,7 +154,7 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 ///     allowOnlyVerifiedSources=sp.TBool,
 ///     allowedSources=sp.TOption(sp.TSet(sp.TString)),
 ///     extra=sp.TRecord(
-///         expectedFulfillmentFee=sp.TNat,
+///         expectedFulfillmentFee=sp.TMutez,
 ///         requirements=sp.TRecord(
 ///             instantMatch=sp.TOption(
 ///                 sp.TSet(
@@ -196,7 +196,7 @@ fn registration_payload_schema() -> &'static Micheline {
             // RegistrationExtra
             pair(vec![
                 // expected_fulfillment_fee
-                nat(),
+                mutez(),
                 // instant_match
                 pair(vec![
                     option(
