@@ -284,8 +284,8 @@ impl RuntimeApiError {
     /// Consume given error `e` with `self` and generate a native log entry with error details.
     pub fn log_error(self, e: impl Debug) -> Self {
         log::error!(
-            target: "runtime::mmr",
-            "[{:?}] MMR error: {:?}",
+            target: "runtime::acurast_marketplace",
+            "[{:?}] error: {:?}",
             self,
             e,
         );
@@ -295,8 +295,8 @@ impl RuntimeApiError {
     /// Consume given error `e` with `self` and generate a native log entry with error details.
     pub fn log_debug(self, e: impl Debug) -> Self {
         log::debug!(
-            target: "runtime::mmr",
-            "[{:?}] MMR error: {:?}",
+            target: "runtime::acurast_marketplace",
+            "[{:?}] error: {:?}",
             self,
             e,
         );
