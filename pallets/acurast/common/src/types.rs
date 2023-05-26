@@ -30,6 +30,8 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
 /// A multi origin identifies a given address from a given origin chain.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub enum MultiOrigin<AcurastAccountId> {
     Acurast(AcurastAccountId),

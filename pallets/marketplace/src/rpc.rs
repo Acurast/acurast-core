@@ -12,7 +12,7 @@ use jsonrpsee::{
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
-// use pallet_acurast::MultiOrigin;
+use pallet_acurast::MultiOrigin;
 use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
 
 const RUNTIME_ERROR: i32 = 8001;
@@ -35,7 +35,7 @@ pub trait MarketplaceApi<
         &self,
         registration: PartialJobRegistration<R, AccountId>,
         sources: Vec<AccountId>,
-        // consumer: Option<MultiOrigin<AccountId>>,
+        consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
     ) -> RpcResult<Vec<AccountId>>;
 }
@@ -79,7 +79,7 @@ where
         &self,
         registration: PartialJobRegistration<R, AccountId>,
         sources: Vec<AccountId>,
-        // consumer: Option<MultiOrigin<AccountId>>,
+        consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
     ) -> RpcResult<Vec<AccountId>> {
         let api = self.client.runtime_api();
@@ -88,7 +88,7 @@ where
                 self.client.info().best_hash,
                 registration,
                 sources,
-                None,
+                consumer,
                 latest_seen_after,
             )
             .map_err(runtime_error_into_rpc_error)?
