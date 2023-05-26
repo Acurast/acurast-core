@@ -317,6 +317,38 @@ pub mod pallet {
         }
     }
 
+    impl<T> Error<T> {
+        /// Returns true if the error is due to invalid matching proposal, i.e. *not* a hard internal error.
+        fn is_matching_error(self: &Self) -> bool {
+            match self {
+                Error::OverdueMatch => true,
+                Error::IncorrectSourceCountInMatch => true,
+                Error::DuplicateSourceInMatch => true,
+                Error::UnverifiedSourceInMatch => true,
+                Error::MultipleRewardAssetsInMatch => true,
+                Error::SchedulingWindowExceededInMatch => true,
+                Error::MaxMemoryExceededInMatch => true,
+                Error::NetworkRequestQuotaExceededInMatch => true,
+                Error::InsufficientStorageCapacityInMatch => true,
+                Error::SourceNotAllowedInMatch => true,
+                Error::ConsumerNotAllowedInMatch => true,
+                Error::InsufficientRewardInMatch => true,
+                Error::InsufficientReputationInMatch => true,
+                Error::ScheduleOverlapInMatch => true,
+                Error::ModuleNotAvailableInMatch => true,
+                Error::PalletAcurast(e) => match *e {
+                    pallet_acurast::Error::FulfillSourceNotAllowed => true,
+                    pallet_acurast::Error::FulfillSourceNotVerified => true,
+                    pallet_acurast::Error::AttestationCertificateNotValid => true,
+                    pallet_acurast::Error::AttestationUsageExpired => true,
+                    pallet_acurast::Error::RevokedCertificate => true,
+                    _ => false,
+                },
+                _ => false,
+            }
+        }
+    }
+
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
@@ -1064,20 +1096,30 @@ pub mod pallet {
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
         ) -> Result<Vec<T::AccountId>, Error<T>> {
-            let candidates = sources
-                .clone()
-                .into_iter()
-                .filter(|p| {
-                    Self::check(&registration, &p, consumer.as_ref()).is_err()
-                        && latest_seen_after
-                            .map(|latest_seen_after| {
-                                T::ProcessorLastSeenProvider::last_seen(&p)
-                                    .map(|last_seen| last_seen >= latest_seen_after)
-                                    .unwrap_or(false)
-                            })
-                            .unwrap_or(true)
-                })
-                .collect::<Vec<T::AccountId>>();
+            let mut candidates = Vec::new();
+            for p in sources {
+                let valid_match = match Self::check(&registration, &p, consumer.as_ref()) {
+                    Ok(()) => {
+                        if let Some(latest_seen_after) = latest_seen_after {
+                            T::ProcessorLastSeenProvider::last_seen(&p)
+                                .map(|last_seen| last_seen >= latest_seen_after)
+                                .unwrap_or(false)
+                        } else {
+                            true
+                        }
+                    }
+                    Err(e) => {
+                        if e.is_matching_error() {
+                            false;
+                        }
+                        return Err(e);
+                    }
+                };
+
+                if valid_match {
+                    candidates.push(p);
+                }
+            }
             Ok(candidates)
         }
 
