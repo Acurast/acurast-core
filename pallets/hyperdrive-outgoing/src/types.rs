@@ -273,11 +273,10 @@ pub enum MMRError {
 }
 
 impl MMRError {
-    #![allow(unused_variables)]
     /// Consume given error `e` with `self` and generate a native log entry with error details.
     pub fn log_error(self, e: impl Debug) -> Self {
         log::error!(
-            target: "runtime::mmr",
+            target: "runtime::acurast_hyperdrive_outgoing",
             "[{:?}] MMR error: {:?}",
             self,
             e,
@@ -288,7 +287,7 @@ impl MMRError {
     /// Consume given error `e` with `self` and generate a native log entry with error details.
     pub fn log_debug(self, e: impl Debug) -> Self {
         log::debug!(
-            target: "runtime::mmr",
+            target: "runtime::acurast_hyperdrive_outgoing",
             "[{:?}] MMR error: {:?}",
             self,
             e,

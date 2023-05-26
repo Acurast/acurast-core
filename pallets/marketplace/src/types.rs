@@ -1,7 +1,13 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin};
+use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
+
+use core::fmt::Debug;
+#[cfg(feature = "std")]
+use serde;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
 
 use crate::payments::RewardFor;
 use crate::Config;
@@ -202,6 +208,35 @@ pub struct Match<AcurastAccountId> {
     pub sources: Vec<PlannedExecution<AcurastAccountId>>,
 }
 
+/// Structure representing a job registration partially specified.
+///
+/// Useful for frontend to filter for processors that would match.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+pub struct PartialJobRegistration<Reward, AccountId> {
+    /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
+    pub allowed_sources: Option<Vec<AccountId>>,
+    /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
+    pub allow_only_verified_sources: bool,
+    /// The schedule describing the desired (multiple) execution(s) of the script.
+    pub schedule: Option<Schedule>,
+    /// Maximum memory bytes used during a single execution of the job.
+    pub memory: Option<u32>,
+    /// Maximum network request used during a single execution of the job.
+    pub network_requests: Option<u32>,
+    /// Maximum storage bytes used during the whole period of the job's executions.
+    pub storage: Option<u32>,
+    /// The modules required for the job.
+    pub required_modules: JobModules,
+    /// Job requirements: The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+    pub slots: Option<u8>,
+    /// Job requirements: Reward offered for each slot and scheduled execution of the job.
+    pub reward: Reward,
+    /// Job requirements: Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
+    pub min_reputation: Option<u128>,
+}
+
 /// The details for a single planned slot execution with the delay.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct PlannedExecution<AccountId> {
@@ -233,5 +268,38 @@ impl<T: Config> MarketplaceHooks<T> for () {
         _pub_keys: &PubKeys,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
+    }
+}
+
+/// Runtime API error.
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq)]
+pub enum RuntimeApiError {
+    /// Error when filtering matching sources failed.
+    #[cfg_attr(feature = "std", error("Filtering matching sources failed."))]
+    FilterMatchingSources,
+}
+
+impl RuntimeApiError {
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_error(self, e: impl Debug) -> Self {
+        log::error!(
+            target: "runtime::acurast_marketplace",
+            "[{:?}] error: {:?}",
+            self,
+            e,
+        );
+        self
+    }
+
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_debug(self, e: impl Debug) -> Self {
+        log::debug!(
+            target: "runtime::acurast_marketplace",
+            "[{:?}] error: {:?}",
+            self,
+            e,
+        );
+        self
     }
 }
