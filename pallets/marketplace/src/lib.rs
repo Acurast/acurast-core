@@ -307,6 +307,14 @@ pub mod pallet {
         JobNotAssigned,
         /// The job cannot be finalized yet.
         JobCannotBeFinalized,
+        /// Nested Acurast error.
+        PalletAcurast(pallet_acurast::Error<T>),
+    }
+
+    impl<T> From<pallet_acurast::Error<T>> for Error<T> {
+        fn from(e: pallet_acurast::Error<T>) -> Self {
+            Error::<T>::PalletAcurast(e)
+        }
     }
 
     #[pallet::hooks]
@@ -976,7 +984,7 @@ pub mod pallet {
             schedule: &Schedule,
             now: u64,
             start_delay: u64,
-        ) -> Result<(), DispatchError> {
+        ) -> Result<(), Error<T>> {
             match scheduling_window {
                 SchedulingWindow::End(end) => {
                     ensure!(
@@ -1007,7 +1015,7 @@ pub mod pallet {
             ad: &AdvertisementRestriction<T::AccountId>,
             schedule: &Schedule,
             network_requests: u32,
-        ) -> Result<(), DispatchError> {
+        ) -> Result<(), Error<T>> {
             // CHECK network request quota sufficient
             ensure!(
                 // duration (s) * network_request_quota >= network_requests (per second)
@@ -1032,7 +1040,7 @@ pub mod pallet {
             min_reputation: Option<u128>,
             source: &T::AccountId,
             reward_asset: &<T as Config>::AssetId,
-        ) -> Result<(), DispatchError> {
+        ) -> Result<(), Error<T>> {
             if let Some(min_reputation) = min_reputation {
                 let beta_params = <StoredReputation<T>>::get(source, reward_asset)
                     .ok_or(Error::<T>::ReputationNotFound)?;
@@ -1055,7 +1063,7 @@ pub mod pallet {
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
-        ) -> Vec<T::AccountId> {
+        ) -> Result<Vec<T::AccountId>, Error<T>> {
             let candidates = sources
                 .clone()
                 .into_iter()
@@ -1070,21 +1078,21 @@ pub mod pallet {
                             .unwrap_or(true)
                 })
                 .collect::<Vec<T::AccountId>>();
-            candidates
+            Ok(candidates)
         }
 
         fn check(
             registration: &PartialJobRegistration<RewardFor<T>, T::AccountId>,
             source: &T::AccountId,
             consumer: Option<&MultiOrigin<T::AccountId>>,
-        ) -> Result<(), DispatchError> {
+        ) -> Result<(), Error<T>> {
             // parse reward into asset_id and amount
             let reward_asset: <T as Config>::AssetId = registration
                 .reward
                 .try_get_asset_id()
                 .map_err(|_| Error::<T>::JobRegistrationUnsupportedReward)?
                 .into();
-            T::AssetValidator::validate(&reward_asset).map_err(|e| e.into())?;
+            T::AssetValidator::validate(&reward_asset).map_err(|_| Error::<T>::InvalidAssetId)?;
 
             let reward_amount: <T as Config>::AssetAmount = registration
                 .reward
@@ -1190,7 +1198,7 @@ pub mod pallet {
             source: &T::AccountId,
             schedule: &Schedule,
             start_delay: u64,
-        ) -> Result<(), DispatchError> {
+        ) -> Result<(), Error<T>> {
             for (job_id, assignment) in <StoredMatches<T>>::iter_prefix(&source) {
                 // TODO decide tradeoff: we could save this lookup at the cost of storing the schedule along with the match or even completly move it from StoredJobRegistration into StoredMatches
                 let other = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
@@ -1277,7 +1285,7 @@ pub mod pallet {
         }
 
         /// Returns the current timestamp.
-        pub fn now() -> Result<u64, DispatchError> {
+        pub fn now() -> Result<u64, Error<T>> {
             Ok(<T as pallet_acurast::Config>::UnixTime::now()
                 .as_millis()
                 .try_into()
