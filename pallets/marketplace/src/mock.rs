@@ -307,7 +307,7 @@ impl ManagerProvider<Test> for ManagerOf {
 pub struct ProcessorLastSeenProvider;
 
 impl crate::traits::ProcessorLastSeenProvider<Test> for ProcessorLastSeenProvider {
-    fn last_seen(processor: &<Test as frame_system::Config>::AccountId) -> Option<u128> {
+    fn last_seen(_processor: &<Test as frame_system::Config>::AccountId) -> Option<u128> {
         Some(AcurastMarketplace::now().unwrap().into())
     }
 }

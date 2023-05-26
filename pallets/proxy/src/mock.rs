@@ -419,7 +419,7 @@ pub mod acurast_runtime {
     impl pallet_acurast_marketplace::traits::ProcessorLastSeenProvider<Runtime>
         for ProcessorLastSeenProvider
     {
-        fn last_seen(processor: &<Runtime as frame_system::Config>::AccountId) -> Option<u128> {
+        fn last_seen(_processor: &<Runtime as frame_system::Config>::AccountId) -> Option<u128> {
             Some(AcurastMarketplace::now().unwrap().into())
         }
     }
