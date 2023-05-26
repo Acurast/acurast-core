@@ -1095,7 +1095,7 @@ pub mod pallet {
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
-        ) -> Result<Vec<T::AccountId>, Error<T>> {
+        ) -> Result<Vec<T::AccountId>, RuntimeApiError> {
             let mut candidates = Vec::new();
             for p in sources {
                 let valid_match = match Self::check(&registration, &p, consumer.as_ref()) {
@@ -1109,10 +1109,11 @@ pub mod pallet {
                         }
                     }
                     Err(e) => {
-                        if e.is_matching_error() {
-                            false;
+                        if !e.is_matching_error() {
+                            return Err(RuntimeApiError::FilterMatchingSources);
                         }
-                        return Err(e);
+
+                        false
                     }
                 };
 

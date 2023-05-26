@@ -9,10 +9,10 @@ use jsonrpsee::{
     proc_macros::rpc,
     types::error::{CallError, ErrorObject},
 };
+use pallet_acurast::MultiOrigin;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
-use pallet_acurast::MultiOrigin;
 use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
 
 const RUNTIME_ERROR: i32 = 8001;
@@ -29,7 +29,8 @@ pub trait MarketplaceApi<
     AccountId: MaybeSerializeDeserialize,
 >
 {
-    /// Filters the given `sources` by those recently seen and matching partially specified `registration`.
+    /// Filters the given `sources` by those recently seen and matching partially specified `registration`
+    /// and whitelisting `consumer` if specifying a whitelist.
     #[method(name = "filterMatchingSources")]
     fn filter_matching_sources(
         &self,
