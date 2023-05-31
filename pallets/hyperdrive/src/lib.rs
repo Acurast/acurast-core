@@ -99,9 +99,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type RegistrationExtra: From<
-            RegistrationExtra<Self::Reward, Self::Balance, Self::AccountId>,
-        >;
+        type RegistrationExtra: From<RegistrationExtra<Self::Balance, Self::AccountId>>;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -111,7 +109,7 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<Self::Reward, Self::AccountId, Self::RegistrationExtra>;
+        type MessageParser: MessageParser<Self::AccountId, Self::RegistrationExtra>;
 
         type ActionExecutor: ActionExecutor<Self::AccountId, Self::RegistrationExtra>;
 

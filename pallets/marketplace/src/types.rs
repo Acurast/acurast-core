@@ -26,20 +26,15 @@ pub type JobRegistrationForMarketplace<T> =
 
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
-pub struct RegistrationExtra<Reward, Balance, AccountId>
-where
-    Reward: Parameter + Member,
-{
-    pub requirements: JobRequirements<Reward, AccountId>,
+pub struct RegistrationExtra<Balance, AccountId> {
+    pub requirements: JobRequirements<Balance, AccountId>,
     pub expected_fulfillment_fee: Balance,
 }
 
-impl<Reward, Balance, AccountId> From<RegistrationExtra<Reward, Balance, AccountId>>
-    for JobRequirements<Reward, AccountId>
-where
-    Reward: Parameter + Member,
+impl<Balance, AccountId> From<RegistrationExtra<Balance, AccountId>>
+    for JobRequirements<Balance, AccountId>
 {
-    fn from(extra: RegistrationExtra<Reward, Balance, AccountId>) -> Self {
+    fn from(extra: RegistrationExtra<Balance, AccountId>) -> Self {
         extra.requirements
     }
 }
@@ -184,10 +179,7 @@ pub type JobRequirementsFor<T> =
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements<Reward, AccountId>
-where
-    Reward: Parameter + Member,
-{
+pub struct JobRequirements<Reward, AccountId> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// Reward offered for each slot and scheduled execution of the job.
