@@ -143,17 +143,11 @@ pub type MessageIdentifier = u128;
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub trait MessageParser<Reward, AccountId, Extra> {
+pub trait MessageParser<AccountId, Extra> {
     type Error;
-    type AssetParser: RewardParser<Reward>;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
     fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
-}
-
-pub trait RewardParser<Reward> {
-    type Error;
-    fn parse(encoded: Vec<u8>) -> Result<Reward, Self::Error>;
 }
 
 pub trait ActionExecutor<AccountId, Extra> {

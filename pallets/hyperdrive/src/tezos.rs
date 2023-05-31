@@ -3,11 +3,9 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use derive_more::Error as DError;
 use derive_more::{Display, From};
-use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
 use sp_core::RuntimeDebug;
-use sp_runtime::traits::Member;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 use sp_std::vec;
@@ -30,32 +28,20 @@ use pallet_acurast::{JobIdSequence, JobModule, JobRegistration, MultiOrigin, Sch
 use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
 
 use crate::types::{MessageParser, RawAction};
-use crate::RewardParser;
 use crate::{MessageIdentifier, ParsedAction};
 
-pub struct TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>(
-    PhantomData<(
-        Reward,
-        Balance,
-        ParsableAccountId,
-        AccountId,
-        Extra,
-        AssetParser,
-    )>,
+pub struct TezosParser<Balance, ParsableAccountId, AccountId, Extra>(
+    PhantomData<(Balance, ParsableAccountId, AccountId, Extra)>,
 );
 
-impl<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
-    MessageParser<Reward, AccountId, Extra>
-    for TezosParser<Reward, Balance, ParsableAccountId, AccountId, Extra, AssetParser>
+impl<Balance, ParsableAccountId, AccountId, Extra> MessageParser<AccountId, Extra>
+    for TezosParser<Balance, ParsableAccountId, AccountId, Extra>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
-    Reward: Parameter + Member,
+    Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
-    AssetParser: RewardParser<Reward>,
 {
     type Error = ValidationError;
-    type AssetParser = AssetParser;
 
     /// Parses an encoded key from Tezos representing a message identifier.
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error> {
@@ -73,14 +59,10 @@ where
         Ok(match action {
             RawAction::RegisterJob => {
                 let payload: Vec<u8> = (&payload).into();
-                let (job_id_sequence, registration) = parse_job_registration_payload::<
-                    Reward,
-                    Balance,
-                    ParsableAccountId,
-                    AccountId,
-                    Extra,
-                    AssetParser,
-                >(payload.as_slice())?;
+                let (job_id_sequence, registration) =
+                    parse_job_registration_payload::<Balance, ParsableAccountId, AccountId, Extra>(
+                        payload.as_slice(),
+                    )?;
 
                 ParsedAction::RegisterJob(
                     (
@@ -165,7 +147,7 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 ///                 )
 ///             ),
 ///             minReputation=sp.TOption(sp.TNat),
-///             reward=sp.TBytes,
+///             reward=sp.TNat,
 ///             slots=sp.TNat,
 ///         ).right_comb(),
 ///     ).right_comb(),
@@ -210,7 +192,7 @@ fn registration_payload_schema() -> &'static Micheline {
                     // min_reputation
                     option(nat()),
                     // reward
-                    bytes(),
+                    nat(),
                     // slots
                     nat(),
                 ])
@@ -252,22 +234,13 @@ fn registration_payload_schema() -> &'static Micheline {
 /// # Example
 /// A message's payload to register a job could look like:
 ///
-fn parse_job_registration_payload<
-    Reward,
-    Balance,
-    ParsableAccountId,
-    AccountId,
-    Extra,
-    AssetParser,
->(
+fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, Extra>(
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Reward, Balance, AccountId>>,
-    Reward: Parameter + Member,
+    Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
-    AssetParser: RewardParser<Reward>,
 {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
@@ -295,7 +268,7 @@ where
             })
         },
     )?;
-
+    // TODO: "expected_fulfillment_fee" field could be skipped (only used on the target chain)
     let expected_fulfillment_fee = {
         let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
             FieldError::ExpectedFulfillmentFee,
@@ -352,12 +325,12 @@ where
         },
     )?;
     let reward = {
-        let reward: Bytes = try_bytes(
+        let v: Int = try_int(
             iter.next()
                 .ok_or(ValidationError::MissingField(FieldError::Reward))?,
         )?;
-        let reward: Vec<u8> = (&reward).into();
-        AssetParser::parse(reward.to_vec()).map_err(|_| ValidationError::InvalidReward)?
+        let v: u128 = v.to_integer()?;
+        v.into()
     };
     let slots = {
         let v: Int = try_int(
@@ -594,10 +567,10 @@ mod tests {
 
     #[test]
     fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f804670a000000ee050707030a0707050902000000250a00000020000000000000000000000000000000000000000000000000000000000000000007070707000007070509020000002907070a00000020111111111111111111111111111111111111111111111111111111111111111100000707030607070a00000001ff00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000ec050707030a0707050902000000250a0000002000000000000000000000000000000000000000000000000000000000000000000707070700a80f07070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
-        let exp: TezosAddress = "tz1h4EsGunH2Ue1T2uNs8mfKZ8XZoQji3HcK".try_into().unwrap();
+        let exp: TezosAddress = "KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1".try_into().unwrap();
         assert_eq!(exp, origin);
 
         let payload: Vec<u8> = (&payload).into();
@@ -605,19 +578,13 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
-                RegistrationExtra<
-                    MockAsset,
-                    AssetAmount,
-                    <Test as frame_system::Config>::AccountId,
-                >,
+                RegistrationExtra<AssetAmount, <Test as frame_system::Config>::AccountId>,
             >,
         ) = parse_job_registration_payload::<
-            _,
             _,
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
             _,
-            SimpleAssetParser,
         >(payload.as_slice())?;
         let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
             script: Script::try_from(vec![
@@ -645,7 +612,7 @@ mod tests {
             extra: RegistrationExtra {
                 requirements: JobRequirements {
                     slots: 1,
-                    reward: MockAsset { id: 5, amount: 255 },
+                    reward: 1000,
                     min_reputation: None,
                     instant_match: Some(vec![PlannedExecution {
                         source: hex![
@@ -655,7 +622,7 @@ mod tests {
                         start_delay: 0,
                     }]),
                 },
-                expected_fulfillment_fee: 0,
+                expected_fulfillment_fee: 1000,
             },
         };
 

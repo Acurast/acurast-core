@@ -23,7 +23,7 @@ use pallet_acurast_marketplace::{RegistrationExtra, Reward};
 
 use crate::tezos::TezosParser;
 use crate::types::RawAction;
-use crate::{weights, ActionExecutor, ParsedAction, RewardParser, StateOwner};
+use crate::{weights, ActionExecutor, ParsedAction, StateOwner};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -93,17 +93,15 @@ impl crate::Config for Test {
     type Reward = MockAsset;
     type Balance = AssetAmount;
     type RegistrationExtra =
-        RegistrationExtra<MockAsset, AssetAmount, <Self as frame_system::Config>::AccountId>;
+        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
     type MessageParser = TezosParser<
-        Self::Reward,
         Self::Balance,
         AcurastAccountId,
         <Self as frame_system::Config>::AccountId,
         Self::RegistrationExtra,
-        SimpleAssetParser,
     >;
     type ActionExecutor = ();
     type WeightInfo = weights::Weights<Test>;
@@ -158,18 +156,6 @@ impl Reward for MockAsset {
 
     fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
         Ok(self.amount)
-    }
-}
-
-pub struct SimpleAssetParser;
-impl RewardParser<MockAsset> for SimpleAssetParser {
-    type Error = ();
-
-    fn parse(encoded: Vec<u8>) -> Result<MockAsset, Self::Error> {
-        let mut combined = vec![0u8; 16];
-        combined[16 - encoded.len()..].copy_from_slice(&encoded.as_ref());
-        let amount: u128 = u128::from_be_bytes(combined.as_slice().try_into().map_err(|_| ())?);
-        Ok(MockAsset { id: 5, amount })
     }
 }
 
