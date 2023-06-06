@@ -13,8 +13,6 @@ pub mod benchmarking;
 
 pub mod weights;
 
-pub mod traits;
-
 use sp_runtime::traits::StaticLookup;
 
 pub use pallet::*;
@@ -27,7 +25,6 @@ type AccountIdLookupOf<T> = <<T as frame_system::Config>::Lookup as StaticLookup
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use crate::traits::AssetValidator;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use xcm::latest::MultiLocation;
@@ -240,15 +237,6 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> AssetValidator<AssetId> for Pallet<T, I> {
-        type Error = Error<T, I>;
-
-        fn validate(asset: &AssetId) -> Result<(), Self::Error> {
-            Self::reverse_asset_index(asset).ok_or(Error::<T, I>::AssetNotIndexed)?;
-            Ok(())
-        }
-    }
-
     impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> Convert<MultiLocation, T::AssetId>
         for Pallet<T, I>
     {
@@ -260,28 +248,6 @@ pub mod pallet {
                 Concrete(location) => Ok(location),
                 Abstract(_) => Err(()),
             }
-        }
-    }
-
-    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> acurast_common::AssetTransfer
-        for Pallet<T, I>
-    {
-        type AssetId = AssetId;
-        type AccountId = T::AccountId;
-        type Balance = T::Balance;
-        type Error = DispatchError;
-
-        fn transfer(
-            asset: Self::AssetId,
-            source: &Self::AccountId,
-            dest: &Self::AccountId,
-            amount: Self::Balance,
-        ) -> Result<(), Self::Error> {
-            let id =
-                <ReverseAssetIndex<T, I>>::get(&asset).ok_or(Error::<T, I>::AssetNotIndexed)?;
-            let _: Self::Balance =
-                <pallet_assets::Pallet::<T, I> as frame_support::traits::tokens::fungibles::Transfer<Self::AccountId>>::transfer(id, source, dest, amount, true)?;
-            Ok(())
         }
     }
 }

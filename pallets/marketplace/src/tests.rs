@@ -21,7 +21,6 @@ fn test_match() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let asset_id = ad.pricing[0].reward_asset;
     let registration1 = JobRegistrationFor::<Test> {
         script: script(),
         allowed_sources: None,
@@ -39,7 +38,7 @@ fn test_match() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
@@ -61,7 +60,7 @@ fn test_match() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
@@ -96,11 +95,8 @@ fn test_match() {
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
         assert_eq!(
-            Some(ad.pricing[0].clone()),
-            AcurastMarketplace::stored_advertisement_pricing(
-                processor_account_id(),
-                asset_id.clone()
-            )
+            Some(ad.pricing.clone()),
+            AcurastMarketplace::stored_advertisement_pricing(processor_account_id())
         );
 
         assert_ok!(Acurast::register(
@@ -176,13 +172,12 @@ fn test_match() {
             ExecutionResult::Success(operation_hash())
         ));
         // average reward only updated at end of job
-        assert_eq!(None, AcurastMarketplace::average_reward(asset_id.clone()),);
+        assert_eq!(None, AcurastMarketplace::average_reward());
         // reputation still ~50%
         assert_eq!(
             Permill::from_parts(509_803),
             BetaReputation::<u128>::normalize(
-                AcurastMarketplace::stored_reputation(processor_account_id(), asset_id.clone())
-                    .unwrap()
+                AcurastMarketplace::stored_reputation(processor_account_id()).unwrap()
             )
             .unwrap()
         );
@@ -190,10 +185,7 @@ fn test_match() {
             Some(Assignment {
                 slot: 0,
                 start_delay: 0,
-                fee_per_execution: MockAsset {
-                    id: 0,
-                    amount: 5_020_000
-                },
+                fee_per_execution: 5_020_000,
                 acknowledged: true,
                 sla: SLA { total: 2, met: 1 },
                 pub_keys: PubKeys::default(),
@@ -233,21 +225,14 @@ fn test_match() {
             None,
             AcurastMarketplace::stored_matches(processor_account_id(), job_id1.clone()),
         );
-        assert_eq!(
-            Some(2),
-            AcurastMarketplace::total_assigned(asset_id.clone())
-        );
+        assert_eq!(Some(2), AcurastMarketplace::total_assigned());
         // average reward only updated at end of job
-        assert_eq!(
-            Some(3000000),
-            AcurastMarketplace::average_reward(asset_id.clone())
-        );
+        assert_eq!(Some(3000000), AcurastMarketplace::average_reward());
         // reputation increased
         assert_eq!(
             Permill::from_parts(763_424),
             BetaReputation::<u128>::normalize(
-                AcurastMarketplace::stored_reputation(processor_account_id(), asset_id.clone())
-                    .unwrap()
+                AcurastMarketplace::stored_reputation(processor_account_id()).unwrap()
             )
             .unwrap()
         );
@@ -273,47 +258,32 @@ fn test_match() {
                     ad.clone(),
                     processor_account_id()
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 12_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(12_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
                     job_id1.clone(),
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 12_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(12_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration2.clone(),
                     job_id2.clone(),
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match1)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(job_match2)),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
-                    id: 0,
-                    amount: 3_920_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(3_920_000)), // this is before splitting of the configured percentage that actually is transferred to the matcher
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationAssigned(
                     job_id1.clone(),
                     processor_account_id(),
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
                         pub_keys: PubKeys::default(),
                     }
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
-                    id: 0,
-                    amount: 5_020_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(5_020_000)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
                     job_id1.clone(),
                     operation_hash()
@@ -324,19 +294,13 @@ fn test_match() {
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
                         pub_keys: PubKeys::default(),
                     }
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
-                    id: 0,
-                    amount: 5_020_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(5_020_000)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
                     job_id1.clone(),
                     operation_hash()
@@ -347,10 +311,7 @@ fn test_match() {
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
                         pub_keys: PubKeys::default(),
@@ -385,7 +346,7 @@ fn test_no_match_schedule_overlap() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
@@ -408,7 +369,7 @@ fn test_no_match_schedule_overlap() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
@@ -481,27 +442,18 @@ fn test_no_match_schedule_overlap() {
                     ad.clone(),
                     processor_account_id()
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 12_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(12_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
                     job_id1.clone()
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 18_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(18_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration2.clone(),
                     (job_id1.0.clone(), &job_id1.1 + 1)
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
-                    id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(1_960_000)),
                 // no match event for second
             ]
         );
@@ -531,7 +483,7 @@ fn test_no_match_insufficient_reputation() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: Some(1_000_000),
             instant_match: None,
         },
@@ -581,10 +533,7 @@ fn test_no_match_insufficient_reputation() {
                     ad.clone(),
                     processor_account_id()
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 12_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(12_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
                     job_id.clone()
@@ -618,7 +567,7 @@ fn test_more_reports_than_expected() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: asset(3_000_000 * 2),
+            reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
@@ -706,38 +655,26 @@ fn test_more_reports_than_expected() {
                     ad.clone(),
                     processor_account_id()
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(MockAsset {
-                    id: 0,
-                    amount: 12_000_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::Locked(12_000_000)),
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration.clone(),
                     job_id.clone()
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(m)),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(MockAsset {
-                    id: 0,
-                    amount: 1_960_000 // this is before splitting of the configured percentage that actually is transferred to the matcher
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayMatcherReward(1_960_000)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationAssigned(
                     job_id.clone(),
                     processor_account_id(),
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 0 },
                         pub_keys: PubKeys::default(),
                     }
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
-                    id: 0,
-                    amount: 5_020_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(5_020_000)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
                     job_id.clone(),
                     operation_hash()
@@ -748,19 +685,13 @@ fn test_more_reports_than_expected() {
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 1 },
                         pub_keys: PubKeys::default(),
                     }
                 )),
-                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(MockAsset {
-                    id: 0,
-                    amount: 5_020_000
-                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PayReward(5_020_000)),
                 RuntimeEvent::AcurastMarketplace(crate::Event::ExecutionSuccess(
                     job_id.clone(),
                     operation_hash()
@@ -771,10 +702,7 @@ fn test_more_reports_than_expected() {
                     Assignment {
                         slot: 0,
                         start_delay: 0,
-                        fee_per_execution: MockAsset {
-                            id: 0,
-                            amount: 5_020_000
-                        },
+                        fee_per_execution: 5_020_000,
                         acknowledged: true,
                         sla: SLA { total: 2, met: 2 },
                         pub_keys: PubKeys::default(),

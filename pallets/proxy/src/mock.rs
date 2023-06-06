@@ -2,23 +2,15 @@ use std::marker::PhantomData;
 
 use acurast_common::Schedule;
 use frame_support::traits::OriginTrait;
-use pallet_acurast_marketplace::Reward;
-use scale_info::TypeInfo;
-use sp_core::*;
-use sp_std::prelude::*;
 use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-pub type AcurastAssetId = AssetId;
-pub type InternalAssetId = u32;
-pub type AcurastAssetAmount = u128;
+pub type Balance = u128;
 
 use acurast_runtime::AccountId as AcurastAccountId;
 use pallet_acurast::{JobModules, JobRegistration, CU32};
-use pallet_acurast_marketplace::{
-    types::MAX_PRICING_VARIANTS, Advertisement, JobRequirements, PricingVariant, SchedulingWindow,
-};
+use pallet_acurast_marketplace::{Advertisement, JobRequirements, Pricing, SchedulingWindow};
 
 pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
@@ -28,17 +20,8 @@ pub fn alice_account_id() -> AcurastAccountId {
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn owned_asset(amount: u128) -> AcurastAsset {
-    AcurastAsset(MultiAsset {
-        id: Concrete(MultiLocation {
-            parents: 1,
-            interior: X3(Parachain(1000), PalletInstance(50), GeneralIndex(22)),
-        }),
-        fun: Fungible(amount),
-    })
-}
 pub fn registration(
-) -> JobRegistration<AcurastAccountId, JobRequirements<AcurastAsset, AcurastAccountId>> {
+) -> JobRegistration<AcurastAccountId, JobRequirements<Balance, AcurastAccountId>> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -56,37 +39,22 @@ pub fn registration(
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
-            reward: owned_asset(20000),
+            reward: 20000,
             min_reputation: None,
             instant_match: None,
         },
     }
 }
-pub fn asset(id: u32) -> AssetId {
-    AssetId::Concrete(MultiLocation::new(
-        1,
-        X3(
-            Parachain(1000),
-            PalletInstance(50),
-            GeneralIndex(id as u128),
-        ),
-    ))
-}
 pub fn advertisement(
     fee_per_millisecond: u128,
-) -> Advertisement<AcurastAccountId, AcurastAssetId, AcurastAssetAmount, CU32<10>> {
-    let pricing: frame_support::BoundedVec<
-        PricingVariant<AcurastAssetId, AcurastAssetAmount>,
-        ConstU32<MAX_PRICING_VARIANTS>,
-    > = bounded_vec![PricingVariant {
-        reward_asset: asset(22),
-        fee_per_millisecond,
-        fee_per_storage_byte: 0,
-        base_fee_per_execution: 0,
-        scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
-    }];
+) -> Advertisement<AcurastAccountId, Balance, CU32<10>> {
     Advertisement {
-        pricing,
+        pricing: Pricing {
+            fee_per_millisecond,
+            fee_per_storage_byte: 0,
+            base_fee_per_execution: 0,
+            scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
+        },
         allowed_consumers: None,
         storage_capacity: 5,
         max_memory: 5000,
@@ -95,43 +63,14 @@ pub fn advertisement(
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Encode, Decode, TypeInfo)]
-pub struct AcurastAsset(pub MultiAsset);
-
-impl Reward for AcurastAsset {
-    type AssetId = AcurastAssetId;
-    type AssetAmount = AcurastAssetAmount;
-    type Error = ();
-
-    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
-        self.0 = MultiAsset {
-            id: self.0.id.clone(),
-            fun: Fungible(amount),
-        };
-        Ok(self)
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        Ok(self.0.id.clone())
-    }
-
-    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        match self.0.fun {
-            Fungible(amount) => Ok(amount),
-            _ => Err(()),
-        }
-    }
-}
-
 pub mod acurast_runtime {
     use frame_support::{
         construct_runtime, parameter_types,
         sp_runtime::{testing::Header, traits::AccountIdLookup, AccountId32},
-        traits::{AsEnsureOriginWithArg, Everything, Nothing},
+        traits::{Everything, Nothing},
         PalletId,
     };
     pub use pallet_acurast::{self, CU32};
-    use pallet_acurast_assets_manager::traits::AssetValidator;
     pub use pallet_acurast_marketplace;
     use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
     use pallet_xcm::XcmPassthrough;
@@ -148,7 +87,7 @@ pub mod acurast_runtime {
     };
     use xcm_executor::XcmExecutor;
 
-    use super::{AcurastAsset, AcurastAssetAmount, AcurastAssetId, InternalAssetId};
+    use super::Balance;
 
     pub type AccountId = AccountId32;
     pub type LocalOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>;
@@ -171,19 +110,8 @@ pub mod acurast_runtime {
         XcmPassthrough<RuntimeOrigin>,
     );
 
-    pub struct PassAllAssets {}
-    impl<AssetId> AssetValidator<AssetId> for PassAllAssets {
-        type Error = DispatchError;
-
-        fn validate(_: &AssetId) -> Result<(), Self::Error> {
-            Ok(())
-        }
-    }
-
     pub const MILLISECS_PER_BLOCK: u64 = 12000;
     pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
-    pub const UNIT: AcurastAssetAmount = 1_000_000;
-    pub const MICROUNIT: AcurastAssetAmount = 1;
 
     construct_runtime!(
         pub enum Runtime where
@@ -194,8 +122,6 @@ pub mod acurast_runtime {
             System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
             Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
             Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-            Assets: pallet_assets::{Pallet, Storage, Event<T>, Config<T>}, // hide calls since they get proxied by `pallet_acurast_assets`
-            AcurastAssets: pallet_acurast_assets_manager::{Pallet, Storage, Event<T>, Config<T>, Call},
             ParachainInfo: parachain_info::{Pallet, Storage, Config},
             MsgQueue: super::mock_msg_queue::{Pallet, Storage, Event<T>},
             PolkadotXcm: pallet_xcm::{Pallet, Call, Event<T>, Origin},
@@ -214,7 +140,7 @@ pub mod acurast_runtime {
         pub const BlockHashCount: u64 = 250;
     }
     parameter_types! {
-        pub ExistentialDeposit: AcurastAssetAmount = 1;
+        pub ExistentialDeposit: Balance = 1;
         pub const MaxLocks: u32 = 50;
         pub const MaxReserves: u32 = 50;
     }
@@ -261,7 +187,7 @@ pub mod acurast_runtime {
     }
 
     impl pallet_balances::Config for Runtime {
-        type Balance = AcurastAssetAmount;
+        type Balance = Balance;
         type DustRemoval = ();
         type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;
@@ -290,7 +216,7 @@ pub mod acurast_runtime {
         type DbWeight = ();
         type Version = ();
         type PalletInfo = PalletInfo;
-        type AccountData = pallet_balances::AccountData<AcurastAssetAmount>;
+        type AccountData = pallet_balances::AccountData<Balance>;
         type OnNewAccount = ();
         type OnKilledAccount = ();
         type SystemWeightInfo = ();
@@ -308,55 +234,8 @@ pub mod acurast_runtime {
         type WeightInfo = ();
     }
 
-    impl pallet_assets::Config for Runtime {
-        type RuntimeEvent = RuntimeEvent;
-        type Balance = AcurastAssetAmount;
-        type AssetId = InternalAssetId;
-        type AssetIdParameter = codec::Compact<InternalAssetId>;
-        type Currency = Balances;
-        type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
-        type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-        type AssetDeposit = frame_support::traits::ConstU128<0>;
-        type AssetAccountDeposit = frame_support::traits::ConstU128<0>;
-        type MetadataDepositBase = frame_support::traits::ConstU128<{ UNIT }>;
-        type MetadataDepositPerByte = frame_support::traits::ConstU128<{ 10 * MICROUNIT }>;
-        type ApprovalDeposit = frame_support::traits::ConstU128<{ 10 * MICROUNIT }>;
-        type StringLimit = frame_support::traits::ConstU32<50>;
-        type Freezer = ();
-        type Extra = ();
-        type WeightInfo = ();
-        type RemoveItemsLimit = ();
-        type CallbackHandle = ();
-        #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper = TestBenchmarkHelper;
-    }
-
-    impl pallet_acurast_assets_manager::Config for Runtime {
-        type RuntimeEvent = RuntimeEvent;
-        type ManagerOrigin = frame_system::EnsureRoot<Self::AccountId>;
-        type WeightInfo = ();
-        #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper = TestBenchmarkHelper;
-    }
-
     #[cfg(feature = "runtime-benchmarks")]
     pub struct TestBenchmarkHelper;
-    #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_assets::BenchmarkHelper<<Runtime as pallet_assets::Config>::AssetIdParameter>
-        for TestBenchmarkHelper
-    {
-        fn create_asset_id_parameter(
-            id: u32,
-        ) -> <Runtime as pallet_assets::Config>::AssetIdParameter {
-            codec::Compact(id.into())
-        }
-    }
-    #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_acurast_assets_manager::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
-        fn manager_account() -> <Runtime as frame_system::Config>::AccountId {
-            [0; 32].into()
-        }
-    }
 
     pub struct FeeManagerImpl;
 
@@ -376,7 +255,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId>;
         type MaxAllowedSources = frame_support::traits::ConstU32<1000>;
         type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
         type PalletId = AcurastPalletId;
@@ -394,10 +273,7 @@ pub mod acurast_runtime {
         fn registration_extra() -> <Runtime as pallet_acurast::Config>::RegistrationExtra {
             JobRequirements {
                 slots: 1,
-                reward: AcurastAsset(MultiAsset {
-                    id: super::asset(1),
-                    fun: Fungible(1),
-                }),
+                reward: 1,
                 min_reputation: None,
                 instant_match: None,
             }
@@ -428,15 +304,12 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
-        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
-        type AssetId = AcurastAssetId;
-        type AssetAmount = AcurastAssetAmount;
+        type Balance = Balance;
         type ManagerProvider = ManagerOf;
-        type RewardManager =
-            AssetRewardManager<AcurastAsset, FeeManagerImpl, Balances, AcurastAssets>;
-        type AssetValidator = PassAllAssets;
+        type RewardManager = AssetRewardManager<Balance, FeeManagerImpl, Balances>;
         type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
         type MarketplaceHooks = ();
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
@@ -506,7 +379,7 @@ pub mod proxy_runtime {
     use pallet_acurast::CU32;
     use pallet_acurast_marketplace::JobRequirements;
 
-    use crate::mock::{AcurastAsset, AcurastAssetAmount, AcurastAssetId};
+    use crate::mock::Balance;
 
     #[cfg(feature = "runtime-benchmarks")]
     use super::{advertisement, alice_account_id, registration};
@@ -584,7 +457,7 @@ pub mod proxy_runtime {
         pub const MaxAssetsIntoHolding: u32 = 64;
     }
     parameter_types! {
-        pub ExistentialDeposit: AcurastAssetAmount = 1;
+        pub ExistentialDeposit: Balance = 1;
         pub const MaxLocks: u32 = 50;
         pub const MaxReserves: u32 = 50;
     }
@@ -630,7 +503,7 @@ pub mod proxy_runtime {
         type DbWeight = ();
         type Version = ();
         type PalletInfo = PalletInfo;
-        type AccountData = pallet_balances::AccountData<AcurastAssetAmount>;
+        type AccountData = pallet_balances::AccountData<Balance>;
         type OnNewAccount = ();
         type OnKilledAccount = ();
         type SystemWeightInfo = ();
@@ -640,7 +513,7 @@ pub mod proxy_runtime {
     }
 
     impl pallet_balances::Config for Runtime {
-        type Balance = AcurastAssetAmount;
+        type Balance = Balance;
         type DustRemoval = ();
         type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;
@@ -683,11 +556,10 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<AcurastAsset, AccountId>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId>;
         type MaxAllowedSources = ConstU32<10>;
         type MaxAllowedConsumers = CU32<10>;
-        type AssetId = AcurastAssetId;
-        type AssetAmount = AcurastAssetAmount;
+        type Balance = Balance;
         type XcmSender = XcmRouter;
         type AcurastPalletId = AcurastPalletId;
         type AcurastMarketplacePalletId = AcurastMarketplacePalletId;
@@ -720,8 +592,7 @@ pub mod proxy_runtime {
 
         fn create_advertisement() -> pallet_acurast_marketplace::Advertisement<
             <Runtime as frame_system::Config>::AccountId,
-            <Runtime as crate::Config>::AssetId,
-            <Runtime as crate::Config>::AssetAmount,
+            <Runtime as crate::Config>::Balance,
             <Runtime as crate::Config>::MaxAllowedConsumers,
         > {
             advertisement(10)
@@ -755,7 +626,7 @@ pub mod relay_chain {
     };
     use xcm_executor::{Config, XcmExecutor};
 
-    use crate::mock::AcurastAssetAmount;
+    use crate::mock::Balance;
 
     pub type AccountId = AccountId32;
     pub type SovereignAccountOf = (
@@ -837,7 +708,7 @@ pub mod relay_chain {
         pub const FirstMessageFactorPercent: u64 = 100;
     }
     parameter_types! {
-        pub ExistentialDeposit: AcurastAssetAmount = 1;
+        pub ExistentialDeposit: Balance = 1;
         pub const MaxLocks: u32 = 50;
         pub const MaxReserves: u32 = 50;
     }
@@ -864,7 +735,7 @@ pub mod relay_chain {
         type DbWeight = ();
         type Version = ();
         type PalletInfo = PalletInfo;
-        type AccountData = pallet_balances::AccountData<AcurastAssetAmount>;
+        type AccountData = pallet_balances::AccountData<Balance>;
         type OnNewAccount = ();
         type OnKilledAccount = ();
         type SystemWeightInfo = ();
@@ -876,7 +747,7 @@ pub mod relay_chain {
     impl parachain_info::Config for Runtime {}
 
     impl pallet_balances::Config for Runtime {
-        type Balance = AcurastAssetAmount;
+        type Balance = Balance;
         type DustRemoval = ();
         type RuntimeEvent = RuntimeEvent;
         type ExistentialDeposit = ExistentialDeposit;

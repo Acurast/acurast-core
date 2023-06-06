@@ -2,7 +2,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use crate::{MarketplaceRuntimeApi, PartialJobRegistration, Reward, RuntimeApiError};
+use crate::{MarketplaceRuntimeApi, PartialJobRegistration, RuntimeApiError};
 use codec::Codec;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -22,10 +22,9 @@ const MARKETPLACE_ERROR: i32 = 8011;
 #[rpc(client, server)]
 pub trait MarketplaceApi<
     BlockHash,
-    AssetId,
-    AssetAmount,
+    Balance,
     Error,
-    R: Reward<AssetId = AssetId, AssetAmount = AssetAmount, Error = Error> + MaybeSerializeDeserialize,
+    R: MaybeSerializeDeserialize,
     AccountId: MaybeSerializeDeserialize,
 >
 {
@@ -58,22 +57,17 @@ impl<C, B> Marketplace<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, AssetId, AssetAmount, Error, R, AccountId>
-    MarketplaceApiServer<HashFor<Block>, AssetId, AssetAmount, Error, R, AccountId>
-    for Marketplace<Client, (Block, AssetId, AssetAmount, Error, R, AccountId)>
+impl<Client, Block, AssetId, Balance, Error, R, AccountId>
+    MarketplaceApiServer<HashFor<Block>, Balance, Error, R, AccountId>
+    for Marketplace<Client, (Block, AssetId, Balance, Error, R, AccountId)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
     Client::Api: MarketplaceRuntimeApi<Block, R, AccountId>,
     AssetId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
-    AssetAmount: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
+    Balance: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     Error: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
-    R: Reward<AssetId = AssetId, AssetAmount = AssetAmount, Error = Error>
-        + MaybeSerializeDeserialize
-        + Codec
-        + Send
-        + Sync
-        + 'static,
+    R: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     AccountId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
     fn filter_matching_sources(

@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
+use frame_support::sp_runtime::traits::AccountIdConversion;
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
@@ -87,26 +87,6 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
             (bob_account_id(), INITIAL_BALANCE),
             (processor_account_id(), INITIAL_BALANCE),
         ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    // give alice an initial balance of token 22 (backed by statemint) to pay for a job
-    // get the MultiAsset representing token 22 with owned_asset()
-    pallet_assets::GenesisConfig::<Runtime> {
-        assets: vec![(22, pallet_assets_account(), false, 1_000)],
-        metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-        accounts: vec![
-            (22, alice_account_id(), INITIAL_BALANCE),
-            (22, bob_account_id(), INITIAL_BALANCE),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    // make asset 22 a valid asset via Genesis
-    pallet_acurast_assets_manager::GenesisConfig::<Runtime> {
-        assets: vec![(22, 1000, 50, 22)],
     }
     .assimilate_storage(&mut t)
     .unwrap();

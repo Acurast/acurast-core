@@ -19,7 +19,7 @@ use sp_runtime::{
 };
 use sp_std::prelude::*;
 
-use pallet_acurast_marketplace::{RegistrationExtra, Reward};
+use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::tezos::TezosParser;
 use crate::types::RawAction;
@@ -90,8 +90,7 @@ impl crate::Config for Test {
     type TargetChainOwner = TargetChainStateOwner;
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
-    type Reward = MockAsset;
-    type Balance = AssetAmount;
+    type Balance = Balance;
     type RegistrationExtra =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId>;
     type TargetChainHashing = Keccak256;
@@ -131,33 +130,7 @@ pub fn events() -> Vec<RuntimeEvent> {
     evt
 }
 
-pub type AssetId = u32;
-pub type AssetAmount = u128;
-
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct MockAsset {
-    pub id: AssetId,
-    pub amount: AssetAmount,
-}
-
-impl Reward for MockAsset {
-    type AssetId = AssetId;
-    type AssetAmount = AssetAmount;
-    type Error = ();
-
-    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
-        self.amount = amount;
-        Ok(self)
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        Ok(self.id)
-    }
-
-    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        Ok(self.amount)
-    }
-}
+pub type Balance = u128;
 
 impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
     fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {

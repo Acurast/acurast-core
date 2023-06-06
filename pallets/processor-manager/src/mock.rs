@@ -1,5 +1,4 @@
 use frame_support::{
-    pallet_prelude::GenesisBuild,
     sp_runtime::{
         generic,
         traits::{AccountIdLookup, BlakeTwo256, ConstU128, ConstU32},
@@ -7,7 +6,6 @@ use frame_support::{
     },
     traits::{
         fungible::{Inspect, Mutate},
-        fungibles::{InspectEnumerable, Transfer},
         nonfungibles::{Create, InspectEnumerable as NFTInspectEnumerable},
         AsEnsureOriginWithArg, Everything,
     },
@@ -37,19 +35,6 @@ impl ExtBuilder {
         .assimilate_storage(&mut t)
         .unwrap();
 
-        // give alice an initial balance of token 22 (backed by statemint) to pay for a job
-        // get the MockAsset representing token 22 with owned_asset()
-        pallet_assets::GenesisConfig::<Test> {
-            assets: vec![(22, pallet_assets_account(), false, 1_000)],
-            metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-            accounts: vec![
-                (22, alice_account_id(), INITIAL_BALANCE),
-                (22, bob_account_id(), INITIAL_BALANCE),
-            ],
-        }
-        .assimilate_storage(&mut t)
-        .unwrap();
-
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
@@ -70,7 +55,6 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         Uniques: pallet_uniques::{Pallet, Storage, Event<T>, Call},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         AcurastProcessorManager: crate::{Pallet, Call, Storage, Event<T>},
@@ -116,40 +100,6 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-}
-
-impl pallet_assets::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type Balance = Balance;
-    type AssetId = AssetId;
-    type AssetIdParameter = codec::Compact<AssetId>;
-    type Currency = Balances;
-    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
-    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-    type AssetDeposit = ConstU128<0>;
-    type AssetAccountDeposit = ConstU128<0>;
-    type MetadataDepositBase = ConstU128<0>;
-    type MetadataDepositPerByte = ConstU128<0>;
-    type ApprovalDeposit = ConstU128<0>;
-    type StringLimit = ConstU32<50>;
-    type Freezer = ();
-    type Extra = ();
-    type WeightInfo = ();
-    type RemoveItemsLimit = ();
-    type CallbackHandle = ();
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = TestBenchmarkHelper;
-}
-
-#[cfg(feature = "runtime-benchmarks")]
-pub struct TestBenchmarkHelper;
-#[cfg(feature = "runtime-benchmarks")]
-impl pallet_assets::BenchmarkHelper<<Test as pallet_assets::Config>::AssetIdParameter>
-    for TestBenchmarkHelper
-{
-    fn create_asset_id_parameter(id: u32) -> <Test as pallet_assets::Config>::AssetIdParameter {
-        codec::Compact(id.into())
-    }
 }
 
 impl pallet_uniques::Config for Test {
@@ -236,20 +186,6 @@ impl ProcessorAssetRecovery<Test> for AcurastProcessorAssetRecovery {
         if usable_balance > 0 {
             let burned = Balances::burn_from(processor, usable_balance)?;
             Balances::mint_into(destination_account, burned)?;
-        }
-
-        let ids = Assets::asset_ids();
-        for id in ids {
-            let balance = Assets::balance(id, processor);
-            if balance > 0 {
-                <Assets as Transfer<<Test as frame_system::Config>::AccountId>>::transfer(
-                    id,
-                    &processor,
-                    &destination_account,
-                    balance,
-                    false,
-                )?;
-            }
         }
         Ok(())
     }

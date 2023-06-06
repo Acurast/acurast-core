@@ -37,7 +37,6 @@ pub mod pallet {
     use sp_std::vec;
 
     use pallet_acurast_marketplace::types::RegistrationExtra;
-    use pallet_acurast_marketplace::Reward;
 
     use crate::weights::WeightInfo;
 
@@ -88,12 +87,11 @@ pub mod pallet {
             + Zero
             + From<u8>
             + CheckedRem;
-        type Reward: Parameter + Member + Reward;
         type Balance: Member
             + Parameter
             + AtLeast32BitUnsigned
-            + From<u128>
             // required to translate Tezos Ints of unknown precision (Alternative: use Tezos SDK types in clients of this pallet)
+            + From<u128>
             + Default
             + Copy
             + MaybeSerializeDeserialize

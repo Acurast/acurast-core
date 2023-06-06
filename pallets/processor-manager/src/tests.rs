@@ -254,13 +254,6 @@ fn test_recover_funds_succeed_1() {
             10_000_000
         ));
         assert_eq!(Balances::balance(&alice_account_id()), 90_000_000);
-        assert_ok!(Assets::transfer(
-            RuntimeOrigin::signed(alice_account_id()),
-            codec::Compact(22),
-            processor_account.clone().into(),
-            1_000_000
-        ));
-        assert_eq!(1_000_000, Assets::balance(22, &processor_account));
 
         let call = AcurastProcessorManager::recover_funds(
             RuntimeOrigin::signed(alice_account_id()),
@@ -270,7 +263,6 @@ fn test_recover_funds_succeed_1() {
 
         assert_ok!(call);
         assert_eq!(Balances::balance(&alice_account_id()), 99_999_000); // 1_000 of existensial balance remains on the processor
-        assert_eq!(Assets::balance(22, &processor_account), 0);
 
         assert_eq!(
             events().last().unwrap(),

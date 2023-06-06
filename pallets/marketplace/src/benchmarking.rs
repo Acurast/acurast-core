@@ -43,13 +43,11 @@ pub fn advertisement<T: Config>(
 where
     RewardFor<T>: From<MockAsset>,
     <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
+    <T as Config>::Balance: From<u128>,
 {
-    let mut pricing: BoundedVec<
-        PricingVariant<<T as Config>::AssetId, <T as Config>::AssetAmount>,
-        ConstU32<MAX_PRICING_VARIANTS>,
-    > = Default::default();
-    let r = pricing.try_push(PricingVariant {
+    let mut pricing: BoundedVec<Pricing<<T as Config>::Balance>, ConstU32<MAX_PRICING_VARIANTS>> =
+        Default::default();
+    let r = pricing.try_push(Pricing {
         reward_asset: 0.into(),
         fee_per_millisecond: fee_per_millisecond.into(),
         fee_per_storage_byte: 5.into(),
@@ -106,12 +104,7 @@ pub fn script() -> Script {
     SCRIPT_BYTES.to_vec().try_into().unwrap()
 }
 
-fn token_22_funded_account<T: Config>(index: u32) -> T::AccountId
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-{
+fn token_22_funded_account<T: Config>(index: u32) -> T::AccountId {
     use pallet_assets::Pallet as Assets;
     let caller: T::AccountId = account("token_account", index, SEED);
     whitelist_account!(caller);
@@ -143,7 +136,7 @@ fn advertise_helper<T: Config>(submit: bool) -> (T::AccountId, AdvertisementFor<
 where
     T: pallet_assets::Config,
     <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
+    <T as Config>::Balance: From<u128>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
     RewardFor<T>: From<MockAsset>,
@@ -168,7 +161,7 @@ fn register_helper<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor
 where
     T: pallet_assets::Config,
     <T as Config>::AssetId: From<u32>,
-    <T as Config>::AssetAmount: From<u128>,
+    <T as Config>::Balance: From<u128>,
     <T as pallet_assets::Config>::AssetId: From<u32>,
     <T as pallet_assets::Config>::Balance: From<u128>,
     RewardFor<T>: From<MockAsset>,
@@ -223,7 +216,7 @@ benchmarks! {
         T: pallet_assets::Config + pallet_acurast::Config,
         RewardFor<T>: From<MockAsset>,
         <T as Config>::AssetId: From<u32>,
-        <T as Config>::AssetAmount: From<u128>,
+        <T as Config>::Balance: From<u128>,
         <T as pallet_assets::Config>::AssetId: From<u32>,
         <T as pallet_assets::Config>::Balance: From<u128>,
     }
