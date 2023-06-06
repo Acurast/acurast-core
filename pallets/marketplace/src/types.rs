@@ -26,15 +26,15 @@ pub type JobRegistrationForMarketplace<T> =
 
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
-pub struct RegistrationExtra<Balance, AccountId> {
-    pub requirements: JobRequirements<Balance, AccountId>,
-    pub expected_fulfillment_fee: Balance,
+pub struct RegistrationExtra<Reward, AccountId> {
+    pub requirements: JobRequirements<Reward, AccountId>,
+    pub expected_fulfillment_fee: u128,
 }
 
-impl<Balance, AccountId> From<RegistrationExtra<Balance, AccountId>>
-    for JobRequirements<Balance, AccountId>
+impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
+    for JobRequirements<Reward, AccountId>
 {
-    fn from(extra: RegistrationExtra<Balance, AccountId>) -> Self {
+    fn from(extra: RegistrationExtra<Reward, AccountId>) -> Self {
         extra.requirements
     }
 }
