@@ -190,6 +190,16 @@ impl pallet_acurast::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper
             instant_match: None,
         }
     }
+
+    fn funded_account(index: u32) -> AccountId {
+        let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
+            &caller,
+            u32::MAX.into(),
+        );
+
+        caller
+    }
 }
 
 impl mock_pallet::Config for Test {
@@ -290,6 +300,13 @@ impl Config for Test {
 impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
     fn registration_extra(r: JobRequirementsFor<Test>) -> <Test as Config>::RegistrationExtra {
         r
+    }
+
+    fn funded_account(index: u32, amount: Balance) -> AccountId {
+        let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(&caller, amount);
+
+        caller
     }
 }
 

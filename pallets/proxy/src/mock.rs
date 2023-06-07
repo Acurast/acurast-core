@@ -1,16 +1,19 @@
 use std::marker::PhantomData;
 
-use acurast_common::Schedule;
 use frame_support::traits::OriginTrait;
 use xcm::latest::{Junction, MultiLocation, OriginKind};
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertOrigin;
 
-pub type Balance = u128;
-
+use acurast_common::Schedule;
 use acurast_runtime::AccountId as AcurastAccountId;
 use pallet_acurast::{JobModules, JobRegistration, CU32};
 use pallet_acurast_marketplace::{Advertisement, JobRequirements, Pricing, SchedulingWindow};
+
+#[cfg(feature = "runtime-benchmarks")]
+pub const SEED: u32 = 1337;
+
+pub type Balance = u128;
 
 pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
@@ -70,9 +73,6 @@ pub mod acurast_runtime {
         traits::{Everything, Nothing},
         PalletId,
     };
-    pub use pallet_acurast::{self, CU32};
-    pub use pallet_acurast_marketplace;
-    use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
     use pallet_xcm::XcmPassthrough;
     use polkadot_parachain::primitives::Sibling;
     use sp_core::*;
@@ -86,6 +86,10 @@ pub mod acurast_runtime {
         SignedToAccountId32, SovereignSignedViaLocation,
     };
     use xcm_executor::XcmExecutor;
+
+    pub use pallet_acurast::{self, CU32};
+    pub use pallet_acurast_marketplace;
+    use pallet_acurast_marketplace::{AssetRewardManager, JobRequirements};
 
     use super::Balance;
 
@@ -278,6 +282,17 @@ pub mod acurast_runtime {
                 instant_match: None,
             }
         }
+
+        fn funded_account(index: u32) -> super::AcurastAccountId {
+            let caller: super::AcurastAccountId =
+                frame_benchmarking::account("token_account", index, super::SEED);
+            <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
+                &caller,
+                u32::MAX.into(),
+            );
+
+            caller
+        }
     }
 
     pub struct ManagerOf;
@@ -323,6 +338,14 @@ pub mod acurast_runtime {
             r: pallet_acurast_marketplace::JobRequirementsFor<Runtime>,
         ) -> <Runtime as pallet_acurast_marketplace::Config>::RegistrationExtra {
             r
+        }
+
+        fn funded_account(index: u32, amount: Balance) -> super::AcurastAccountId {
+            let caller: super::AcurastAccountId =
+                frame_benchmarking::account("token_account", index, super::SEED);
+            <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(&caller, amount);
+
+            caller
         }
     }
 

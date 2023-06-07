@@ -1,15 +1,15 @@
-use acurast_common::{AttestationChain, JobRegistration, Script};
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
     assert_ok,
-    sp_runtime::traits::{AccountIdConversion, Get, StaticLookup},
-    traits::{Currency, OriginTrait},
+    sp_runtime::traits::{AccountIdConversion, Get},
+    traits::OriginTrait,
     BoundedVec,
 };
 use frame_system::RawOrigin;
 use hex_literal::hex;
 use sp_std::prelude::*;
 
+use acurast_common::{AttestationChain, JobRegistration, Script};
 pub use pallet::Config;
 
 use crate::utils::validate_and_extract_attestation;
@@ -30,15 +30,7 @@ const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000
 
 pub trait BenchmarkHelper<T: Config> {
     fn registration_extra() -> T::RegistrationExtra;
-}
-
-impl<T: Config> BenchmarkHelper<T> for ()
-where
-    T::RegistrationExtra: Default,
-{
-    fn registration_extra() -> T::RegistrationExtra {
-        Default::default()
-    }
+    fn funded_account(index: u32) -> T::AccountId;
 }
 
 pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
@@ -89,46 +81,8 @@ pub fn attestation_chain() -> AttestationChain {
     }
 }
 
-fn token_22_funded_account<T: Config>() -> T::AccountId
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-{
-    use pallet_assets::Pallet as Assets;
-    let caller: T::AccountId = account("token_account", 0, SEED);
-    whitelist_account!(caller);
-    let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-    let pallet_origin: T::RuntimeOrigin = RawOrigin::Signed(pallet_account.clone()).into();
-
-    T::Currency::make_free_balance_be(&caller, u32::MAX.into());
-
-    // might fail if asset is already created in genesis config. Fail doesn't affect later mint
-    let _create_token_call = Assets::<T>::create(
-        pallet_origin.clone(),
-        T::AssetId::from(22).into(),
-        T::Lookup::unlookup(pallet_account.clone()),
-        10u32.into(),
-    );
-
-    let mint_token_call = Assets::<T>::mint(
-        pallet_origin,
-        T::AssetId::from(22).into(),
-        T::Lookup::unlookup(caller.clone()),
-        INITIAL_BALANCE.into(),
-    );
-    assert_ok!(mint_token_call);
-
-    caller
-}
-
-fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>)
-where
-    T: pallet_assets::Config,
-    <T as pallet_assets::Config>::AssetId: From<u32>,
-    <T as pallet_assets::Config>::Balance: From<u128>,
-{
-    let caller: T::AccountId = token_22_funded_account::<T>();
+fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>) {
+    let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0);
     whitelist_account!(caller);
 
     let job = job_registration::<T>(<T as Config>::BenchmarkHelper::registration_extra());
@@ -144,9 +98,7 @@ where
 
 benchmarks! {
     where_clause {  where
-        T: pallet_assets::Config + pallet_timestamp::Config,
-        <T as pallet_assets::Config>::AssetId: From<u32>,
-        <T as pallet_assets::Config>::Balance: From<u128>,
+        T: pallet_timestamp::Config,
         <T as frame_system::Config>::AccountId: From<[u8; 32]>,
         <T as pallet_timestamp::Config>::Moment: From<u64>,
     }

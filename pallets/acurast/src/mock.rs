@@ -1,11 +1,15 @@
-use acurast_common::{JobModules, Schedule};
 use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::{generic, AccountId32};
 
+use acurast_common::{JobModules, Schedule};
+
+use crate::benchmarking::BenchmarkHelper;
 use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber};
+
+pub const SEED: u32 = 1337;
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -158,6 +162,27 @@ impl crate::Config for Test {
     type JobHooks = ();
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl<T: Config> BenchmarkHelper<T> for ()
+where
+    T::RegistrationExtra: Default,
+    T::AccountId: Into<AccountId32>,
+{
+    fn registration_extra() -> T::RegistrationExtra {
+        Default::default()
+    }
+
+    fn funded_account(index: u32) -> T::AccountId {
+        let caller: T::AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
+            &caller.clone().into(),
+            u32::MAX.into(),
+        );
+
+        caller
+    }
 }
 
 pub fn events() -> Vec<RuntimeEvent> {
