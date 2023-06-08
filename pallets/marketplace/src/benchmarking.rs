@@ -41,12 +41,12 @@ pub fn advertisement<T: Config>(
             fee_per_millisecond: fee_per_millisecond.into(),
             fee_per_storage_byte: 5u8.into(),
             base_fee_per_execution: 0u8.into(),
-            scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
+            scheduling_window: SchedulingWindow::End(1671886800000),
         },
         allowed_consumers: None,
         storage_capacity,
         max_memory: 80_000,
-        network_request_quota: 5,
+        network_request_quota: 50,
         available_modules: JobModules::default(),
     }
 }
@@ -55,13 +55,14 @@ pub fn job_registration_with_reward<T: Config>(
     script: Script,
     duration: u64,
     reward_value: u128,
+    instant_match_processor: Option<PlannedExecution<T::AccountId>>,
 ) -> JobRegistrationFor<T> {
     let reward: <T as Config>::Balance = reward_value.into();
     let r = JobRequirements {
         slots: 1,
         reward: reward.into(),
         min_reputation: Some(0),
-        instant_match: None,
+        instant_match: instant_match_processor.map(|m| vec![m]),
     };
     let r: <T as Config>::RegistrationExtra = <T as Config>::BenchmarkHelper::registration_extra(r);
     let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
@@ -77,7 +78,7 @@ pub fn job_registration_with_reward<T: Config>(
             max_start_delay: 5000,
         },
         memory: 5_000u32,
-        network_requests: 5,
+        network_requests: 1,
         storage: 20_000u32,
         required_modules: JobModules::default(),
         extra: r,
@@ -115,7 +116,7 @@ where
     let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0, u32::MAX.into());
     whitelist_account!(caller);
 
-    let job = job_registration_with_reward::<T>(script(), 2, 20100);
+    let job = job_registration_with_reward::<T>(script(), 2, 20100, None);
 
     if submit {
         let register_call =
@@ -134,12 +135,20 @@ where
     let consumer: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0, u32::MAX.into());
     let processor: T::AccountId =
         <T as Config>::BenchmarkHelper::funded_account(1, u32::MAX.into());
-    let ad = advertisement::<T>(1, 1000);
+    let ad = advertisement::<T>(1, 1_000_000);
     assert_ok!(AcurastMarketplace::<T>::advertise(
         RawOrigin::Signed(processor.clone()).into(),
         ad.clone(),
     ));
-    let job = job_registration_with_reward::<T>(script(), 100, 1000);
+    let job = job_registration_with_reward::<T>(
+        script(),
+        100,
+        1_000_000,
+        Some(PlannedExecution {
+            source: processor.clone(),
+            start_delay: 0,
+        }),
+    );
     assert_ok!(Acurast::<T>::register(
         RawOrigin::Signed(consumer.clone()).into(),
         job.clone()

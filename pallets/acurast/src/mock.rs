@@ -6,6 +6,7 @@ use sp_runtime::{generic, AccountId32};
 
 use acurast_common::{JobModules, Schedule};
 
+#[cfg(feature = "runtime-benchmarks")]
 use crate::benchmarking::BenchmarkHelper;
 use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber};
 
