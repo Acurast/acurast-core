@@ -8,6 +8,8 @@ mod stub;
 #[cfg(test)]
 mod tests;
 
+mod migration;
+
 #[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
@@ -31,8 +33,11 @@ pub mod pallet {
     use xcm::prelude::{Abstract, AssetId, Concrete, GeneralIndex, PalletInstance, Parachain, X3};
     use xcm_executor::traits::Convert;
 
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+
     #[pallet::pallet]
     #[pallet::without_storage_info]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     #[pallet::config]
@@ -110,6 +115,13 @@ pub mod pallet {
         CreationNotAllowed,
         AssetNotIndexed,
         InvalidAssetIndex,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {
+        fn on_runtime_upgrade() -> Weight {
+            crate::migration::migrate_to_v2::<T, I>()
+        }
     }
 
     #[pallet::call]
