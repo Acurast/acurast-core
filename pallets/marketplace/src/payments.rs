@@ -64,8 +64,8 @@ impl IsNativeAsset for AssetId {
     }
 }
 
-pub struct AssetRewardManager<Asset, AssetSplit, Currency>(
-    PhantomData<(Asset, AssetSplit, Currency)>,
+pub struct AssetRewardManager<Reward, AssetSplit, Currency>(
+    PhantomData<(Reward, AssetSplit, Currency)>,
 );
 
 impl<T, Reward, AssetSplit, Currency> RewardManager<T>

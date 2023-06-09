@@ -152,7 +152,7 @@ pub mod pallet {
     pub type StoredReputation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BetaParameters<FixedU128>>;
 
-    /// Deprecated: Number of total jobs assigned as a map [`AssetId`] -> `AssetAmount`
+    /// Deprecated: Number of total jobs assigned as a map [`AssetId`] -> `Balance`
     #[pallet::storage]
     #[deprecated(since = "V2", note = "please use `StoredTotalAssignedV3` instead")]
     pub type StoredTotalAssignedV2<T: Config> = StorageMap<_, Blake2_128Concat, AssetId, u128>;
@@ -162,7 +162,7 @@ pub mod pallet {
     #[pallet::getter(fn total_assigned)]
     pub type StoredTotalAssignedV3<T: Config> = StorageValue<_, u128>;
 
-    /// Deprecated: Average job reward as a map [`AssetId`] -> `AssetAmount`
+    /// Deprecated: Average job reward as a map [`AssetId`] -> `Balance`
     #[deprecated(since = "V2", note = "please use `StoredAverageRewardV3` instead")]
     #[pallet::storage]
     pub type StoredAverageRewardV2<T> = StorageMap<_, Blake2_128Concat, AssetId, u128>;

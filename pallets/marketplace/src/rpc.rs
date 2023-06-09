@@ -22,9 +22,7 @@ const MARKETPLACE_ERROR: i32 = 8011;
 #[rpc(client, server)]
 pub trait MarketplaceApi<
     BlockHash,
-    Balance,
-    Error,
-    R: MaybeSerializeDeserialize,
+    Reward: MaybeSerializeDeserialize,
     AccountId: MaybeSerializeDeserialize,
 >
 {
@@ -33,7 +31,7 @@ pub trait MarketplaceApi<
     #[method(name = "filterMatchingSources")]
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<R, AccountId>,
+        registration: PartialJobRegistration<Reward, AccountId>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
@@ -57,22 +55,18 @@ impl<C, B> Marketplace<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, AssetId, Balance, Error, R, AccountId>
-    MarketplaceApiServer<HashFor<Block>, Balance, Error, R, AccountId>
-    for Marketplace<Client, (Block, AssetId, Balance, Error, R, AccountId)>
+impl<Client, Block, Reward, AccountId> MarketplaceApiServer<HashFor<Block>, Reward, AccountId>
+    for Marketplace<Client, (Block, Reward, AccountId)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: MarketplaceRuntimeApi<Block, R, AccountId>,
-    AssetId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
-    Balance: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
-    Error: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
-    R: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
+    Client::Api: MarketplaceRuntimeApi<Block, Reward, AccountId>,
+    Reward: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     AccountId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<R, AccountId>,
+        registration: PartialJobRegistration<Reward, AccountId>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
