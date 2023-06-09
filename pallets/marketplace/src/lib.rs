@@ -45,6 +45,7 @@ pub mod pallet {
     use sp_runtime::{FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
+    use xcm::v3::AssetId;
 
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
@@ -107,7 +108,7 @@ pub mod pallet {
         type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
-    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
     #[pallet::without_storage_info]
@@ -151,15 +152,25 @@ pub mod pallet {
     pub type StoredReputation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BetaParameters<FixedU128>>;
 
-    /// Number of total jobs assigned.
+    /// Deprecated: Number of total jobs assigned as a map [`AssetId`] -> `AssetAmount`
+    #[pallet::storage]
+    #[deprecated(since = "V2", note = "please use `StoredTotalAssignedV3` instead")]
+    pub type StoredTotalAssignedV2<T: Config> = StorageMap<_, Blake2_128Concat, AssetId, u128>;
+
+    /// Deprecated: Number of total jobs assigned.
     #[pallet::storage]
     #[pallet::getter(fn total_assigned)]
-    pub type StoredTotalAssigned<T: Config> = StorageValue<_, u128>;
+    pub type StoredTotalAssignedV3<T: Config> = StorageValue<_, u128>;
+
+    /// Deprecated: Average job reward as a map [`AssetId`] -> `AssetAmount`
+    #[deprecated(since = "V2", note = "please use `StoredAverageRewardV3` instead")]
+    #[pallet::storage]
+    pub type StoredAverageRewardV2<T> = StorageMap<_, Blake2_128Concat, AssetId, u128>;
 
     /// Average job reward.
     #[pallet::storage]
     #[pallet::getter(fn average_reward)]
-    pub type StoredAverageReward<T> = StorageValue<_, u128>;
+    pub type StoredAverageRewardV3<T> = StorageValue<_, u128>;
 
     /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> `SlotId`
     #[pallet::storage]
@@ -327,7 +338,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
-            crate::migration::migrate_to_v2::<T>()
+            crate::migration::migrate_to_v2::<T>() + crate::migration::migrate_to_v3::<T>()
         }
     }
 
@@ -566,8 +577,8 @@ pub mod pallet {
                 // skip reputation update if reward is 0
                 let reward_amount: <T as Config>::Balance = requirements.reward.into();
                 if reward_amount > 0u8.into() {
-                    let average_reward = <StoredAverageReward<T>>::get().unwrap_or(0);
-                    let total_assigned = <StoredTotalAssigned<T>>::get().unwrap_or_default();
+                    let average_reward = <StoredAverageRewardV3<T>>::get().unwrap_or(0);
+                    let total_assigned = <StoredTotalAssignedV3<T>>::get().unwrap_or_default();
 
                     let total_reward = average_reward
                         .checked_mul(total_assigned - 1u128)
@@ -593,7 +604,7 @@ pub mod pallet {
                         .checked_div(total_assigned)
                         .ok_or(Error::<T>::CalculationOverflow)?;
 
-                    <StoredAverageReward<T>>::set(Some(new_average_reward));
+                    <StoredAverageRewardV3<T>>::set(Some(new_average_reward));
                     <StoredReputation<T>>::insert(
                         &who,
                         BetaParameters {
@@ -920,7 +931,7 @@ pub mod pallet {
                     .checked_add(&diff)
                     .ok_or(Error::<T>::CalculationOverflow)?;
 
-                <StoredTotalAssigned<T>>::mutate(|t| {
+                <StoredTotalAssignedV3<T>>::mutate(|t| {
                     *t = Some(t.unwrap_or(0u128).saturating_add(1));
                 });
 
