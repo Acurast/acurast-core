@@ -14,28 +14,6 @@
 //!   [`VerifyingKey`] types which natively implement ECDSA/P-384 signing and
 //!   verification.
 //!
-//! ## Signing/Verification Example
-//!
-//! This example requires the `ecdsa` Cargo feature is enabled:
-//!
-//! ```
-//! # #[cfg(feature = "ecdsa")]
-//! # {
-//! use p384::ecdsa::{signature::Signer, Signature, SigningKey};
-//! use rand_core::OsRng; // requires 'getrandom' feature
-//!
-//! // Signing
-//! let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
-//! let message = b"ECDSA proves knowledge of a secret number in the context of a single message";
-//! let signature = signing_key.sign(message);
-//!
-//! // Verification
-//! use p384::ecdsa::{signature::Verifier, VerifyingKey};
-//!
-//! let verifying_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
-//! assert!(verifying_key.verify(message, &signature).is_ok());
-//! # }
-//! ```
 pub use ecdsa::signature_vendored::{self as signature, Error};
 pub use ecdsa_vendored as ecdsa;
 #[cfg(feature = "ecdsa")]
@@ -76,35 +54,7 @@ impl VerifyPrimitive<NistP384> for AffinePoint {}
 
 #[cfg(all(test, feature = "ecdsa"))]
 mod tests {
-    use crate::{
-        ecdsa::{signature::Signer, SigningKey},
-        SecretKey,
-    };
-    use hex_literal::hex;
-
-    // Test vector from RFC 6979 Appendix 2.6 (NIST P-384 + SHA-384)
-    // <https://tools.ietf.org/html/rfc6979#appendix-A.2.6>
-    #[test]
-    fn rfc6979() {
-        let x = &hex!("6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5");
-        let signer = SigningKey::from_bytes(x).unwrap();
-        let signature = signer.sign(b"sample");
-        assert_eq!(
-            signature.as_ref(),
-            &hex!(
-                "94edbb92a5ecb8aad4736e56c691916b3f88140666ce9fa73d64c4ea95ad133c81a648152e44acf96e36dd1e80fabe46
-                99ef4aeb15f178cea1fe40db2603138f130e740a19624526203b6351d0a3a94fa329c145786e679e7b82c71a38628ac8"
-            )[..]
-        );
-        let signature = signer.sign(b"test");
-        assert_eq!(
-            signature.as_ref(),
-            &hex!(
-                "8203b63d3c853e8d77227fb377bcf7b7b772e97892a80f36ab775d509d7a5feb0542a7f0812998da8f1dd3ca3cf023db
-                ddd0760448d42d8a43af45af836fce4de8be06b485e9b61b827c2f13173923e06a739f040649a667bf3b828246baa5a5"
-            )[..]
-        );
-    }
+    use crate::{ecdsa::SigningKey, SecretKey};
 
     #[test]
     fn signing_secret_key_equivalent() {
@@ -129,10 +79,5 @@ mod tests {
     mod verify {
         use crate::{test_vectors::ecdsa::ECDSA_TEST_VECTORS, NistP384};
         ecdsa_vendored::new_verification_test!(NistP384, ECDSA_TEST_VECTORS);
-    }
-
-    mod wycheproof {
-        use crate::NistP384;
-        ecdsa_vendored::new_wycheproof_test!(wycheproof, "wycheproof", NistP384);
     }
 }

@@ -2,7 +2,7 @@
 
 #![cfg(feature = "dev")]
 
-use elliptic_curve::dev::SecretKey;
+use elliptic_curve_vendored::dev::SecretKey;
 
 #[test]
 fn undersize_secret_key() {

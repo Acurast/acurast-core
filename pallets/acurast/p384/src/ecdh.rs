@@ -9,7 +9,7 @@
 //! exchange, nicknamed "Alice" and "Bob".
 //!
 //! ```
-//! use p384::{EncodedPoint, PublicKey, ecdh::EphemeralSecret};
+//! use p384_vendored::{EncodedPoint, PublicKey, ecdh::EphemeralSecret};
 //! use rand_core::OsRng; // requires 'getrandom' feature
 //!
 //! // Alice

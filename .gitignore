@@ -16,4 +16,5 @@
 .DS_Store
 .idea
 .vscode
+.fleet
 Cargo.lock

@@ -1,5 +1,7 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std"), not(test)), no_std)]
 
+use core::convert::TryInto;
+
 use asn1::{
     Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv,
 };
@@ -40,6 +42,7 @@ pub struct TBSCertificate<'a> {
     pub version: u64,
     pub serial_number: asn1::BigUint<'a>,
     pub signature: AlgorithmIdentifier<'a>,
+    // RFC: https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.4
     pub issuer: Name<'a>,
     pub validity: Validity,
     pub subject: Name<'a>,
@@ -82,6 +85,15 @@ pub struct Validity {
 pub enum Time {
     UTCTime(asn1::UtcTime),
     GeneralizedTime(asn1::GeneralizedTime),
+}
+
+impl Time {
+    pub fn timestamp_millis(&self) -> u64 {
+        match self {
+            Time::UTCTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
+            Time::GeneralizedTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
+        }
+    }
 }
 
 #[derive(Asn1Read, Asn1Write, Clone)]
@@ -565,6 +577,18 @@ pub struct RSAPublicKey<'a> {
 pub struct ECDSASignature<'a> {
     pub r: asn1::BigInt<'a>,
     pub s: asn1::BigInt<'a>,
+}
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write)]
+pub struct AttestationApplicationId<'a> {
+    pub package_infos: SetOf<'a, AttestationPackageInfo<'a>>,
+    pub signature_digests: SetOf<'a, &'a [u8]>,
+}
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write)]
+pub struct AttestationPackageInfo<'a> {
+    pub package_name: &'a [u8],
+    pub version: i64,
 }
 
 /// One of Verified (0),

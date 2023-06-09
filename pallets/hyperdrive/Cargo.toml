@@ -1,0 +1,79 @@
+[package]
+name = "pallet-acurast-hyperdrive"
+authors = ["Papers AG"]
+description = "Acurast Hyperdrive is a building block allowing for general bidirectional message passing"
+version = "0.1.0"
+license = "MIT"
+homepage = "https://docs.acurast.com/"
+edition = "2021"
+publish = false
+repository = "https://github.com/acurast/acurast-core"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
+	"derive",
+] }
+sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+
+# Acurast
+pallet-acurast = { path = "../acurast", default-features = false }
+pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
+
+# SDKs
+tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
+tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
+derive_more = { version = "0.99.17", default-features = false }
+strum = { version = "0.24.1", default-features = false }
+strum_macros = { version = "0.24.1", default-features = false }
+once_cell = { version = "1.17.1", default-features = false }
+
+# Benchmarks
+hex-literal = { version = "0.3", optional = true }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", optional = true, default-features = false }
+
+# Substrate
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+scale-info = { version = "2.2.0", default-features = false, features = [
+	"derive",
+] }
+sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+
+[dev-dependencies]
+hex-literal = "0.3"
+
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41", default-features = false }
+log = "0.4.17"
+
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"frame-benchmarking/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-acurast/std",
+	"pallet-acurast-marketplace/std",
+	"scale-info/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"strum/std",
+	"tezos-core/std",
+	"tezos-michelson/std",
+]
+
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"hex-literal",
+]
+try-runtime = ["frame-support/try-runtime"]
