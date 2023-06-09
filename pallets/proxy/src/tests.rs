@@ -82,7 +82,6 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (alice_account_id(), INITIAL_BALANCE),
-            (pallet_assets_account(), INITIAL_BALANCE),
             (pallet_fees_account(), INITIAL_BALANCE),
             (bob_account_id(), INITIAL_BALANCE),
             (processor_account_id(), INITIAL_BALANCE),
@@ -146,9 +145,6 @@ pub fn para_account_id(id: u32) -> relay_chain::AccountId {
 }
 pub fn processor_account_id() -> AcurastAccountId {
     hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
-}
-pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
-    <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating()
 }
 pub fn pallet_fees_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()

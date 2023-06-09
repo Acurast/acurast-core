@@ -327,10 +327,6 @@ pub fn processor_account_id() -> AccountId {
     hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
 }
 
-pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
-    <Test as crate::Config>::PalletId::get().into_account_truncating()
-}
-
 pub fn alice_account_id() -> AccountId {
     [0; 32].into()
 }

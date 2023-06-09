@@ -27,7 +27,6 @@ impl ExtBuilder {
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
                 (alice_account_id(), INITIAL_BALANCE),
-                (pallet_assets_account(), INITIAL_BALANCE),
                 (bob_account_id(), INITIAL_BALANCE),
                 (processor_account_id(), INITIAL_BALANCE),
             ],
