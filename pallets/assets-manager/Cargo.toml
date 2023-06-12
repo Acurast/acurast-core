@@ -2,7 +2,7 @@
 name = "pallet-acurast-assets-manager"
 authors = ["Papers AG"]
 description = "Pallet for managing the Acurast assets extending pallet_assets."
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 homepage = "https://docs.acurast.com/"
 edition = "2021"

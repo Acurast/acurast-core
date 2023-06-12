@@ -2,7 +2,7 @@
 name = "pallet-acurast-hyperdrive"
 authors = ["Papers AG"]
 description = "Acurast Hyperdrive is a building block allowing for general bidirectional message passing"
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 homepage = "https://docs.acurast.com/"
 edition = "2021"
