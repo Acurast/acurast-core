@@ -440,7 +440,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         )?;
         proof
             .map(|(leaves, proof)| {
-                let mmr_size = NodesUtils::new(Self::number_of_leaves()).size();
+                let mmr_size = NodesUtils::new(proof.leaf_count).size();
                 let leaf_positions: Vec<NodeIndex> = proof
                     .leaf_indices
                     .iter()
