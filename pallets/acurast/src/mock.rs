@@ -1,14 +1,16 @@
-use acurast_common::{JobModules, Schedule};
-use frame_support::{
-    pallet_prelude::GenesisBuild, parameter_types, traits::AsEnsureOriginWithArg,
-    traits::Everything, PalletId,
-};
+use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;
-use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
+use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::{generic, AccountId32};
 
+use acurast_common::{JobModules, Schedule};
+
+#[cfg(feature = "runtime-benchmarks")]
+use crate::benchmarking::BenchmarkHelper;
 use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Script, SerialNumber};
+
+pub const SEED: u32 = 1337;
 
 type AccountId = AccountId32;
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -77,7 +79,6 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: crate::{Pallet, Call, Storage, Event<T>}
     }
@@ -147,29 +148,6 @@ impl pallet_balances::Config for Test {
     type ReserveIdentifier = [u8; 8];
 }
 
-impl pallet_assets::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type Balance = Balance;
-    type AssetId = parachains_common::AssetIdForTrustBackedAssets;
-    type AssetIdParameter = codec::Compact<parachains_common::AssetIdForTrustBackedAssets>;
-    type Currency = Balances;
-    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
-    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-    type AssetDeposit = ConstU128<0>;
-    type AssetAccountDeposit = ConstU128<0>;
-    type MetadataDepositBase = ConstU128<{ UNIT }>;
-    type MetadataDepositPerByte = ConstU128<{ 10 * MICROUNIT }>;
-    type ApprovalDeposit = ConstU128<{ 10 * MICROUNIT }>;
-    type StringLimit = ConstU32<50>;
-    type Freezer = ();
-    type Extra = ();
-    type WeightInfo = ();
-    type RemoveItemsLimit = ();
-    type CallbackHandle = ();
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = ();
-}
-
 impl parachain_info::Config for Test {}
 
 impl crate::Config for Test {
@@ -185,6 +163,27 @@ impl crate::Config for Test {
     type JobHooks = ();
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl<T: Config> BenchmarkHelper<T> for ()
+where
+    T::RegistrationExtra: Default,
+    T::AccountId: Into<AccountId32>,
+{
+    fn registration_extra() -> T::RegistrationExtra {
+        Default::default()
+    }
+
+    fn funded_account(index: u32) -> T::AccountId {
+        let caller: T::AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
+            &caller.clone().into(),
+            u32::MAX.into(),
+        );
+
+        caller
+    }
 }
 
 pub fn events() -> Vec<RuntimeEvent> {
@@ -326,10 +325,6 @@ pub fn cert_serial_number() -> SerialNumber {
 
 pub fn processor_account_id() -> AccountId {
     hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
-}
-
-pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
-    <Test as crate::Config>::PalletId::get().into_account_truncating()
 }
 
 pub fn alice_account_id() -> AccountId {

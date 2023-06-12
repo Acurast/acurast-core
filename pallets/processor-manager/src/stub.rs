@@ -3,7 +3,7 @@
 use codec::Encode;
 use frame_support::{
     parameter_types,
-    sp_runtime::{traits::AccountIdConversion, AccountId32, MultiSignature},
+    sp_runtime::{AccountId32, MultiSignature},
     weights::Weight,
     PalletId,
 };
@@ -39,10 +39,6 @@ parameter_types! {
     pub const MaxLocks: u32 = 50;
     pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
     pub const ReportTolerance: u64 = 12000;
-}
-
-pub fn pallet_assets_account() -> AccountId {
-    AcurastPalletId::get().into_account_truncating()
 }
 
 pub fn processor_account_id() -> AccountId {

@@ -1,62 +1,23 @@
 #![allow(dead_code)]
 
-use frame_support::pallet_prelude::*;
 use hex_literal::hex;
-use sp_core::*;
 use sp_runtime::AccountId32;
-use sp_std::prelude::*;
 
 use pallet_acurast::{AttestationChain, Script, SerialNumber};
-use pallet_acurast_assets_manager::traits::AssetValidator;
 
 use crate::*;
 
 pub type AccountId = AccountId32;
 pub type BlockNumber = u32;
 
-pub type AssetId = u32;
-pub type AssetAmount = u128;
-
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct MockAsset {
-    pub id: AssetId,
-    pub amount: AssetAmount,
-}
-
-impl Reward for MockAsset {
-    type AssetId = AssetId;
-    type AssetAmount = AssetAmount;
-    type Error = ();
-
-    fn with_amount(&mut self, amount: Self::AssetAmount) -> Result<&Self, Self::Error> {
-        self.amount = amount;
-        Ok(self)
-    }
-
-    fn try_get_asset_id(&self) -> Result<Self::AssetId, Self::Error> {
-        Ok(self.id)
-    }
-
-    fn try_get_amount(&self) -> Result<Self::AssetAmount, Self::Error> {
-        Ok(self.amount)
-    }
-}
-
-pub struct PassAllAssets {}
-impl<AssetId> AssetValidator<AssetId> for PassAllAssets {
-    type Error = DispatchError;
-
-    fn validate(_: &AssetId) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
+pub type Balance = u128;
 
 pub const SEED: u32 = 1337;
 pub const INITIAL_BALANCE: u128 = UNIT * 10;
-pub const EXISTENTIAL_DEPOSIT: AssetAmount = MILLIUNIT;
-pub const UNIT: AssetAmount = 1_000_000;
-pub const MILLIUNIT: AssetAmount = UNIT / 1_000;
-pub const MICROUNIT: AssetAmount = UNIT / 1_000_000;
+pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
+pub const UNIT: Balance = 1_000_000;
+pub const MILLIUNIT: Balance = UNIT / 1_000;
+pub const MICROUNIT: Balance = UNIT / 1_000_000;
 pub const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 pub const SCRIPT_RANDOM_VALUE_BYTES: [u8; 53] = hex!("697066733a2f2f516d644a4e764d4c66766a7a4a6e48514a6d73454243384b554431667954757346726b5841463559615a6f755432");
 pub const OPERATION_HASH: [u8; 32] =
@@ -163,11 +124,4 @@ pub fn account_id(i: u8) -> AccountId {
 
 pub fn script_random_value() -> Script {
     SCRIPT_RANDOM_VALUE_BYTES.to_vec().try_into().unwrap()
-}
-
-pub fn asset(value: u128) -> MockAsset {
-    MockAsset {
-        id: 0,
-        amount: value,
-    }
 }

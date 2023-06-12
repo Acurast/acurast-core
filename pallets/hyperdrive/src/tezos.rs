@@ -578,7 +578,7 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
-                RegistrationExtra<AssetAmount, <Test as frame_system::Config>::AccountId>,
+                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
             >,
         ) = parse_job_registration_payload::<
             _,

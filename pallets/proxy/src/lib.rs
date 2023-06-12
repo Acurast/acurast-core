@@ -43,8 +43,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxAllowedSources: Get<u32>;
         type MaxAllowedConsumers: Get<u32> + Parameter;
-        type AssetId: Parameter + Member;
-        type AssetAmount: Parameter;
+        type Balance: Parameter;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;
         type AcurastMarketplacePalletId: Get<u8>;
@@ -78,8 +77,7 @@ pub mod pallet {
 
         #[codec(index = 0u8)]
         Advertise {
-            advertisement:
-                Advertisement<T::AccountId, T::AssetId, T::AssetAmount, T::MaxAllowedConsumers>,
+            advertisement: Advertisement<T::AccountId, T::Balance, T::MaxAllowedConsumers>,
         },
     }
 
@@ -225,12 +223,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::advertise())]
         pub fn advertise(
             origin: OriginFor<T>,
-            advertisement: Advertisement<
-                T::AccountId,
-                T::AssetId,
-                T::AssetAmount,
-                T::MaxAllowedConsumers,
-            >,
+            advertisement: Advertisement<T::AccountId, T::Balance, T::MaxAllowedConsumers>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Advertise { advertisement };

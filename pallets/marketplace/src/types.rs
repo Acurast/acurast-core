@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::payments::RewardFor;
 use crate::Config;
 
-pub const MAX_PRICING_VARIANTS: u32 = 100;
 pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
 
 pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
@@ -41,9 +40,9 @@ impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
 
 /// The resource advertisement by a source containing pricing and capacity announcements.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct Advertisement<AccountId, AssetId, AssetAmount, MaxAllowedConsumers: Get<u32>> {
+pub struct Advertisement<AccountId, Reward, MaxAllowedConsumers: Get<u32>> {
     /// The reward token accepted. Understood as one-of per job assigned.
-    pub pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>>,
+    pub pricing: Pricing<Reward>,
     /// Maximum memory in bytes not to be exceeded during any job's execution.
     pub max_memory: u32,
     /// Maximum network requests per second not to be exceeded.
@@ -58,8 +57,7 @@ pub struct Advertisement<AccountId, AssetId, AssetAmount, MaxAllowedConsumers: G
 
 pub type AdvertisementFor<T> = Advertisement<
     <T as frame_system::Config>::AccountId,
-    <T as Config>::AssetId,
-    <T as Config>::AssetAmount,
+    <T as Config>::Balance,
     <T as Config>::MaxAllowedConsumers,
 >;
 
@@ -91,23 +89,21 @@ pub enum SchedulingWindow {
     Delta(u64),
 }
 
-/// Pricing variant listing cost per resource unit and slash on SLA violation.
+/// Pricing listing cost per resource unit and slash on SLA violation.
 /// Specified in specific asset that is payed out or deducted from stake on complete fulfillment.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct PricingVariant<AssetId, AssetAmount> {
-    /// The rewarded asset. Only one per [PricingVariant].
-    pub reward_asset: AssetId,
+pub struct Pricing<Reward> {
     /// Fee per millisecond in [reward_asset].
-    pub fee_per_millisecond: AssetAmount,
+    pub fee_per_millisecond: Reward,
     /// Fee per storage byte in [reward_asset].
-    pub fee_per_storage_byte: AssetAmount,
+    pub fee_per_storage_byte: Reward,
     /// A fixed base fee for each execution (for each slot and at each interval) in [reward_asset].
-    pub base_fee_per_execution: AssetAmount,
+    pub base_fee_per_execution: Reward,
     /// The scheduling window in which to accept matches for this pricing.
     pub scheduling_window: SchedulingWindow,
 }
 
-pub type PricingVariantFor<T> = PricingVariant<<T as Config>::AssetId, <T as Config>::AssetAmount>;
+pub type PricingFor<T> = Pricing<<T as Config>::Balance>;
 
 /// A proposed [Match] becomes an [Assignment] once it's acknowledged.
 ///
