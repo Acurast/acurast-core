@@ -1,6 +1,6 @@
 [package]
 name = "acurast-common"
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 homepage = "https://docs.acurast.com/"
 repository = "https://github.com/Acurast/acurast-core"
