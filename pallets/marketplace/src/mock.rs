@@ -236,7 +236,7 @@ impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
 
     fn lock_reward(
         reward: Self::Reward,
-        _owner: &<T as frame_system::Config>::AccountId,
+        _who: &MultiOrigin<T::AccountId>,
     ) -> Result<(), DispatchError> {
         mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward.clone()));
         Ok(())

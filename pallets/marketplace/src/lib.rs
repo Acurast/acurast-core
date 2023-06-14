@@ -696,13 +696,8 @@ pub mod pallet {
             }
 
             // lock only after all other steps succeeded without errors because locking reward is not revertable
-            if let MultiOrigin::Acurast(who) = who {
-                // reward is understood per slot and execution
-                T::RewardManager::lock_reward(
-                    Self::total_reward_amount(registration)?.into(),
-                    &who,
-                )?;
-            }
+            // reward is understood per slot and execution
+            T::RewardManager::lock_reward(Self::total_reward_amount(registration)?.into(), &who)?;
 
             Ok(().into())
         }

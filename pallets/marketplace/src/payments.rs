@@ -9,6 +9,7 @@ use frame_support::{
     },
     PalletId, Parameter,
 };
+use pallet_acurast::MultiOrigin;
 use xcm::prelude::AssetId;
 
 pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
@@ -17,7 +18,10 @@ pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Rewa
 pub trait RewardManager<T: frame_system::Config> {
     type Reward: Parameter;
 
-    fn lock_reward(reward: Self::Reward, owner: &T::AccountId) -> Result<(), DispatchError>;
+    fn lock_reward(
+        reward: Self::Reward,
+        who: &MultiOrigin<T::AccountId>,
+    ) -> Result<(), DispatchError>;
     fn pay_reward(reward: Self::Reward, target: &T::AccountId) -> Result<(), DispatchError>;
     fn pay_matcher_reward(
         reward: Self::Reward,
@@ -28,7 +32,10 @@ pub trait RewardManager<T: frame_system::Config> {
 impl<T: frame_system::Config> RewardManager<T> for () {
     type Reward = u128;
 
-    fn lock_reward(_reward: Self::Reward, _owner: &T::AccountId) -> Result<(), DispatchError> {
+    fn lock_reward(
+        _reward: Self::Reward,
+        _who: &MultiOrigin<T::AccountId>,
+    ) -> Result<(), DispatchError> {
         Ok(())
     }
 
@@ -74,19 +81,33 @@ where
     T: Config + frame_system::Config,
     Reward: Balance,
     AssetSplit: FeeManager,
-    Currency: frame_support::traits::Currency<T::AccountId, Balance = Reward>,
-    Currency::Balance: Member,
+    Currency: frame_support::traits::Currency<T::AccountId, Balance = Reward>
+        + frame_support::traits::tokens::fungible::Mutate<T::AccountId>,
+    <Currency as frame_support::traits::Currency<T::AccountId>>::Balance: Member,
+    <Currency as frame_support::traits::tokens::fungible::Inspect<T::AccountId>>::Balance:
+        Member + From<Reward>,
 {
     type Reward = Reward;
 
-    fn lock_reward(reward: Self::Reward, owner: &T::AccountId) -> Result<(), DispatchError> {
+    fn lock_reward(
+        reward: Self::Reward,
+        who: &MultiOrigin<T::AccountId>,
+    ) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-        Currency::transfer(
-            owner,
-            &pallet_account,
-            reward,
-            frame_support::traits::ExistenceRequirement::KeepAlive,
-        )?;
+        match who {
+            MultiOrigin::Acurast(who) => {
+                Currency::transfer(
+                    who,
+                    &pallet_account,
+                    reward,
+                    frame_support::traits::ExistenceRequirement::KeepAlive,
+                )?;
+            }
+            MultiOrigin::Tezos(who) => {
+                // The availability of these funds was ensured on Tezos side, so we just mint the amount here
+                Currency::mint_into(&pallet_account, reward.into())?;
+            }
+        };
 
         Ok(())
     }
