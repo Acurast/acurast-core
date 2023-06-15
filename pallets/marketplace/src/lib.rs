@@ -568,14 +568,13 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?;
             ensure!(actual_end.lt(&now), Error::<T>::JobCannotBeFinalized);
 
+            let reward_amount: <T as Config>::Balance = assignment.fee_per_execution.into();
+            let unmet: u64 = assignment.sla.total - assignment.sla.met;
+
             // update reputation since we don't expect further reports for this job
             // (only update for attested devices!)
             if ensure_source_verified::<T>(&who).is_ok() {
-                let extra: <T as Config>::RegistrationExtra = registration.extra.clone().into();
-                let requirements: JobRequirementsFor<T> = extra.into();
-
                 // skip reputation update if reward is 0
-                let reward_amount: <T as Config>::Balance = requirements.reward.into();
                 if reward_amount > 0u8.into() {
                     let average_reward = <StoredAverageRewardV3<T>>::get().unwrap_or(0);
                     let total_assigned = <StoredTotalAssignedV3<T>>::get().unwrap_or_default();

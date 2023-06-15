@@ -227,7 +227,7 @@ fn test_match() {
         );
         assert_eq!(Some(2), AcurastMarketplace::total_assigned());
         // average reward only updated at end of job
-        assert_eq!(Some(3000000), AcurastMarketplace::average_reward());
+        assert_eq!(Some(2510000), AcurastMarketplace::average_reward());
         // reputation increased
         assert_eq!(
             Permill::from_parts(763_424),
