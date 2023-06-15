@@ -103,7 +103,7 @@ where
                     frame_support::traits::ExistenceRequirement::KeepAlive,
                 )?;
             }
-            MultiOrigin::Tezos(who) => {
+            MultiOrigin::Tezos(_who) => {
                 // The availability of these funds was ensured on Tezos side, so we just mint the amount here
                 Currency::mint_into(&pallet_account, reward.into())?;
             }

@@ -248,12 +248,24 @@ pub trait MarketplaceHooks<T: Config> {
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
         pub_keys: &PubKeys,
     ) -> DispatchResultWithPostInfo;
+
+    fn finalize_job(
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        refund: T::Balance,
+    ) -> DispatchResultWithPostInfo;
 }
 
 impl<T: Config> MarketplaceHooks<T> for () {
     fn assign_job(
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _pub_keys: &PubKeys,
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
+    }
+
+    fn finalize_job(
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        _refund: T::Balance,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }

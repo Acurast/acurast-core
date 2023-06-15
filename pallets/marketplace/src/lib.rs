@@ -594,8 +594,8 @@ pub mod pallet {
                     beta_params = BetaReputation::update(
                         beta_params,
                         assignment.sla.met,
-                        assignment.sla.total - assignment.sla.met,
-                        reward_amount.into(),
+                        unmet,
+                        reward_amount.clone().into(),
                         average_reward,
                     )
                     .ok_or(Error::<T>::CalculationOverflow)?;
@@ -614,6 +614,13 @@ pub mod pallet {
                     );
                 }
             }
+
+            T::MarketplaceHooks::finalize_job(
+                &job_id,
+                reward_amount
+                    .checked_mul(&unmet.into())
+                    .ok_or(Error::<T>::CalculationOverflow)?,
+            )?;
 
             // removed completed job from all storage points (completed SLA gets still deposited in event below)
             <StoredMatches<T>>::remove(&who, &job_id);
