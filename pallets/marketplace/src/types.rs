@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::payments::RewardFor;
 use crate::Config;
 
-pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
+pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
 
 pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
 pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
