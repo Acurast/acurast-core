@@ -1,53 +1,64 @@
-use crate::Config;
 use core::marker::PhantomData;
-use frame_support::traits::tokens::Balance;
+
 use frame_support::{
     pallet_prelude::Member,
     sp_runtime::{
         traits::{AccountIdConversion, Get},
         DispatchError, Percent,
     },
-    PalletId, Parameter,
+    PalletId,
 };
-use pallet_acurast::MultiOrigin;
+use sp_runtime::SaturatedConversion;
+use sp_std::prelude::*;
 use xcm::prelude::AssetId;
 
-pub type RewardFor<T> = <<T as Config>::RewardManager as RewardManager<T>>::Reward;
+use pallet_acurast::{JobId, MultiOrigin};
+
+use crate::Config;
 
 /// Trait used to manage lock up and payments of rewards.
-pub trait RewardManager<T: frame_system::Config> {
-    type Reward: Parameter;
-
+pub trait RewardManager<T: frame_system::Config + Config> {
     fn lock_reward(
-        reward: Self::Reward,
-        who: &MultiOrigin<T::AccountId>,
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
     ) -> Result<(), DispatchError>;
-    fn pay_reward(reward: Self::Reward, target: &T::AccountId) -> Result<(), DispatchError>;
+    fn pay_reward(
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
+        target: &T::AccountId,
+    ) -> Result<(), DispatchError>;
     fn pay_matcher_reward(
-        reward: Self::Reward,
+        rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
         matcher: &T::AccountId,
     ) -> Result<(), DispatchError>;
+    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance;
 }
 
-impl<T: frame_system::Config> RewardManager<T> for () {
-    type Reward = u128;
-
+impl<T: frame_system::Config + Config> RewardManager<T> for () {
     fn lock_reward(
-        _reward: Self::Reward,
-        _who: &MultiOrigin<T::AccountId>,
+        _job_id: &JobId<T::AccountId>,
+        _reward: <T as Config>::Balance,
     ) -> Result<(), DispatchError> {
         Ok(())
     }
 
-    fn pay_reward(_reward: Self::Reward, _target: &T::AccountId) -> Result<(), DispatchError> {
+    fn pay_reward(
+        _job_id: &JobId<T::AccountId>,
+        _reward: <T as Config>::Balance,
+        _target: &T::AccountId,
+    ) -> Result<(), DispatchError> {
         Ok(())
     }
 
     fn pay_matcher_reward(
-        _reward: Self::Reward,
+        _rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
         _matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
         Ok(())
+    }
+
+    fn refund(_job_id: &JobId<T::AccountId>) -> T::Balance {
+        0u8.into()
     }
 }
 
@@ -71,30 +82,24 @@ impl IsNativeAsset for AssetId {
     }
 }
 
-pub struct AssetRewardManager<Reward, AssetSplit, Currency>(
-    PhantomData<(Reward, AssetSplit, Currency)>,
+pub struct AssetRewardManager<AssetSplit, Currency, JobBudget>(
+    PhantomData<(AssetSplit, Currency, JobBudget)>,
 );
 
-impl<T, Reward, AssetSplit, Currency> RewardManager<T>
-    for AssetRewardManager<Reward, AssetSplit, Currency>
+impl<T, AssetSplit, Currency, Budget> RewardManager<T>
+    for AssetRewardManager<AssetSplit, Currency, Budget>
 where
     T: Config + frame_system::Config,
-    Reward: Balance,
     AssetSplit: FeeManager,
-    Currency: frame_support::traits::Currency<T::AccountId, Balance = Reward>
+    Currency: frame_support::traits::Currency<T::AccountId, Balance = T::Balance>
         + frame_support::traits::tokens::fungible::Mutate<T::AccountId>,
-    <Currency as frame_support::traits::Currency<T::AccountId>>::Balance: Member,
     <Currency as frame_support::traits::tokens::fungible::Inspect<T::AccountId>>::Balance:
-        Member + From<Reward>,
+        Member + From<T::Balance>,
+    Budget: JobBudget<T>,
 {
-    type Reward = Reward;
-
-    fn lock_reward(
-        reward: Self::Reward,
-        who: &MultiOrigin<T::AccountId>,
-    ) -> Result<(), DispatchError> {
+    fn lock_reward(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
-        match who {
+        match &job_id.0 {
             MultiOrigin::Acurast(who) => {
                 Currency::transfer(
                     who,
@@ -105,14 +110,24 @@ where
             }
             MultiOrigin::Tezos(_who) => {
                 // The availability of these funds was ensured on Tezos side, so we just mint the amount here
-                Currency::mint_into(&pallet_account, reward.into())?;
+                Currency::mint_into(&pallet_account, reward.saturated_into::<<Currency as frame_support::traits::tokens::fungible::Inspect<T::AccountId>>::Balance>())?;
             }
         };
+
+        Budget::reserve(&job_id, reward)
+            .map_err(|_| DispatchError::Other("Severe Error: JobBudget::reserve failed"))?;
 
         Ok(())
     }
 
-    fn pay_reward(reward: Self::Reward, target: &T::AccountId) -> Result<(), DispatchError> {
+    fn pay_reward(
+        job_id: &JobId<T::AccountId>,
+        reward: T::Balance,
+        target: &T::AccountId,
+    ) -> Result<(), DispatchError> {
+        Budget::unreserve(&job_id, reward)
+            .map_err(|_| DispatchError::Other("Severe Error: JobBudget::unreserve failed"))?;
+
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
 
         // Extract fee from the processor reward
@@ -142,13 +157,61 @@ where
     }
 
     fn pay_matcher_reward(
-        remaining_reward: Self::Reward,
+        rewards: Vec<(JobId<T::AccountId>, T::Balance)>,
         matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
         let matcher_fee_percentage = AssetSplit::get_matcher_percentage(); // TODO: fee will be indexed by version in the future
-        <Self as RewardManager<T>>::pay_reward(
-            matcher_fee_percentage.mul_floor(remaining_reward),
+
+        let mut reward: T::Balance = 0u8.into();
+        for (job_id, remaining_reward) in rewards.into_iter() {
+            Budget::unreserve(&job_id, remaining_reward)
+                .map_err(|_| DispatchError::Other("Severe Error: JobBudget::unreserve failed"))?;
+            reward += matcher_fee_percentage.mul_floor(remaining_reward);
+        }
+
+        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
+
+        // Extract fee from the matcher reward
+        let fee_percentage = AssetSplit::get_fee_percentage(); // TODO: fee will be indexed by version in the future
+        let fee = fee_percentage.mul_floor(reward);
+
+        // Subtract the fee from the reward
+        let reward_after_fee = reward - fee;
+
+        // Transfer fees to Acurast fees manager account
+        let fee_pallet_account: T::AccountId = AssetSplit::pallet_id().into_account_truncating();
+
+        Currency::transfer(
+            &pallet_account,
+            &fee_pallet_account,
+            fee,
+            frame_support::traits::ExistenceRequirement::KeepAlive,
+        )?;
+        Currency::transfer(
+            &pallet_account,
             matcher,
-        )
+            reward_after_fee,
+            frame_support::traits::ExistenceRequirement::KeepAlive,
+        )?;
+
+        Ok(())
     }
+
+    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance {
+        Budget::unreserve_remaining(&job_id)
+    }
+}
+
+/// Manages each job's budget by reserving/unreserving rewards that are externally strored, e.g. on a pallet account in `pallet_balances`.
+pub trait JobBudget<T: frame_system::Config + Config> {
+    fn reserve(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), ()>;
+
+    /// Unreserve exactly `reward` from reserved balance and fails if this exceeds the reserved amount.
+    fn unreserve(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), ()>;
+
+    /// Unreserves the remaining balance.
+    fn unreserve_remaining(job_id: &JobId<T::AccountId>) -> T::Balance;
+
+    /// The reserved amount.
+    fn reserved(job_id: &JobId<T::AccountId>) -> T::Balance;
 }

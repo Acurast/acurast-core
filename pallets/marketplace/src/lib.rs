@@ -34,6 +34,7 @@ use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use frame_support::traits::tokens::Balance;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
         Blake2_128, Blake2_128Concat, PalletId,
@@ -41,8 +42,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
     use reputation::{BetaParameters, BetaReputation, ReputationEngine};
-    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
-    use sp_runtime::{FixedU128, Permill, SaturatedConversion};
+    use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
+    use sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
     use xcm::v3::AssetId;
@@ -53,12 +54,11 @@ pub mod pallet {
         Schedule, StoredJobRegistration,
     };
 
-    use crate::payments::RewardFor;
     use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
     use crate::weights::WeightInfo;
-    use crate::RewardManager;
+    use crate::{JobBudget, RewardManager};
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_acurast::Config {
@@ -82,20 +82,7 @@ pub mod pallet {
         /// would be considered outide of the agreed schedule despite being within schedule.
         #[pallet::constant]
         type ReportTolerance: Get<u64>;
-        type Balance: Parameter
-            + CheckedAdd
-            + CheckedSub
-            + CheckedMul
-            + CheckedDiv
-            + From<u8>
-            + From<u32>
-            + From<u64>
-            + From<u128>
-            + Into<u128>
-            + Default
-            + Ord
-            + Clone
-            + IsType<RewardFor<Self>>;
+        type Balance: Parameter + From<u64> + IsType<u128> + Balance + FixedPointOperand;
         type ManagerProvider: ManagerProvider<Self>;
         type ProcessorLastSeenProvider: ProcessorLastSeenProvider<Self>;
         /// Logic for locking and paying tokens for job execution
@@ -185,9 +172,15 @@ pub mod pallet {
     >;
 
     #[pallet::storage]
-    #[pallet::getter(fn stored_matches_reverse_index)]
+    #[deprecated(since = "V2", note = "removed without replacement")]
     pub type StoredMatchesReverseIndex<T: Config> =
         StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
+
+    /// Tracks reward amounts locked for each job on pallet account as a map [`JobId`] -> [`T::Balance`]
+    #[pallet::storage]
+    #[pallet::getter(fn job_budgets)]
+    pub type JobBudgets<T: Config> =
+        StorageMap<_, Blake2_128, JobId<T::AccountId>, T::Balance, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
@@ -423,11 +416,10 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let remaining_reward = Self::process_matching(&matches)?;
+            let remaining_rewards = Self::process_matching(&matches)?;
 
             // pay part of accumulated remaining reward (unspent to consumer) to matcher
-            // pay only after all other steps succeeded without errors because paying reward is not revertable
-            T::RewardManager::pay_matcher_reward(remaining_reward, &who)?;
+            T::RewardManager::pay_matcher_reward(remaining_rewards, &who)?;
 
             Ok(().into())
         }
@@ -553,7 +545,11 @@ pub mod pallet {
 
             match T::ManagerProvider::manager_of(&who) {
                 Ok(manager) => {
-                    T::RewardManager::pay_reward(assignment.fee_per_execution.clone(), &manager)?;
+                    T::RewardManager::pay_reward(
+                        &job_id,
+                        assignment.fee_per_execution.clone(),
+                        &manager,
+                    )?;
 
                     match execution_result {
                         ExecutionResult::Success(operation_hash) => Self::deposit_event(
@@ -596,14 +592,13 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?;
             ensure!(actual_end.lt(&now), Error::<T>::JobCannotBeFinalized);
 
-            let reward_amount: <T as Config>::Balance = assignment.fee_per_execution.into();
             let unmet: u64 = assignment.sla.total - assignment.sla.met;
 
             // update reputation since we don't expect further reports for this job
             // (only update for attested devices!)
             if ensure_source_verified::<T>(&who).is_ok() {
                 // skip reputation update if reward is 0
-                if reward_amount > 0u8.into() {
+                if assignment.fee_per_execution > 0u8.into() {
                     let average_reward = <StoredAverageRewardV3<T>>::get().unwrap_or(0);
                     let total_assigned = <StoredTotalAssignedV3<T>>::get().unwrap_or_default();
 
@@ -612,7 +607,7 @@ pub mod pallet {
                         .ok_or(Error::<T>::CalculationOverflow)?;
 
                     let new_total_rewards = total_reward
-                        .checked_add(reward_amount.clone().into())
+                        .checked_add(assignment.fee_per_execution.into())
                         .ok_or(Error::<T>::CalculationOverflow)?;
 
                     let mut beta_params =
@@ -622,8 +617,8 @@ pub mod pallet {
                         beta_params,
                         assignment.sla.met,
                         unmet,
-                        reward_amount.clone().into(),
-                        average_reward,
+                        assignment.fee_per_execution,
+                        average_reward.into(),
                     )
                     .ok_or(Error::<T>::CalculationOverflow)?;
 
@@ -642,12 +637,7 @@ pub mod pallet {
                 }
             }
 
-            T::MarketplaceHooks::finalize_job(
-                &job_id,
-                reward_amount
-                    .checked_mul(&unmet.into())
-                    .ok_or(Error::<T>::CalculationOverflow)?,
-            )?;
+            T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
 
             // removed completed job from all storage points (completed SLA gets still deposited in event below)
             <StoredMatches<T>>::remove(&who, &job_id);
@@ -676,7 +666,7 @@ pub mod pallet {
         /// Registers a job in the marketplace by providing a [JobRegistration].
         /// If a job for the same `(accountId, script)` was previously registered, it will be overwritten.
         fn register_hook(
-            who: &MultiOrigin<T::AccountId>,
+            _who: &MultiOrigin<T::AccountId>,
             job_id: &JobId<T::AccountId>,
             registration: &JobRegistrationFor<T>,
         ) -> Result<(), DispatchError> {
@@ -729,9 +719,10 @@ pub mod pallet {
                 None => {}
             }
 
-            // lock only after all other steps succeeded without errors because locking reward is not revertable
-            // reward is understood per slot and execution
-            T::RewardManager::lock_reward(Self::total_reward_amount(registration)?.into(), &who)?;
+            // - lock only after all other steps succeeded without errors because locking reward is not revertable
+            // - reward is understood per slot and execution, so calculate total_reward_amount first
+            // - lock the complete reward inclusive the matcher share and potential gap to actual fee that will be refunded during job finalization
+            T::RewardManager::lock_reward(&job_id, Self::total_reward_amount(registration)?)?;
 
             Ok(().into())
         }
@@ -778,12 +769,43 @@ pub mod pallet {
         }
     }
 
+    impl<T: Config> JobBudget<T> for Pallet<T> {
+        fn reserve(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), ()> {
+            <JobBudgets<T>>::mutate(job_id, |amount| {
+                *amount = amount.checked_add(&reward).ok_or(())?;
+                Ok(())
+            })
+        }
+
+        fn unreserve(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), ()> {
+            <JobBudgets<T>>::mutate(job_id, |amount| {
+                if reward > *amount {
+                    return Err(());
+                }
+                *amount = amount.checked_sub(&reward).ok_or(())?;
+                Ok(())
+            })
+        }
+
+        fn unreserve_remaining(job_id: &JobId<T::AccountId>) -> T::Balance {
+            <JobBudgets<T>>::mutate(job_id, |amount| {
+                let remaining = amount.clone();
+                *amount = 0u8.into();
+                remaining
+            })
+        }
+
+        fn reserved(job_id: &JobId<T::AccountId>) -> T::Balance {
+            <JobBudgets<T>>::get(job_id)
+        }
+    }
+
     impl<T: Config> Pallet<T> {
-        /// Checks if a Processor - Job match is possible and returns the remaining job reward.
+        /// Checks if a Processor - Job match is possible and returns the remaining job rewards by `job_id`.
         fn process_matching<'a>(
             matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
-        ) -> Result<RewardFor<T>, DispatchError> {
-            let mut remaining_reward: T::Balance = 0u8.into();
+        ) -> Result<Vec<(JobId<T::AccountId>, T::Balance)>, DispatchError> {
+            let mut remaining_rewards: Vec<(JobId<T::AccountId>, T::Balance)> = Default::default();
 
             for m in matching {
                 let registration = <StoredJobRegistration<T>>::get(&m.job_id.0, &m.job_id.1)
@@ -803,7 +825,7 @@ pub mod pallet {
                     Error::<T>::IncorrectSourceCountInMatch
                 );
 
-                let reward_amount: <T as Config>::Balance = requirements.reward.into();
+                let reward_amount: <T as Config>::Balance = requirements.reward;
 
                 // keep track of total fee in assignments to check later if it exceeds reward
                 let mut total_fee: <T as Config>::Balance = 0u8.into();
@@ -923,7 +945,7 @@ pub mod pallet {
                                     *s = Some(Assignment {
                                         slot: slot as u8,
                                         start_delay: planned_execution.start_delay,
-                                        fee_per_execution: fee_per_execution.into(),
+                                        fee_per_execution,
                                         acknowledged: false,
                                         sla: SLA {
                                             total: execution_count,
@@ -956,9 +978,7 @@ pub mod pallet {
                 // because we cannot assume that asset amount is an unsigned integer for all future
                 ensure!(diff >= 0u32.into(), Error::<T>::InsufficientRewardInMatch);
 
-                remaining_reward = remaining_reward
-                    .checked_add(&diff)
-                    .ok_or(Error::<T>::CalculationOverflow)?;
+                remaining_rewards.push((m.job_id.clone(), diff));
 
                 <StoredTotalAssignedV3<T>>::mutate(|t| {
                     *t = Some(t.unwrap_or(0u128).saturating_add(1));
@@ -967,7 +987,7 @@ pub mod pallet {
                 <StoredJobStatus<T>>::insert(&m.job_id.0, &m.job_id.1, JobStatus::Matched);
                 Self::deposit_event(Event::JobRegistrationMatched(m.clone()));
             }
-            return Ok(remaining_reward.into());
+            return Ok(remaining_rewards);
         }
 
         fn check_scheduling_window(
@@ -1049,7 +1069,7 @@ pub mod pallet {
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
         pub fn filter_matching_sources(
-            registration: PartialJobRegistration<RewardFor<T>, T::AccountId>,
+            registration: PartialJobRegistration<T::Balance, T::AccountId>,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
@@ -1083,7 +1103,7 @@ pub mod pallet {
         }
 
         fn check(
-            registration: &PartialJobRegistration<RewardFor<T>, T::AccountId>,
+            registration: &PartialJobRegistration<T::Balance, T::AccountId>,
             source: &T::AccountId,
             consumer: Option<&MultiOrigin<T::AccountId>>,
         ) -> Result<(), Error<T>> {
@@ -1129,7 +1149,7 @@ pub mod pallet {
 
                     // CHECK price not exceeding reward
                     ensure!(
-                        fee_per_execution <= registration.reward.clone().into(),
+                        fee_per_execution <= registration.reward.clone(),
                         Error::<T>::InsufficientRewardInMatch
                     );
                 }
@@ -1236,8 +1256,8 @@ pub mod pallet {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
             let requirements: JobRequirementsFor<T> = e.into();
 
-            let reward_amount: <T as Config>::Balance = requirements.reward.into();
-            Ok(reward_amount
+            Ok(requirements
+                .reward
                 .checked_mul(&((requirements.slots as u128).into()))
                 .ok_or(Error::<T>::CalculationOverflow)?
                 .checked_mul(&registration.schedule.execution_count().into())

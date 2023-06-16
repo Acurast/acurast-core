@@ -9,7 +9,6 @@ use serde;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
-use crate::payments::RewardFor;
 use crate::Config;
 
 pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
@@ -141,7 +140,7 @@ pub enum PubKey {
     SECP256k1(PubKeyBytes),
 }
 
-pub type AssignmentFor<T> = Assignment<RewardFor<T>>;
+pub type AssignmentFor<T> = Assignment<<T as Config>::Balance>;
 
 /// The allowed sources update operation.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
@@ -171,7 +170,7 @@ pub struct SLA {
 }
 
 pub type JobRequirementsFor<T> =
-    JobRequirements<RewardFor<T>, <T as frame_system::Config>::AccountId>;
+    JobRequirements<<T as Config>::Balance, <T as frame_system::Config>::AccountId>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
