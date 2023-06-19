@@ -102,7 +102,7 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// The storage for jobs' status as a map [`AccountId`] `(consumer)` -> [`Script`] -> [`JobStatus`].
+    /// The storage for jobs' status as a map [`AccountId`] `(consumer)` -> [`JobId`] -> [`JobStatus`].
     #[pallet::storage]
     #[pallet::getter(fn stored_job_status)]
     pub type StoredJobStatus<T: Config> = StorageDoubleMap<
@@ -172,9 +172,18 @@ pub mod pallet {
     >;
 
     #[pallet::storage]
-    #[deprecated(since = "V2", note = "removed without replacement")]
+    #[deprecated(since = "V2", note = "please use `AssignedProcessors` instead")]
     pub type StoredMatchesReverseIndex<T: Config> =
         StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn assigned_processors)]
+    pub type AssignedProcessors<T: Config> = StorageMap<
+        _,
+        Blake2_128,
+        JobId<T::AccountId>,
+        BoundedVec<T::AccountId, ConstU32<MAX_SLOTS>>,
+    >;
 
     /// Tracks reward amounts locked for each job on pallet account as a map [`JobId`] -> [`T::Balance`]
     #[pallet::storage]
@@ -237,6 +246,8 @@ pub mod pallet {
         TooManyAllowedConsumers,
         /// The allowed consumers list for a registration cannot be empty if provided.
         TooFewAllowedConsumers,
+        /// The allowed number of slots is exceeded.
+        TooManySlots,
         /// Advertisement cannot be deleted while matched to at least one job.
         ///
         /// Pricing and capacity can be updated, e.g. the capacity can be set to 0 no no longer receive job matches.
@@ -341,6 +352,7 @@ pub mod pallet {
                 Error::AdvertisementPricingNotFound => false,
                 Error::TooManyAllowedConsumers => false,
                 Error::TooFewAllowedConsumers => false,
+                Error::TooManySlots => false,
                 Error::CannotDeleteAdvertisementWhileMatched => false,
                 Error::FailedToPay => false,
                 Error::AssetNotAllowedByBarrier => false,
@@ -583,14 +595,10 @@ pub mod pallet {
             let assignment =
                 <StoredMatches<T>>::get(&who, &job_id).ok_or(Error::<T>::JobNotAssigned)?;
 
-            let now = Self::now()?
-                .checked_add(T::ReportTolerance::get())
-                .ok_or(Error::<T>::CalculationOverflow)?;
-            let (_actual_start, actual_end) = registration
-                .schedule
-                .range(assignment.start_delay)
-                .ok_or(Error::<T>::CalculationOverflow)?;
-            ensure!(actual_end.lt(&now), Error::<T>::JobCannotBeFinalized);
+            ensure!(
+                Self::actual_schedule_ended(&registration.schedule, &assignment)?,
+                Error::<T>::JobCannotBeFinalized
+            );
 
             let unmet: u64 = assignment.sla.total - assignment.sla.met;
 
@@ -640,16 +648,16 @@ pub mod pallet {
             T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
 
             // removed completed job from all storage points (completed SLA gets still deposited in event below)
-            <StoredMatches<T>>::remove(&who, &job_id);
             <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-            <StoredMatchesReverseIndex<T>>::remove(&job_id);
+            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+
+            <StoredMatches<T>>::remove(&who, &job_id);
+            <StoredMatches<T>>::remove(&who, &job_id);
 
             // increase capacity
             <StoredStorageCapacity<T>>::mutate(&who, |c| {
                 *c = c.unwrap_or(0).checked_add(registration.storage.into())
             });
-
-            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
 
             Self::deposit_event(Event::JobFinalized(job_id));
             Ok(().into())
@@ -669,7 +677,7 @@ pub mod pallet {
             _who: &MultiOrigin<T::AccountId>,
             job_id: &JobId<T::AccountId>,
             registration: &JobRegistrationFor<T>,
-        ) -> Result<(), DispatchError> {
+        ) -> DispatchResultWithPostInfo {
             let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
             let requirements: JobRequirementsFor<T> = e.into();
 
@@ -699,6 +707,10 @@ pub mod pallet {
                 Error::<T>::JobRegistrationEndBeforeStart
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
+            ensure!(
+                requirements.slots as u32 <= MAX_SLOTS,
+                Error::<T>::TooManySlots
+            );
 
             if let Some(job_status) = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1) {
                 ensure!(
@@ -727,27 +739,59 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Deregisters a job for the given script.
-        fn deregister_hook(
-            _who: &T::AccountId,
-            job_id: &JobId<T::AccountId>,
-        ) -> Result<(), DispatchError> {
+        /// Deregisters a job.
+        fn deregister_hook(job_id: &JobId<T::AccountId>) -> DispatchResultWithPostInfo {
             let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
-            // lazily evaluated check if job is overdue
-            let overdue = || -> Result<bool, DispatchError> {
-                let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
-                    .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-                Ok(Self::now()? >= registration.schedule.start_time)
-            };
-            ensure!(
-                // allow to deregister overdue jobs
-                job_status == JobStatus::Open || overdue()?,
-                Error::<T>::JobRegistrationUnmodifiable
-            );
+            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
 
-            <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+            match job_status {
+                JobStatus::Open | JobStatus::Matched => {
+                    let match_overdue = Self::now()? >= registration.schedule.start_time;
+
+                    if match_overdue {
+                        T::MarketplaceHooks::finalize_job(
+                            &job_id,
+                            T::RewardManager::refund(&job_id),
+                        )?;
+
+                        <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                        <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+                    } else {
+                        Err(Error::<T>::JobRegistrationUnmodifiable)?;
+                    }
+                }
+                JobStatus::Assigned(_) => {
+                    if Self::schedule_ended(&registration.schedule)? {
+                        T::MarketplaceHooks::finalize_job(
+                            &job_id,
+                            T::RewardManager::refund(&job_id),
+                        )?;
+
+                        // removed completed job from all storage points (completed SLA gets still deposited in event below)
+                        <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                        <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+
+                        if let Some(processors) = <AssignedProcessors<T>>::get(&job_id) {
+                            for p in processors.iter() {
+                                <StoredMatches<T>>::remove(p, &job_id);
+
+                                // increase capacity
+                                <StoredStorageCapacity<T>>::mutate(p, |c| {
+                                    *c = c.unwrap_or(0).checked_add(registration.storage.into())
+                                });
+                            }
+                        }
+
+                        Self::deposit_event(Event::JobFinalized(job_id.clone()));
+                    } else {
+                        Err(Error::<T>::JobRegistrationUnmodifiable)?;
+                    }
+                }
+            }
+
             Ok(().into())
         }
 
@@ -756,7 +800,7 @@ pub mod pallet {
             _who: &T::AccountId,
             job_id: &JobId<T::AccountId>,
             _updates: &Vec<AllowedSourcesUpdate<T::AccountId>>,
-        ) -> Result<(), DispatchError> {
+        ) -> DispatchResultWithPostInfo {
             let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
 
@@ -959,10 +1003,21 @@ pub mod pallet {
                             Ok(())
                         },
                     )?;
-                    <StoredMatchesReverseIndex<T>>::insert(
+                    <AssignedProcessors<T>>::try_mutate(
                         &m.job_id,
-                        planned_execution.source.clone(),
-                    );
+                        |processor| -> Result<(), Error<T>> {
+                            match processor {
+                                None => {
+                                    *processor = Some(Default::default());
+                                }
+                                Some(p) => {
+                                    p.try_push(planned_execution.source.clone())
+                                        .map_err(|_| Error::<T>::TooManySlots)?;
+                                }
+                            };
+                            Ok(())
+                        },
+                    )?;
                     <StoredStorageCapacity<T>>::set(
                         &planned_execution.source,
                         capacity.checked_sub(registration.storage.into()),
@@ -1247,6 +1302,31 @@ pub mod pallet {
             }
 
             Ok(().into())
+        }
+
+        /// Calculates if the job ended considering the given assignment.
+        fn actual_schedule_ended(
+            schedule: &Schedule,
+            assignment: &AssignmentFor<T>,
+        ) -> Result<bool, Error<T>> {
+            let now = Self::now()?
+                .checked_add(T::ReportTolerance::get())
+                .ok_or(Error::<T>::CalculationOverflow)?;
+            let (_actual_start, actual_end) = schedule
+                .range(assignment.start_delay)
+                .ok_or(Error::<T>::CalculationOverflow)?;
+            Ok(actual_end.lt(&now))
+        }
+
+        /// Calculates if the job ended considering the given assignment.
+        fn schedule_ended(schedule: &Schedule) -> Result<bool, Error<T>> {
+            let now = Self::now()?
+                .checked_add(T::ReportTolerance::get())
+                .ok_or(Error::<T>::CalculationOverflow)?;
+            let (_actual_start, actual_end) = schedule
+                .range(schedule.max_start_delay)
+                .ok_or(Error::<T>::CalculationOverflow)?;
+            Ok(actual_end.lt(&now))
         }
 
         /// Calculates the total reward amount.

@@ -13,10 +13,10 @@ use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
 use tezos_michelson::michelson::data::{
-    self, try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
+    self, try_bytes, try_int, try_nat, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
 use tezos_michelson::michelson::types::{
-    address, bool as bool_type, bytes, mutez, nat, option, pair, set, string,
+    address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
 use tezos_michelson::Error as TezosMichelineError;
 use tezos_michelson::{
@@ -71,6 +71,15 @@ where
                     ),
                     registration,
                 )
+            }
+            RawAction::DeregisterJob => {
+                let payload: Vec<u8> = (&payload).into();
+                let job_id_sequence = parse_job_id(payload.as_slice())?;
+
+                ParsedAction::DeregisterJob((
+                    MultiOrigin::Tezos(bounded_address(&origin)?),
+                    job_id_sequence,
+                ))
             }
         })
     }
@@ -224,11 +233,24 @@ fn registration_payload_schema() -> &'static Micheline {
     })
 }
 
+/// The structure of a [`RawAction::DeregisterJob`] action before flattening:
+///
+/// ```txt
+/// sp.TRecord(
+///     jobId=sp.TNat,
+/// ).right_comb()
+/// ```
+#[cfg_attr(rustfmt, rustfmt::skip)]
+fn deregistration_job_schema() -> &'static Micheline {
+    static DEREGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+    DEREGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
+        // job_id
+        let schema: Micheline = nat();
+        Box::new(schema)
+    })
+}
+
 /// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
-///
-/// # Example
-/// A message's payload to register a job could look like:
-///
 fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, Extra>(
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
@@ -446,6 +468,15 @@ where
     ))
 }
 
+/// Parses an encoded [`RawAction::DeregisterJob`] action's payload into [`JobIdSequence`].
+fn parse_job_id(encoded: &[u8]) -> Result<JobIdSequence, ValidationError> {
+    let unpacked: Micheline = Micheline::unpack(encoded, Some(deregistration_job_schema()))
+        .map_err(|e| ValidationError::TezosMicheline(e))?;
+
+    let v: Int = try_nat(unpacked).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+    Ok(v.to_integer()?)
+}
+
 fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, ValidationError> {
     let v: Vec<u8> = match &address {
         TezosAddress::Implicit(a) => a.try_into()?,
@@ -611,6 +642,21 @@ mod tests {
         };
 
         assert_eq!(expected, registration);
+        assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_deregister_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000e444552454749535445525f4a4f4207070a0000001600006b82198cb179e8306c1bedd08f12dc863f3288860a00000003050001");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::DeregisterJob, action);
+        let exp: TezosAddress = "tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb".try_into().unwrap();
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let job_id: JobIdSequence = parse_job_id(payload.as_slice())?;
+
         assert_eq!(1, job_id);
         Ok(())
     }

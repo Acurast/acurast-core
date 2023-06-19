@@ -15,6 +15,7 @@ pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds 
 
 pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
 pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
+pub const MAX_SLOTS: u32 = 64;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;

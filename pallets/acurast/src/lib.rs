@@ -328,9 +328,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
             let job_id = (multi_origin, local_job_id);
-            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
 
-            <T as Config>::JobHooks::deregister_hook(&who, &job_id)?;
+            <T as Config>::JobHooks::deregister_hook(&job_id)?;
+
+            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
 
             Self::deposit_event(Event::JobRegistrationRemoved(job_id));
             Ok(().into())
