@@ -26,7 +26,6 @@ pub type JobRegistrationForMarketplace<T> =
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
 pub struct RegistrationExtra<Reward, AccountId> {
     pub requirements: JobRequirements<Reward, AccountId>,
-    pub expected_fulfillment_fee: u128,
 }
 
 impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>

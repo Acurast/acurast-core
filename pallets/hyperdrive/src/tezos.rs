@@ -136,7 +136,6 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 ///     allowOnlyVerifiedSources=sp.TBool,
 ///     allowedSources=sp.TOption(sp.TSet(sp.TString)),
 ///     extra=sp.TRecord(
-///         expectedFulfillmentFee=sp.TMutez,
 ///         requirements=sp.TRecord(
 ///             instantMatch=sp.TOption(
 ///                 sp.TSet(
@@ -177,25 +176,21 @@ fn registration_payload_schema() -> &'static Micheline {
             option(set(bytes())),
             // RegistrationExtra
             pair(vec![
-                // expected_fulfillment_fee
-                mutez(),
                 // instant_match
-                pair(vec![
-                    option(
-                        // PlannedExecutions
-                        set(pair(vec![
-                        // source
-                        bytes(),
-                        // start_delay
-                        nat()
-                    ]))),
-                    // min_reputation
-                    option(nat()),
-                    // reward
-                    nat(),
-                    // slots
-                    nat(),
-                ])
+                option(
+                    // PlannedExecutions
+                    set(pair(vec![
+                    // source
+                    bytes(),
+                    // start_delay
+                    nat()
+                ]))),
+                // min_reputation
+                option(nat()),
+                // reward
+                nat(),
+                // slots
+                nat(),
             ]),
             // job_id
             nat(),
@@ -268,14 +263,6 @@ where
             })
         },
     )?;
-    // TODO: "expected_fulfillment_fee" field could be skipped (only used on the target chain)
-    let expected_fulfillment_fee = {
-        let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
-            FieldError::ExpectedFulfillmentFee,
-        ))?)?;
-        let v: u128 = v.to_integer()?;
-        v.into()
-    };
     let instant_match = try_option(
         iter.next()
             .ok_or(ValidationError::MissingField(FieldError::InstantMatch))?,
@@ -435,7 +422,6 @@ where
             min_reputation,
             instant_match,
         },
-        expected_fulfillment_fee,
     }
     .into();
     Ok((
@@ -497,7 +483,6 @@ pub enum FieldError {
     AllowOnlyVerifiedSources,
     AllowedSources,
     Destination,
-    ExpectedFulfillmentFee,
     InstantMatch,
     Source,
     StartDelay,
@@ -566,8 +551,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000ec050707030a0707050902000000250a0000002000000000000000000000000000000000000000000000000000000000000000000707070700a80f07070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+    fn test_unpack_register_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000e7050707030a0707050902000000250a000000200000000000000000000000000000000000000000000000000000000000000000070707070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
         let exp: TezosAddress = "KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1".try_into().unwrap();
@@ -622,7 +607,6 @@ mod tests {
                         start_delay: 0,
                     }]),
                 },
-                expected_fulfillment_fee: 1000,
             },
         };
 
