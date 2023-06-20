@@ -55,6 +55,13 @@ impl LeafEncoder for TezosEncoder {
                     ]);
                     Micheline::pack(data, Some(assign_payload_schema()))
                 }
+                Action::FinalizeJob(job_id, refund) => {
+                    let data = data::pair(vec![
+                        data::nat(Nat::from_integer(*job_id)),
+                        data::nat(Nat::from_integer(*refund)),
+                    ]);
+                    Micheline::pack(data, Some(assign_payload_schema()))
+                }
                 Action::Noop => Ok(Default::default()),
             }?),
         ]);

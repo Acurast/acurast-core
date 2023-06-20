@@ -1,4 +1,4 @@
-use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
 use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
@@ -9,13 +9,13 @@ use serde;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
-use crate::payments::RewardFor;
 use crate::Config;
 
-pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
+pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
 
 pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
 pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
+pub const MAX_SLOTS: u32 = 64;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
@@ -27,7 +27,6 @@ pub type JobRegistrationForMarketplace<T> =
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
 pub struct RegistrationExtra<Reward, AccountId> {
     pub requirements: JobRequirements<Reward, AccountId>,
-    pub expected_fulfillment_fee: u128,
 }
 
 impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
@@ -141,10 +140,12 @@ pub enum PubKey {
     SECP256k1(PubKeyBytes),
 }
 
-pub type AssignmentFor<T> = Assignment<RewardFor<T>>;
+pub type AssignmentFor<T> = Assignment<<T as Config>::Balance>;
 
 /// The allowed sources update operation.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+#[derive(
+    RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy, PalletError,
+)]
 pub enum JobStatus {
     /// Status after a job got registered.
     Open,
@@ -171,7 +172,7 @@ pub struct SLA {
 }
 
 pub type JobRequirementsFor<T> =
-    JobRequirements<RewardFor<T>, <T as frame_system::Config>::AccountId>;
+    JobRequirements<<T as Config>::Balance, <T as frame_system::Config>::AccountId>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
@@ -248,12 +249,24 @@ pub trait MarketplaceHooks<T: Config> {
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
         pub_keys: &PubKeys,
     ) -> DispatchResultWithPostInfo;
+
+    fn finalize_job(
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        refund: T::Balance,
+    ) -> DispatchResultWithPostInfo;
 }
 
 impl<T: Config> MarketplaceHooks<T> for () {
     fn assign_job(
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _pub_keys: &PubKeys,
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
+    }
+
+    fn finalize_job(
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        _refund: T::Balance,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }

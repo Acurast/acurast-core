@@ -35,6 +35,7 @@ pub trait WeightInfo {
     fn acknowledge_match() -> Weight;
     fn report() -> Weight;
     fn finalize_job() -> Weight;
+    fn finalize_jobs() -> Weight;
 }
 
 /// Weights for pallet_acurast_marketplace using the Substrate node and recommended hardware.
@@ -77,6 +78,12 @@ impl<T: frame_system::Config> WeightInfo for Weights<T> {
             .saturating_add(T::DbWeight::get().writes(3))
     }
     fn finalize_job() -> Weight {
+        // Minimum execution time:  nanoseconds.
+        Weight::from_parts(129_864_000, 0)
+            .saturating_add(T::DbWeight::get().reads(6))
+            .saturating_add(T::DbWeight::get().writes(7))
+    }
+    fn finalize_jobs() -> Weight {
         // Minimum execution time:  nanoseconds.
         Weight::from_parts(129_864_000, 0)
             .saturating_add(T::DbWeight::get().reads(6))

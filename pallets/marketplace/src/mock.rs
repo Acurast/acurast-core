@@ -5,8 +5,11 @@ use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::DispatchError;
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
+use std::marker::PhantomData;
 
-use pallet_acurast::{CertificateRevocationListUpdate, JobModules, RevocationListUpdateBarrier};
+use pallet_acurast::{
+    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier,
+};
 
 use crate::stub::*;
 use crate::*;
@@ -209,6 +212,7 @@ impl mock_pallet::Config for Test {
 #[frame_support::pallet]
 pub mod mock_pallet {
     use frame_support::pallet_prelude::*;
+    use pallet_acurast::JobId;
 
     use crate::stub::Balance;
 
@@ -223,41 +227,65 @@ pub mod mock_pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
-        Locked(Balance),
-        PayReward(Balance),
-        PayMatcherReward(Balance),
+        LockReward((JobId<T::AccountId>, Balance)),
+        PayReward((JobId<T::AccountId>, Balance, T::AccountId)),
+        PayMatcherReward((Vec<(JobId<T::AccountId>, T::Balance)>, T::AccountId)),
+        RefundReward((JobId<T::AccountId>, T::Balance)),
     }
 }
 
-pub struct MockRewardManager {}
+pub struct MockRewardManager<Budget>(PhantomData<Budget>);
 
-impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
-    type Reward = Balance;
-
+impl<T: Config + mock_pallet::Config, Budget: JobBudget<T>> RewardManager<T>
+    for MockRewardManager<Budget>
+{
     fn lock_reward(
-        reward: Self::Reward,
-        _owner: &<T as frame_system::Config>::AccountId,
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward.clone()));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::LockReward((
+            job_id.clone(),
+            reward.into(),
+        )));
+        Budget::reserve(job_id, reward).unwrap();
         Ok(())
     }
 
     fn pay_reward(
-        reward: Self::Reward,
-        _target: &<T as frame_system::Config>::AccountId,
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
+        target: &T::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward.clone()));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward((
+            job_id.clone(),
+            reward.into(),
+            target.clone(),
+        )));
+        Budget::unreserve(job_id, reward).unwrap();
         Ok(())
     }
 
     fn pay_matcher_reward(
-        reward: Self::Reward,
-        _matcher: &<T as frame_system::Config>::AccountId,
+        rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
+        matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(
-            reward.clone(),
-        ));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward((
+            rewards.clone(),
+            matcher.clone(),
+        )));
+        for (job_id, remaining_reward) in rewards.into_iter() {
+            Budget::unreserve(&job_id, remaining_reward).unwrap();
+        }
         Ok(())
+    }
+
+    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance {
+        let remaining = Budget::unreserve_remaining(job_id);
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::RefundReward((
+            job_id.clone(),
+            remaining,
+        )));
+        remaining
     }
 }
 
@@ -288,7 +316,7 @@ impl Config for Test {
     type ReportTolerance = ReportTolerance;
     type Balance = Balance;
     type ManagerProvider = ManagerOf;
-    type RewardManager = MockRewardManager;
+    type RewardManager = MockRewardManager<Pallet<Self>>;
     type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
     type WeightInfo = weights::Weights<Test>;

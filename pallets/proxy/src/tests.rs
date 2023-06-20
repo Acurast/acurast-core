@@ -331,8 +331,10 @@ mod network_tests {
 
 #[cfg(test)]
 mod proxy_calls {
+    use acurast_common::JobIdSequence;
     use frame_support::assert_ok;
     use frame_support::dispatch::Dispatchable;
+    use frame_support::pallet_prelude::Hooks;
     use pallet_acurast::LocalJobIdSequence;
     use xcm_simulator::TestExt;
 
@@ -344,7 +346,7 @@ mod proxy_calls {
         register_job_alice();
     }
 
-    fn register_job_alice() {
+    fn register_job_alice() -> JobIdSequence {
         ProxyParachain::execute_with(|| {
             use crate::pallet::Call::register;
             use proxy_runtime::RuntimeCall::AcurastProxy;
@@ -364,14 +366,15 @@ mod proxy_calls {
 
             let events = System::events();
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = 1;
+            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
                 RuntimeEvent::Acurast(JobRegistrationStored { .. })
             )));
-        });
+            chain_job_id
+        })
     }
 
     #[test]
@@ -379,7 +382,7 @@ mod proxy_calls {
         use frame_support::dispatch::Dispatchable;
 
         Network::reset();
-        register();
+        let chain_job_id = register_job_alice();
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
@@ -387,9 +390,10 @@ mod proxy_calls {
             use acurast_runtime::Runtime;
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
-            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id.clone());
             assert!(p_store.is_some());
+
+            later(registration().schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
         });
 
         ProxyParachain::execute_with(|| {
@@ -410,7 +414,6 @@ mod proxy_calls {
             use acurast_runtime::{Runtime, RuntimeEvent, System};
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_none());
 
@@ -426,7 +429,7 @@ mod proxy_calls {
     fn update_allowed_sources() {
         Network::reset();
 
-        register();
+        let chain_job_id = register_job_alice();
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
@@ -434,7 +437,6 @@ mod proxy_calls {
             use acurast_runtime::Runtime;
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = 1;
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
         });
@@ -469,7 +471,6 @@ mod proxy_calls {
 
             let events = System::events();
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
 
             // source in storage same as one submitted to proxy
@@ -518,5 +519,31 @@ mod proxy_calls {
                 RuntimeEvent::AcurastMarketplace(AdvertisementStored { .. })
             )));
         });
+    }
+
+    fn next_block() {
+        if acurast_runtime::System::block_number() >= 1 {
+            // pallet_acurast_marketplace::on_finalize(System::block_number());
+            acurast_runtime::Timestamp::on_finalize(acurast_runtime::System::block_number());
+        }
+        acurast_runtime::System::set_block_number(acurast_runtime::System::block_number() + 1);
+        acurast_runtime::Timestamp::on_initialize(acurast_runtime::System::block_number());
+    }
+
+    /// A helper function to move time on in tests. It ensures `acurast_runtime::Timestamp::set` is only called once per block by advancing the block otherwise.
+    fn later(now: u64) {
+        // If this is not the very first timestamp ever set, we always advance the block before setting new time
+        // this is because setting it twice in a block is not legal
+        if acurast_runtime::Timestamp::get() > 0 {
+            // pretend block was finalized
+            let b = acurast_runtime::System::block_number();
+            next_block(); // we cannot set time twice in same block
+            assert_eq!(b + 1, acurast_runtime::System::block_number());
+        }
+        // pretend time moved on
+        assert_ok!(acurast_runtime::Timestamp::set(
+            acurast_runtime::RuntimeOrigin::none(),
+            now
+        ));
     }
 }

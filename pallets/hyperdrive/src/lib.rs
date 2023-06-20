@@ -358,6 +358,8 @@ pub mod pallet {
             // don't fail extrinsic from here onwards
             if let Err(e) = Self::process_message(key_bytes, message_bytes) {
                 Self::deposit_event(Event::MessageProcessed(e));
+            } else {
+                Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ActionSuccess));
             }
 
             Ok(().into())

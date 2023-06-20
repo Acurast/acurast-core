@@ -123,12 +123,18 @@ pub type StateValue = BoundedVec<u8, ConstU32<VALUE_MAX_LENGTH>>;
 pub enum RawAction {
     #[strum(serialize = "REGISTER_JOB")]
     RegisterJob,
+    #[strum(serialize = "DEREGISTER_JOB")]
+    DeregisterJob,
+    #[strum(serialize = "FINALIZE_JOB")]
+    FinalizeJob,
 }
 
 impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
     fn from(action: &ParsedAction<AccountId, Extra>) -> Self {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
+            ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
+            ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
         }
     }
 }
@@ -136,6 +142,8 @@ impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
+    DeregisterJob(JobId<AccountId>),
+    FinalizeJob(Vec<JobId<AccountId>>),
 }
 
 pub type MessageIdentifier = u128;

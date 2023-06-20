@@ -324,7 +324,7 @@ pub mod acurast_runtime {
         type ReportTolerance = ReportTolerance;
         type Balance = Balance;
         type ManagerProvider = ManagerOf;
-        type RewardManager = AssetRewardManager<Balance, FeeManagerImpl, Balances>;
+        type RewardManager = AssetRewardManager<FeeManagerImpl, Balances, AcurastMarketplace>;
         type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
         type MarketplaceHooks = ();
         type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;

@@ -60,7 +60,7 @@ pub fn job_registration_with_reward<T: Config>(
     let reward: <T as Config>::Balance = reward_value.into();
     let r = JobRequirements {
         slots: 1,
-        reward: reward.into(),
+        reward,
         min_reputation: Some(0),
         instant_match: instant_match_processor.map(|m| vec![m]),
     };

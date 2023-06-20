@@ -1,5 +1,6 @@
 use acurast_common::{Attestation, JobId, MultiOrigin};
-use frame_support::{sp_runtime::DispatchError, weights::Weight};
+use frame_support::dispatch::DispatchResultWithPostInfo;
+use frame_support::weights::Weight;
 use sp_std::prelude::*;
 
 use crate::{
@@ -48,16 +49,15 @@ pub trait JobHooks<T: Config> {
         who: &MultiOrigin<T::AccountId>,
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
         registration: &JobRegistrationFor<T>,
-    ) -> Result<(), DispatchError>;
+    ) -> DispatchResultWithPostInfo;
     fn deregister_hook(
-        who: &<T as frame_system::Config>::AccountId,
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
-    ) -> Result<(), DispatchError>;
+    ) -> DispatchResultWithPostInfo;
     fn update_allowed_sources_hook(
         who: &<T as frame_system::Config>::AccountId,
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
         updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
-    ) -> Result<(), DispatchError>;
+    ) -> DispatchResultWithPostInfo;
 }
 
 impl<T: Config> JobHooks<T> for () {
@@ -65,21 +65,20 @@ impl<T: Config> JobHooks<T> for () {
         _who: &MultiOrigin<T::AccountId>,
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _registration: &JobRegistrationFor<T>,
-    ) -> Result<(), DispatchError> {
-        Ok(())
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
     }
     fn deregister_hook(
-        _who: &<T as frame_system::Config>::AccountId,
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
-    ) -> Result<(), DispatchError> {
-        Ok(())
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
     }
     fn update_allowed_sources_hook(
         _who: &<T as frame_system::Config>::AccountId,
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _updates: &Vec<AllowedSourcesUpdate<<T as frame_system::Config>::AccountId>>,
-    ) -> Result<(), DispatchError> {
-        Ok(())
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
     }
 }
 
