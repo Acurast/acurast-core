@@ -159,7 +159,7 @@ pub mod pallet {
     #[pallet::getter(fn average_reward)]
     pub type StoredAverageRewardV3<T> = StorageValue<_, u128>;
 
-    /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> `SlotId`
+    /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> [`AssignmentFor<T>`]
     #[pallet::storage]
     #[pallet::getter(fn stored_matches)]
     pub type StoredMatches<T: Config> = StorageDoubleMap<
@@ -176,13 +176,18 @@ pub mod pallet {
     pub type StoredMatchesReverseIndex<T: Config> =
         StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
 
+    /// Job matches as a map [`JobId`] -> [`AccountId`] `(source)` -> `()`.
+    ///
+    /// This map can serve as a reverse index into `StoredMatches` to achieve a mapping [`JobId`] -> [[`AssignmentFor<T>`]] with one assignment per slot that is not yet finalized.
     #[pallet::storage]
     #[pallet::getter(fn assigned_processors)]
-    pub type AssignedProcessors<T: Config> = StorageMap<
+    pub type AssignedProcessors<T: Config> = StorageDoubleMap<
         _,
-        Blake2_128,
+        Blake2_128Concat,
         JobId<T::AccountId>,
-        BoundedVec<T::AccountId, ConstU32<MAX_SLOTS>>,
+        Blake2_128Concat,
+        T::AccountId,
+        (),
     >;
 
     /// Tracks reward amounts locked for each job on pallet account as a map [`JobId`] -> [`T::Balance`]
@@ -232,8 +237,10 @@ pub mod pallet {
         JobRegistrationZeroSlots,
         /// Job status not found. SEVERE error
         JobStatusNotFound,
-        /// The job registration can't be modified.
+        /// The job registration can't be modified/deregistered if it passed the Open state.
         JobRegistrationUnmodifiable,
+        /// The job registration can't be finalized given its current state.
+        CannotFinalizeJob(JobStatus),
         /// Acknowledge cannot be called for a job that does not have `JobStatus::Matched` status.
         CannotAcknowledgeWhenNotMatched,
         /// Report cannot be called for a job that was not acknowledged.
@@ -346,6 +353,7 @@ pub mod pallet {
                 Error::JobRegistrationZeroSlots => false,
                 Error::JobStatusNotFound => false,
                 Error::JobRegistrationUnmodifiable => false,
+                Error::CannotFinalizeJob(_) => false,
                 Error::CannotAcknowledgeWhenNotMatched => false,
                 Error::CannotReportWhenNotAcknowledged => false,
                 Error::AdvertisementNotFound => false,
@@ -579,7 +587,7 @@ pub mod pallet {
             }
         }
 
-        /// Called processors when the assigned job can be finalized.
+        /// Called by processors when the assigned job can be finalized.
         #[pallet::call_index(5)]
         #[pallet::weight(<T as Config>::WeightInfo::finalize_job())]
         pub fn finalize_job(
@@ -645,14 +653,9 @@ pub mod pallet {
                 }
             }
 
-            T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
-
-            // removed completed job from all storage points (completed SLA gets still deposited in event below)
-            <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-            <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
-
+            // only remove storage point indexed by a single processor (corresponding to the completed duties for the assigned slot)
             <StoredMatches<T>>::remove(&who, &job_id);
-            <StoredMatches<T>>::remove(&who, &job_id);
+            <AssignedProcessors<T>>::remove(&job_id, &who);
 
             // increase capacity
             <StoredStorageCapacity<T>>::mutate(&who, |c| {
@@ -661,6 +664,24 @@ pub mod pallet {
 
             Self::deposit_event(Event::JobFinalized(job_id));
             Ok(().into())
+        }
+
+        /// Called by a consumer whenever he wishes to finalizes some of his jobs and get unused rewards refunded.
+        ///
+        /// For details see [`Pallet<T>::finalize_jobs_for`].
+        #[pallet::call_index(6)]
+        #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs())]
+        pub fn finalize_jobs(
+            origin: OriginFor<T>,
+            job_ids: Vec<JobIdSequence>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            Self::finalize_jobs_for(
+                job_ids
+                    .into_iter()
+                    .map(|job_id_seq| (MultiOrigin::Acurast(who.clone()), job_id_seq)),
+            )
         }
     }
 
@@ -743,53 +764,14 @@ pub mod pallet {
         fn deregister_hook(job_id: &JobId<T::AccountId>) -> DispatchResultWithPostInfo {
             let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
-
-            let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
-                .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
-
             match job_status {
-                JobStatus::Open | JobStatus::Matched => {
-                    let match_overdue = Self::now()? >= registration.schedule.start_time;
+                JobStatus::Open => {
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id))?;
 
-                    if match_overdue {
-                        T::MarketplaceHooks::finalize_job(
-                            &job_id,
-                            T::RewardManager::refund(&job_id),
-                        )?;
-
-                        <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-                        <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
-                    } else {
-                        Err(Error::<T>::JobRegistrationUnmodifiable)?;
-                    }
+                    <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
-                JobStatus::Assigned(_) => {
-                    if Self::schedule_ended(&registration.schedule)? {
-                        T::MarketplaceHooks::finalize_job(
-                            &job_id,
-                            T::RewardManager::refund(&job_id),
-                        )?;
-
-                        // removed completed job from all storage points (completed SLA gets still deposited in event below)
-                        <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-                        <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
-
-                        if let Some(processors) = <AssignedProcessors<T>>::get(&job_id) {
-                            for p in processors.iter() {
-                                <StoredMatches<T>>::remove(p, &job_id);
-
-                                // increase capacity
-                                <StoredStorageCapacity<T>>::mutate(p, |c| {
-                                    *c = c.unwrap_or(0).checked_add(registration.storage.into())
-                                });
-                            }
-                        }
-
-                        Self::deposit_event(Event::JobFinalized(job_id.clone()));
-                    } else {
-                        Err(Error::<T>::JobRegistrationUnmodifiable)?;
-                    }
-                }
+                _ => Err(Error::<T>::JobRegistrationUnmodifiable)?,
             }
 
             Ok(().into())
@@ -846,12 +828,25 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// Checks if a Processor - Job match is possible and returns the remaining job rewards by `job_id`.
+        ///
+        /// If the job is no longer in status [`JobStatus::Open`], the matching is skipped without returning an error.
+        /// **The returned vector does not include an entry for skipped matches.**
+        ///
+        /// Every other invalidity in a provided [`Match`] fails the entire call.
         fn process_matching<'a>(
             matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
         ) -> Result<Vec<(JobId<T::AccountId>, T::Balance)>, DispatchError> {
             let mut remaining_rewards: Vec<(JobId<T::AccountId>, T::Balance)> = Default::default();
 
             for m in matching {
+                let job_status = <StoredJobStatus<T>>::get(&m.job_id.0, &m.job_id.1)
+                    .ok_or(Error::<T>::JobStatusNotFound)?;
+
+                if job_status != JobStatus::Open {
+                    // skip but don't fail this match
+                    continue;
+                }
+
                 let registration = <StoredJobRegistration<T>>::get(&m.job_id.0, &m.job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
                 let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
@@ -1003,21 +998,7 @@ pub mod pallet {
                             Ok(())
                         },
                     )?;
-                    <AssignedProcessors<T>>::try_mutate(
-                        &m.job_id,
-                        |processor| -> Result<(), Error<T>> {
-                            match processor {
-                                None => {
-                                    *processor = Some(Default::default());
-                                }
-                                Some(p) => {
-                                    p.try_push(planned_execution.source.clone())
-                                        .map_err(|_| Error::<T>::TooManySlots)?;
-                                }
-                            };
-                            Ok(())
-                        },
-                    )?;
+                    <AssignedProcessors<T>>::insert(&m.job_id, &planned_execution.source, ());
                     <StoredStorageCapacity<T>>::set(
                         &planned_execution.source,
                         capacity.checked_sub(registration.storage.into()),
@@ -1364,6 +1345,67 @@ pub mod pallet {
                 .ok_or(Error::<T>::CalculationOverflow)?
                 .checked_add(&pricing.base_fee_per_execution)
                 .ok_or(Error::<T>::CalculationOverflow)?)
+        }
+
+        /// Finalizes jobs and get refunds unused rewards.
+        ///
+        /// It assumes the caller was already authorized and is intended to be used from
+        /// * The [`Self::finalize_jobs`] extrinsic of this pallet
+        /// * An inter-chain communication protocol like Hyperdrive
+        ///
+        /// Only valid if for all given jobs provided,
+        ///
+        /// * the job was **not** acknowledged by any processor (job is in state [`JobStatus::Matched`]) OR
+        /// * the job was acknowledged by **at least one** processor (job is in state [`JobStatus::Assigned`]) AND
+        ///   * all processors have finalized their corresponding slot OR
+        ///   * the latest possible reporting time has passed
+        ///
+        /// If the call proceeds, it cleans up the remaining storage entries related to the finalized jobs.
+        pub fn finalize_jobs_for(
+            job_ids: impl IntoIterator<Item = JobId<T::AccountId>>,
+        ) -> DispatchResultWithPostInfo {
+            for job_id in job_ids {
+                let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
+                    .ok_or(Error::<T>::JobStatusNotFound)?;
+
+                let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                    .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+
+                match job_status {
+                    JobStatus::Open => Err(Error::<T>::CannotFinalizeJob(job_status))?,
+                    JobStatus::Matched => {
+                        let match_overdue = Self::now()? >= registration.schedule.start_time;
+                        if !match_overdue {
+                            Err(Error::<T>::CannotFinalizeJob(job_status))?;
+                        }
+                    }
+                    JobStatus::Assigned(_) => {
+                        if !Self::schedule_ended(&registration.schedule)? {
+                            Err(Error::<T>::CannotFinalizeJob(job_status))?;
+                        }
+                    }
+                }
+
+                // removed completed job from remaining storage points
+                for (p, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
+                    <StoredMatches<T>>::remove(&p, &job_id);
+
+                    // increase capacity
+                    <StoredStorageCapacity<T>>::mutate(&p, |c| {
+                        *c = c.unwrap_or(0).checked_add(registration.storage.into())
+                    });
+                }
+                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, MAX_SLOTS, None);
+
+                T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
+
+                <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+
+                Self::deposit_event(Event::JobFinalized(job_id.clone()));
+            }
+
+            Ok(().into())
         }
 
         /// Returns the current timestamp.

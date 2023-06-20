@@ -474,7 +474,7 @@ pub mod pallet {
         ///
         /// It assumes the caller was already authorized and is intended to be used from
         /// * The [`Self::register`] extrinsic of this pallet
-        /// * A inter-chain communication protocol like Hyperdrive
+        /// * An inter-chain communication protocol like Hyperdrive
         pub fn register_for(
             job_id: JobId<T::AccountId>,
             registration: JobRegistrationFor<T>,

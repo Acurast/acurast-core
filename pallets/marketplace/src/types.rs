@@ -1,4 +1,4 @@
-use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
 use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
@@ -143,7 +143,9 @@ pub enum PubKey {
 pub type AssignmentFor<T> = Assignment<<T as Config>::Balance>;
 
 /// The allowed sources update operation.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+#[derive(
+    RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy, PalletError,
+)]
 pub enum JobStatus {
     /// Status after a job got registered.
     Open,

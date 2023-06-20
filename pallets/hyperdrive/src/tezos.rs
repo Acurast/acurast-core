@@ -74,12 +74,24 @@ where
             }
             RawAction::DeregisterJob => {
                 let payload: Vec<u8> = (&payload).into();
-                let job_id_sequence = parse_job_id(payload.as_slice())?;
+                let job_id_sequence = parse_deregister_job_payload(payload.as_slice())?;
 
                 ParsedAction::DeregisterJob((
                     MultiOrigin::Tezos(bounded_address(&origin)?),
                     job_id_sequence,
                 ))
+            }
+            RawAction::FinalizeJob => {
+                let payload: Vec<u8> = (&payload).into();
+                let job_ids = parse_finalize_job_payload(payload.as_slice())?;
+
+                let address = bounded_address(&origin)?;
+                ParsedAction::FinalizeJob(
+                    job_ids
+                        .into_iter()
+                        .map(|job_id_seq| (MultiOrigin::Tezos(address.clone()), job_id_seq))
+                        .collect(),
+                )
             }
         })
     }
@@ -236,16 +248,27 @@ fn registration_payload_schema() -> &'static Micheline {
 /// The structure of a [`RawAction::DeregisterJob`] action before flattening:
 ///
 /// ```txt
-/// sp.TRecord(
-///     jobId=sp.TNat,
-/// ).right_comb()
+/// jobId=sp.TNat
 /// ```
 #[cfg_attr(rustfmt, rustfmt::skip)]
-fn deregistration_job_schema() -> &'static Micheline {
+fn deregister_job_schema() -> &'static Micheline {
     static DEREGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
     DEREGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
-        // job_id
         let schema: Micheline = nat();
+        Box::new(schema)
+    })
+}
+
+/// The structure of a [`RawAction::FinalizeJob`] action before flattening:
+///
+/// ```txt
+/// jobIds=sp.TSet(sp.TNat)
+/// ```
+#[cfg_attr(rustfmt, rustfmt::skip)]
+fn finalize_job_schema() -> &'static Micheline {
+    static DEREGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+    DEREGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
+        let schema: Micheline = set(nat());
         Box::new(schema)
     })
 }
@@ -469,12 +492,31 @@ where
 }
 
 /// Parses an encoded [`RawAction::DeregisterJob`] action's payload into [`JobIdSequence`].
-fn parse_job_id(encoded: &[u8]) -> Result<JobIdSequence, ValidationError> {
-    let unpacked: Micheline = Micheline::unpack(encoded, Some(deregistration_job_schema()))
+fn parse_deregister_job_payload(encoded: &[u8]) -> Result<JobIdSequence, ValidationError> {
+    let unpacked: Micheline = Micheline::unpack(encoded, Some(deregister_job_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
 
     let v: Int = try_nat(unpacked).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
     Ok(v.to_integer()?)
+}
+
+/// Parses an encoded [`RawAction::FinalizeJob`] action's payload into [[`JobIdSequence`]].
+fn parse_finalize_job_payload(encoded: &[u8]) -> Result<Vec<JobIdSequence>, ValidationError> {
+    let unpacked: Micheline = Micheline::unpack(encoded, Some(finalize_job_schema()))
+        .map_err(|e| ValidationError::TezosMicheline(e))?;
+
+    let ids = try_sequence::<JobIdSequence, _>(unpacked.try_into()?, |item| {
+        let job_id_seq: Int =
+            try_nat(item).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+        job_id_seq
+            .to_integer::<u32>()?
+            .try_into()
+            .map_err(|_| ValidationError::MissingField(FieldError::JobId))
+    })?
+    .try_into()
+    .map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+
+    Ok(ids)
 }
 
 fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, ValidationError> {
@@ -655,7 +697,7 @@ mod tests {
         assert_eq!(exp, origin);
 
         let payload: Vec<u8> = (&payload).into();
-        let job_id: JobIdSequence = parse_job_id(payload.as_slice())?;
+        let job_id: JobIdSequence = parse_deregister_job_payload(payload.as_slice())?;
 
         assert_eq!(1, job_id);
         Ok(())

@@ -236,15 +236,26 @@ fn test_match() {
             )
             .unwrap()
         );
-        // Job no longer assigned after last execution
+        // Job still assigned after last execution
         assert_eq!(
-            None,
+            Some(JobStatus::Assigned(1)),
             AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
         assert_eq!(
             // only job2 is still blocking memory
             Some(80_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
+        );
+
+        assert_ok!(AcurastMarketplace::finalize_jobs(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            vec![job_id1.1],
+        ));
+
+        // Job no longer assigned after finalization
+        assert_eq!(
+            None,
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
 
         assert_eq!(
@@ -334,6 +345,7 @@ fn test_match() {
                         pub_keys: PubKeys::default(),
                     }
                 )),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id1.clone())),
                 RuntimeEvent::MockPallet(mock_pallet::Event::RefundReward((job_id1.clone(), 0,))),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id1.clone(),)),
             ]
@@ -439,8 +451,8 @@ fn test_no_match_schedule_overlap() {
         ));
 
         // this one does not match anymore
-        let m = Match {
-            job_id: job_id1.clone(),
+        let m2 = Match {
+            job_id: job_id2.clone(),
             sources: vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
@@ -449,7 +461,7 @@ fn test_no_match_schedule_overlap() {
         assert_err!(
             AcurastMarketplace::propose_matching(
                 RuntimeOrigin::signed(charlie_account_id()).into(),
-                vec![m.clone()].try_into().unwrap(),
+                vec![m2.clone()].try_into().unwrap(),
             ),
             Error::<Test>::ScheduleOverlapInMatch
         );

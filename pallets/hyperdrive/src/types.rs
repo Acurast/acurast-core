@@ -125,6 +125,8 @@ pub enum RawAction {
     RegisterJob,
     #[strum(serialize = "DEREGISTER_JOB")]
     DeregisterJob,
+    #[strum(serialize = "FINALIZE_JOB")]
+    FinalizeJob,
 }
 
 impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
@@ -132,6 +134,7 @@ impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
+            ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
         }
     }
 }
@@ -140,6 +143,7 @@ impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
 pub enum ParsedAction<AccountId, Extra> {
     RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
     DeregisterJob(JobId<AccountId>),
+    FinalizeJob(Vec<JobId<AccountId>>),
 }
 
 pub type MessageIdentifier = u128;
