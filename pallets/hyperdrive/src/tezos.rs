@@ -507,7 +507,7 @@ fn parse_finalize_job_payload(encoded: &[u8]) -> Result<Vec<JobIdSequence>, Vali
 
     let ids = try_sequence::<JobIdSequence, _>(unpacked.try_into()?, |item| {
         let job_id_seq: Int =
-            try_nat(item).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+            try_int(item).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
         job_id_seq
             .to_integer::<u32>()?
             .try_into()
@@ -771,6 +771,21 @@ mod tests {
         let job_id: JobIdSequence = parse_deregister_job_payload(payload.as_slice())?;
 
         assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_finalize_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c46494e414c495a455f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000080502000000020001");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::FinalizeJob, action);
+        let exp: TezosAddress = "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap();
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let job_id: Vec<JobIdSequence> = parse_finalize_job_payload(payload.as_slice())?;
+
+        assert_eq!(vec![1], job_id);
         Ok(())
     }
 }
