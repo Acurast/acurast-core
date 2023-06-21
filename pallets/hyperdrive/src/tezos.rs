@@ -615,6 +615,7 @@ fn try_sequence<R, O: Fn(Data) -> Result<R, ValidationError>>(
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use tezos_core::types::encoded::ImplicitAddress;
 
     use pallet_acurast::{JobRegistration, Script};
 
@@ -675,6 +676,76 @@ mod tests {
                     instant_match: Some(vec![PlannedExecution {
                         source: hex![
                             "1111111111111111111111111111111111111111111111111111111111111111"
+                        ]
+                        .into(),
+                        start_delay: 0,
+                    }]),
+                },
+            },
+        };
+
+        assert_eq!(expected, registration);
+        assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_register_job2() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000ed050707030a0707050902000000250a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f070707070509020000002907070a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f000007070509000007070080c0a8ca9a3a000107070001070700a40107070001070702000000000707070700b40707070080da9ce59b62070700a0cf24070700909c010080bbd3e49b6207070a00000035697066733a2f2f516d536e317252737a444b354258634e516d4e367543767a4d376858636548555569426b61777758396b534d474b0000");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::RegisterJob, action);
+        let exp = TezosAddress::Implicit(ImplicitAddress::TZ1(
+            "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap(),
+        ));
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let (job_id, registration): (
+            JobIdSequence,
+            JobRegistration<
+                <Test as frame_system::Config>::AccountId,
+                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
+            >,
+        ) = parse_job_registration_payload::<
+            _,
+            <Test as Config>::ParsableAccountId,
+            <Test as frame_system::Config>::AccountId,
+            _,
+        >(payload.as_slice())?;
+
+        // JobRegistration { script: BoundedVec([105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75, 53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101, 72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75], 53), allowed_sources: Some([d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...)]), allow_only_verified_sources: true, schedule: Schedule { duration: 500, start_time: 1687356600000, end_time: 1687357200000, interval: 300000, max_start_delay: 10000 }, memory: 100, network_requests: 1, storage: 0, required_modules: BoundedVec([], 1), extra: RegistrationExtra { requirements: JobRequirements { slots: 1, reward: 1000000000000, min_reputation: Some(0), instant_match: Some([PlannedExecution { source: d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...), start_delay: 0 }]) } } }
+
+        let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
+            script: Script::try_from(vec![
+                105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75,
+                53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101,
+                72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75,
+            ])
+            .unwrap(),
+            allowed_sources: Some(vec![hex!(
+                "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
+            )
+            .into()]),
+            allow_only_verified_sources: true,
+            schedule: Schedule {
+                duration: 500,
+                start_time: 1687356600000,
+                end_time: 1687357200000,
+                interval: 300000,
+                max_start_delay: 10000,
+            },
+            memory: 100,
+            network_requests: 1,
+            storage: 0,
+            required_modules: vec![].try_into().unwrap(),
+            extra: RegistrationExtra {
+                requirements: JobRequirements {
+                    slots: 1,
+                    reward: 1000000000000,
+                    min_reputation: Some(0),
+                    instant_match: Some(vec![PlannedExecution {
+                        source: hex![
+                            "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
                         ]
                         .into(),
                         start_delay: 0,
