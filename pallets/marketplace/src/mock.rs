@@ -1,17 +1,15 @@
-use frame_support::{
-    pallet_prelude::GenesisBuild,
-    parameter_types,
-    traits::{AsEnsureOriginWithArg, Everything},
-    PalletId,
-};
+use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use sp_core::*;
 use sp_io;
-use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256, ConstU128, ConstU32};
-use sp_runtime::{bounded_vec, BoundedVec, DispatchError};
+use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
+use sp_runtime::DispatchError;
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
+use std::marker::PhantomData;
 
-use pallet_acurast::{CertificateRevocationListUpdate, JobModules, RevocationListUpdateBarrier};
+use pallet_acurast::{
+    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier,
+};
 
 use crate::stub::*;
 use crate::*;
@@ -67,23 +65,9 @@ impl ExtBuilder {
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
                 (alice_account_id(), INITIAL_BALANCE),
-                (pallet_assets_account(), INITIAL_BALANCE),
                 (pallet_fees_account(), INITIAL_BALANCE),
                 (bob_account_id(), INITIAL_BALANCE),
                 (processor_account_id(), INITIAL_BALANCE),
-            ],
-        }
-        .assimilate_storage(&mut t)
-        .unwrap();
-
-        // give alice an initial balance of token 22 (backed by statemint) to pay for a job
-        // get the MockAsset representing token 22 with owned_asset()
-        pallet_assets::GenesisConfig::<Test> {
-            assets: vec![(22, pallet_assets_account(), false, 1_000)],
-            metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-            accounts: vec![
-                (22, alice_account_id(), INITIAL_BALANCE),
-                (22, bob_account_id(), INITIAL_BALANCE),
             ],
         }
         .assimilate_storage(&mut t)
@@ -110,7 +94,6 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
         AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>},
@@ -124,7 +107,7 @@ parameter_types! {
 parameter_types! {
     pub const MinimumPeriod: u64 = 2000;
     pub AllowedRevocationListUpdate: Vec<AccountId> = vec![alice_account_id(), <Test as crate::Config>::PalletId::get().into_account_truncating()];
-    pub const ExistentialDeposit: AssetAmount = EXISTENTIAL_DEPOSIT;
+    pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
 }
 parameter_types! {
     pub const MaxReserves: u32 = 50;
@@ -147,7 +130,7 @@ impl frame_system::Config for Test {
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
-    type AccountData = pallet_balances::AccountData<AssetAmount>;
+    type AccountData = pallet_balances::AccountData<Balance>;
     type OnNewAccount = ();
     type OnKilledAccount = ();
     type DbWeight = ();
@@ -169,7 +152,7 @@ impl pallet_timestamp::Config for Test {
 
 impl pallet_balances::Config for Test {
     /// The type for recording an account's balance.
-    type Balance = AssetAmount;
+    type Balance = Balance;
     type DustRemoval = ();
     /// The ubiquitous event type.
     type RuntimeEvent = RuntimeEvent;
@@ -179,29 +162,6 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-}
-
-impl pallet_assets::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type Balance = AssetAmount;
-    type AssetId = AssetId;
-    type AssetIdParameter = codec::Compact<AssetId>;
-    type Currency = Balances;
-    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
-    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-    type AssetDeposit = ConstU128<0>;
-    type AssetAccountDeposit = ConstU128<0>;
-    type MetadataDepositBase = ConstU128<{ UNIT }>;
-    type MetadataDepositPerByte = ConstU128<{ 10 * MICROUNIT }>;
-    type ApprovalDeposit = ConstU128<{ 10 * MICROUNIT }>;
-    type StringLimit = ConstU32<50>;
-    type Freezer = ();
-    type Extra = ();
-    type WeightInfo = ();
-    type RemoveItemsLimit = ();
-    type CallbackHandle = ();
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = ();
 }
 
 impl parachain_info::Config for Test {}
@@ -228,10 +188,20 @@ impl pallet_acurast::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper
     fn registration_extra() -> <Test as pallet_acurast::Config>::RegistrationExtra {
         JobRequirements {
             slots: 1,
-            reward: asset(1),
+            reward: 1,
             min_reputation: None,
             instant_match: None,
         }
+    }
+
+    fn funded_account(index: u32) -> AccountId {
+        let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
+            &caller,
+            u32::MAX.into(),
+        );
+
+        caller
     }
 }
 
@@ -242,8 +212,9 @@ impl mock_pallet::Config for Test {
 #[frame_support::pallet]
 pub mod mock_pallet {
     use frame_support::pallet_prelude::*;
+    use pallet_acurast::JobId;
 
-    use crate::stub::MockAsset;
+    use crate::stub::Balance;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + crate::Config {
@@ -256,41 +227,71 @@ pub mod mock_pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
-        Locked(MockAsset),
-        PayReward(MockAsset),
-        PayMatcherReward(MockAsset),
+        LockReward((JobId<T::AccountId>, Balance)),
+        PayReward((JobId<T::AccountId>, Balance, T::AccountId)),
+        PayMatcherReward((Vec<(JobId<T::AccountId>, T::Balance)>, T::AccountId)),
+        RefundReward((JobId<T::AccountId>, T::Balance)),
     }
 }
 
-pub struct MockRewardManager {}
+pub struct MockRewardManager<Budget>(PhantomData<Budget>);
 
-impl<T: Config + mock_pallet::Config> RewardManager<T> for MockRewardManager {
-    type Reward = MockAsset;
-
+impl<T: Config + mock_pallet::Config, Budget: JobBudget<T>> RewardManager<T>
+    for MockRewardManager<Budget>
+{
     fn lock_reward(
-        reward: &Self::Reward,
-        _owner: &<T as frame_system::Config>::AccountId,
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::Locked(reward.clone()));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::LockReward((
+            job_id.clone(),
+            reward.into(),
+        )));
+        Budget::reserve(job_id, reward).unwrap();
         Ok(())
     }
 
     fn pay_reward(
-        reward: &Self::Reward,
-        _target: &<T as frame_system::Config>::AccountId,
+        job_id: &JobId<T::AccountId>,
+        reward: <T as Config>::Balance,
+        target: &T::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward(reward.clone()));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward((
+            job_id.clone(),
+            reward.into(),
+            target.clone(),
+        )));
+        Budget::unreserve(job_id, reward).unwrap();
         Ok(())
     }
 
     fn pay_matcher_reward(
-        reward: &Self::Reward,
-        _matcher: &<T as frame_system::Config>::AccountId,
+        remaining_rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
+        matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward(
-            reward.clone(),
-        ));
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward((
+            remaining_rewards.clone(),
+            matcher.clone(),
+        )));
+
+        let mut matcher_reward: T::Balance = 0u8.into();
+        for (job_id, remaining_reward) in remaining_rewards.into_iter() {
+            let matcher_fee = FeeManagerImpl::get_matcher_percentage().mul_floor(remaining_reward);
+            Budget::unreserve(&job_id, matcher_fee)
+                .map_err(|_| DispatchError::Other("Severe Error: JobBudget::unreserve failed"))?;
+            matcher_reward += matcher_fee;
+        }
+
         Ok(())
+    }
+
+    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance {
+        let remaining = Budget::unreserve_remaining(job_id);
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::RefundReward((
+            job_id.clone(),
+            remaining,
+        )));
+        remaining
     }
 }
 
@@ -319,11 +320,9 @@ impl Config for Test {
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type ReportTolerance = ReportTolerance;
-    type AssetId = AssetId;
-    type AssetAmount = AssetAmount;
+    type Balance = Balance;
     type ManagerProvider = ManagerOf;
-    type RewardManager = MockRewardManager;
-    type AssetValidator = PassAllAssets;
+    type RewardManager = MockRewardManager<Pallet<Self>>;
     type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
     type WeightInfo = weights::Weights<Test>;
@@ -335,6 +334,13 @@ impl Config for Test {
 impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
     fn registration_extra(r: JobRequirementsFor<Test>) -> <Test as Config>::RegistrationExtra {
         r
+    }
+
+    fn funded_account(index: u32, amount: Balance) -> AccountId {
+        let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
+        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(&caller, amount);
+
+        caller
     }
 }
 
@@ -349,10 +355,6 @@ pub fn events() -> Vec<RuntimeEvent> {
     evt
 }
 
-pub fn pallet_assets_account() -> <Test as frame_system::Config>::AccountId {
-    <Test as Config>::PalletId::get().into_account_truncating()
-}
-
 pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
 }
@@ -364,16 +366,13 @@ pub fn advertisement(
     max_memory: u32,
     network_request_quota: u8,
 ) -> AdvertisementFor<Test> {
-    let pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>> =
-        bounded_vec![PricingVariant {
-            reward_asset: 0,
+    Advertisement {
+        pricing: Pricing {
             fee_per_millisecond,
             fee_per_storage_byte,
             base_fee_per_execution: 0,
             scheduling_window: SchedulingWindow::Delta(2_628_000_000), // 1 month
-        }];
-    Advertisement {
-        pricing,
+        },
         allowed_consumers: None,
         storage_capacity,
         max_memory,

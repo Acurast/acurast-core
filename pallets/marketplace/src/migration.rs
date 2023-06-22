@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use frame_support::{traits::GetStorageVersion, weights::Weight};
 use pallet_acurast::JobModules;
 use sp_core::Get;
@@ -41,6 +43,27 @@ pub fn migrate_to_v2<T: Config>() -> Weight {
         STORAGE_VERSION.put::<Pallet<T>>();
         let count = StoredAdvertisementRestriction::<T>::iter_values().count() as u64;
         T::DbWeight::get().reads_writes(count + 1, count + 1)
+    } else {
+        Weight::zero()
+    }
+}
+
+pub fn migrate_to_v3<T: Config>() -> Weight {
+    let onchain_version = Pallet::<T>::on_chain_storage_version();
+    if onchain_version < crate::STORAGE_VERSION {
+        let mut count = 0u32;
+        count += StoredJobStatus::<T>::clear(10_000, None).loops;
+        count += StoredAdvertisementRestriction::<T>::clear(10_000, None).loops;
+        count += StoredAdvertisementPricing::<T>::clear(10_000, None).loops;
+        count += StoredStorageCapacity::<T>::clear(10_000, None).loops;
+        count += StoredReputation::<T>::clear(10_000, None).loops;
+        count += StoredTotalAssignedV2::<T>::clear(10_000, None).loops;
+        count += StoredAverageRewardV2::<T>::clear(10_000, None).loops;
+        count += StoredMatches::<T>::clear(10_000, None).loops;
+        count += StoredMatchesReverseIndex::<T>::clear(10_000, None).loops;
+
+        STORAGE_VERSION.put::<Pallet<T>>();
+        T::DbWeight::get().reads_writes((count + 1).into(), (count + 1).into())
     } else {
         Weight::zero()
     }

@@ -1,4 +1,4 @@
-use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
+use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
 use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
@@ -9,14 +9,13 @@ use serde;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
-use crate::payments::RewardFor;
 use crate::Config;
 
-pub const MAX_PRICING_VARIANTS: u32 = 100;
-pub const MAX_EXECUTIONS_PER_JOB: u64 = 10000;
+pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
 
 pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
 pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
+pub const MAX_SLOTS: u32 = 64;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
@@ -28,7 +27,6 @@ pub type JobRegistrationForMarketplace<T> =
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
 pub struct RegistrationExtra<Reward, AccountId> {
     pub requirements: JobRequirements<Reward, AccountId>,
-    pub expected_fulfillment_fee: u128,
 }
 
 impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
@@ -41,9 +39,9 @@ impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
 
 /// The resource advertisement by a source containing pricing and capacity announcements.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct Advertisement<AccountId, AssetId, AssetAmount, MaxAllowedConsumers: Get<u32>> {
+pub struct Advertisement<AccountId, Reward, MaxAllowedConsumers: Get<u32>> {
     /// The reward token accepted. Understood as one-of per job assigned.
-    pub pricing: BoundedVec<PricingVariant<AssetId, AssetAmount>, ConstU32<MAX_PRICING_VARIANTS>>,
+    pub pricing: Pricing<Reward>,
     /// Maximum memory in bytes not to be exceeded during any job's execution.
     pub max_memory: u32,
     /// Maximum network requests per second not to be exceeded.
@@ -58,8 +56,7 @@ pub struct Advertisement<AccountId, AssetId, AssetAmount, MaxAllowedConsumers: G
 
 pub type AdvertisementFor<T> = Advertisement<
     <T as frame_system::Config>::AccountId,
-    <T as Config>::AssetId,
-    <T as Config>::AssetAmount,
+    <T as Config>::Balance,
     <T as Config>::MaxAllowedConsumers,
 >;
 
@@ -91,23 +88,21 @@ pub enum SchedulingWindow {
     Delta(u64),
 }
 
-/// Pricing variant listing cost per resource unit and slash on SLA violation.
+/// Pricing listing cost per resource unit and slash on SLA violation.
 /// Specified in specific asset that is payed out or deducted from stake on complete fulfillment.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
-pub struct PricingVariant<AssetId, AssetAmount> {
-    /// The rewarded asset. Only one per [PricingVariant].
-    pub reward_asset: AssetId,
+pub struct Pricing<Reward> {
     /// Fee per millisecond in [reward_asset].
-    pub fee_per_millisecond: AssetAmount,
+    pub fee_per_millisecond: Reward,
     /// Fee per storage byte in [reward_asset].
-    pub fee_per_storage_byte: AssetAmount,
+    pub fee_per_storage_byte: Reward,
     /// A fixed base fee for each execution (for each slot and at each interval) in [reward_asset].
-    pub base_fee_per_execution: AssetAmount,
+    pub base_fee_per_execution: Reward,
     /// The scheduling window in which to accept matches for this pricing.
     pub scheduling_window: SchedulingWindow,
 }
 
-pub type PricingVariantFor<T> = PricingVariant<<T as Config>::AssetId, <T as Config>::AssetAmount>;
+pub type PricingFor<T> = Pricing<<T as Config>::Balance>;
 
 /// A proposed [Match] becomes an [Assignment] once it's acknowledged.
 ///
@@ -145,10 +140,12 @@ pub enum PubKey {
     SECP256k1(PubKeyBytes),
 }
 
-pub type AssignmentFor<T> = Assignment<RewardFor<T>>;
+pub type AssignmentFor<T> = Assignment<<T as Config>::Balance>;
 
 /// The allowed sources update operation.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+#[derive(
+    RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy, PalletError,
+)]
 pub enum JobStatus {
     /// Status after a job got registered.
     Open,
@@ -175,7 +172,7 @@ pub struct SLA {
 }
 
 pub type JobRequirementsFor<T> =
-    JobRequirements<RewardFor<T>, <T as frame_system::Config>::AccountId>;
+    JobRequirements<<T as Config>::Balance, <T as frame_system::Config>::AccountId>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
@@ -252,12 +249,24 @@ pub trait MarketplaceHooks<T: Config> {
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
         pub_keys: &PubKeys,
     ) -> DispatchResultWithPostInfo;
+
+    fn finalize_job(
+        job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        refund: T::Balance,
+    ) -> DispatchResultWithPostInfo;
 }
 
 impl<T: Config> MarketplaceHooks<T> for () {
     fn assign_job(
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
         _pub_keys: &PubKeys,
+    ) -> DispatchResultWithPostInfo {
+        Ok(().into())
+    }
+
+    fn finalize_job(
+        _job_id: &JobId<<T as frame_system::Config>::AccountId>,
+        _refund: T::Balance,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }

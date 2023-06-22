@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use frame_support::{pallet_prelude::GenesisBuild, sp_runtime::traits::AccountIdConversion};
+use frame_support::sp_runtime::traits::AccountIdConversion;
 use hex_literal::hex;
 use polkadot_parachain::primitives::Id as ParaId;
 use xcm_simulator::{decl_test_network, decl_test_parachain, decl_test_relay_chain};
@@ -82,31 +82,10 @@ pub fn acurast_ext(para_id: u32) -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (alice_account_id(), INITIAL_BALANCE),
-            (pallet_assets_account(), INITIAL_BALANCE),
             (pallet_fees_account(), INITIAL_BALANCE),
             (bob_account_id(), INITIAL_BALANCE),
             (processor_account_id(), INITIAL_BALANCE),
         ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    // give alice an initial balance of token 22 (backed by statemint) to pay for a job
-    // get the MultiAsset representing token 22 with owned_asset()
-    pallet_assets::GenesisConfig::<Runtime> {
-        assets: vec![(22, pallet_assets_account(), false, 1_000)],
-        metadata: vec![(22, "test_payment".into(), "tpt".into(), 12.into())],
-        accounts: vec![
-            (22, alice_account_id(), INITIAL_BALANCE),
-            (22, bob_account_id(), INITIAL_BALANCE),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    // make asset 22 a valid asset via Genesis
-    pallet_acurast_assets_manager::GenesisConfig::<Runtime> {
-        assets: vec![(22, 1000, 50, 22)],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -166,9 +145,6 @@ pub fn para_account_id(id: u32) -> relay_chain::AccountId {
 }
 pub fn processor_account_id() -> AcurastAccountId {
     hex!("b8bc25a2b4c0386b8892b43e435b71fe11fa50533935f027949caf04bcce4694").into()
-}
-pub fn pallet_assets_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
-    <AcurastRuntime as pallet_acurast::Config>::PalletId::get().into_account_truncating()
 }
 pub fn pallet_fees_account() -> <AcurastRuntime as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
@@ -355,8 +331,10 @@ mod network_tests {
 
 #[cfg(test)]
 mod proxy_calls {
+    use acurast_common::JobIdSequence;
     use frame_support::assert_ok;
     use frame_support::dispatch::Dispatchable;
+    use frame_support::pallet_prelude::Hooks;
     use pallet_acurast::LocalJobIdSequence;
     use xcm_simulator::TestExt;
 
@@ -368,7 +346,7 @@ mod proxy_calls {
         register_job_alice();
     }
 
-    fn register_job_alice() {
+    fn register_job_alice() -> JobIdSequence {
         ProxyParachain::execute_with(|| {
             use crate::pallet::Call::register;
             use proxy_runtime::RuntimeCall::AcurastProxy;
@@ -388,14 +366,15 @@ mod proxy_calls {
 
             let events = System::events();
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = 1;
+            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
             assert!(events.iter().any(|event| matches!(
                 event.event,
                 RuntimeEvent::Acurast(JobRegistrationStored { .. })
             )));
-        });
+            chain_job_id
+        })
     }
 
     #[test]
@@ -403,7 +382,7 @@ mod proxy_calls {
         use frame_support::dispatch::Dispatchable;
 
         Network::reset();
-        register();
+        let chain_job_id = register_job_alice();
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
@@ -411,9 +390,10 @@ mod proxy_calls {
             use acurast_runtime::Runtime;
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
-            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
+            let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id.clone());
             assert!(p_store.is_some());
+
+            later(registration().schedule.start_time + 3000); // pretend actual execution until report call took 3 seconds
         });
 
         ProxyParachain::execute_with(|| {
@@ -434,7 +414,6 @@ mod proxy_calls {
             use acurast_runtime::{Runtime, RuntimeEvent, System};
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_none());
 
@@ -450,7 +429,7 @@ mod proxy_calls {
     fn update_allowed_sources() {
         Network::reset();
 
-        register();
+        let chain_job_id = register_job_alice();
 
         // check that job is stored in the context of this test
         AcurastParachain::execute_with(|| {
@@ -458,7 +437,6 @@ mod proxy_calls {
             use acurast_runtime::Runtime;
 
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = 1;
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
             assert!(p_store.is_some());
         });
@@ -493,7 +471,6 @@ mod proxy_calls {
 
             let events = System::events();
             let multi_origin = MultiOrigin::Acurast(ALICE);
-            let chain_job_id = LocalJobIdSequence::<Runtime>::get();
             let p_store = StoredJobRegistration::<Runtime>::get(multi_origin, chain_job_id);
 
             // source in storage same as one submitted to proxy
@@ -542,5 +519,31 @@ mod proxy_calls {
                 RuntimeEvent::AcurastMarketplace(AdvertisementStored { .. })
             )));
         });
+    }
+
+    fn next_block() {
+        if acurast_runtime::System::block_number() >= 1 {
+            // pallet_acurast_marketplace::on_finalize(System::block_number());
+            acurast_runtime::Timestamp::on_finalize(acurast_runtime::System::block_number());
+        }
+        acurast_runtime::System::set_block_number(acurast_runtime::System::block_number() + 1);
+        acurast_runtime::Timestamp::on_initialize(acurast_runtime::System::block_number());
+    }
+
+    /// A helper function to move time on in tests. It ensures `acurast_runtime::Timestamp::set` is only called once per block by advancing the block otherwise.
+    fn later(now: u64) {
+        // If this is not the very first timestamp ever set, we always advance the block before setting new time
+        // this is because setting it twice in a block is not legal
+        if acurast_runtime::Timestamp::get() > 0 {
+            // pretend block was finalized
+            let b = acurast_runtime::System::block_number();
+            next_block(); // we cannot set time twice in same block
+            assert_eq!(b + 1, acurast_runtime::System::block_number());
+        }
+        // pretend time moved on
+        assert_ok!(acurast_runtime::Timestamp::set(
+            acurast_runtime::RuntimeOrigin::none(),
+            now
+        ));
     }
 }

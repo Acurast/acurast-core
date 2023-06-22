@@ -1,6 +1,6 @@
 [package]
 name = "pallet-acurast-processor-manager"
-version = "0.1.1"
+version = "0.2.0"
 license = "MIT"
 homepage = "https://docs.acurast.com/"
 edition = "2021"

@@ -1,5 +1,4 @@
 use frame_support::{ensure, pallet_prelude::DispatchResult};
-use pallet_acurast_assets_manager::traits::AssetValidator;
 use reputation::BetaParameters;
 use sp_core::Get;
 
@@ -56,16 +55,12 @@ impl<T: Config> Pallet<T> {
             },
         );
         // update separate pricing index
-        for pricing in &advertisement.pricing {
-            T::AssetValidator::validate(&pricing.reward_asset).map_err(|e| e.into())?;
-            <StoredAdvertisementPricing<T>>::insert(processor, &pricing.reward_asset, pricing);
-
-            <StoredReputation<T>>::mutate(processor, &pricing.reward_asset, |r| {
-                if r.is_none() {
-                    *r = Some(BetaParameters::default());
-                }
-            });
-        }
+        <StoredAdvertisementPricing<T>>::insert(processor, advertisement.pricing.clone());
+        <StoredReputation<T>>::mutate(processor, |r| {
+            if r.is_none() {
+                *r = Some(BetaParameters::default());
+            }
+        });
 
         Ok(().into())
     }

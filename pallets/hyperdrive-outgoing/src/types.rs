@@ -67,6 +67,8 @@ impl<Hash> OnNewRoot<Hash> for () {
 pub enum RawAction {
     #[strum(serialize = "ASSIGN_JOB_PROCESSOR")]
     AssignJob,
+    #[strum(serialize = "FINALIZE_JOB")]
+    FinalizeJob,
     #[strum(serialize = "NOOP")]
     Noop,
 }
@@ -75,6 +77,7 @@ impl From<&Action> for RawAction {
     fn from(action: &Action) -> Self {
         match action {
             Action::AssignJob(_, _) => RawAction::AssignJob,
+            Action::FinalizeJob(_, _) => RawAction::FinalizeJob,
             Action::Noop => RawAction::Noop,
         }
     }
@@ -83,10 +86,16 @@ impl From<&Action> for RawAction {
 /// The action is triggered over Hyperdrive as part of a [`Message`].
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 pub enum Action {
-    /// A subset of values expressed by [`pallet_acurast::JobId`], only for jobs created on Tezos.
+    /// Assigns a job on target chain.
     ///
-    /// Consists of `(Job ID on Tezos, [processor addresses])`.
+    /// Consists of `(Job ID on Tezos, processor address)`,
+    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
     AssignJob(JobIdSequence, String), // (nat, address)
+    /// Finalizes a job on target chain.
+    ///
+    /// Consists of `(Job ID on Tezos, refund amount)`,
+    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
+    FinalizeJob(JobIdSequence, u128), // (nat, nat)
     /// A noop action that solely suits the purpose of testing that messages get sent.
     Noop,
 }
@@ -138,7 +147,7 @@ pub trait TargetChainConfig {
     /// Required to be provided separatly from [`Self::Hasher`], to satisfy trait bounds for storage items.
     type Hash: Member
         + MaybeSerializeDeserialize
-        + sp_std::fmt::Debug
+        + Debug
         + sp_std::hash::Hash
         + AsRef<[u8]>
         + AsMut<[u8]>

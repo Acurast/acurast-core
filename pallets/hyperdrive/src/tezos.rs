@@ -13,10 +13,10 @@ use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
 use tezos_michelson::michelson::data::{
-    self, try_bytes, try_int, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
+    self, try_bytes, try_int, try_nat, try_string, Bytes, Data, Int, Nat, Pair, Sequence,
 };
 use tezos_michelson::michelson::types::{
-    address, bool as bool_type, bytes, mutez, nat, option, pair, set, string,
+    address, bool as bool_type, bytes, nat, option, pair, set, string,
 };
 use tezos_michelson::Error as TezosMichelineError;
 use tezos_michelson::{
@@ -70,6 +70,27 @@ where
                         job_id_sequence,
                     ),
                     registration,
+                )
+            }
+            RawAction::DeregisterJob => {
+                let payload: Vec<u8> = (&payload).into();
+                let job_id_sequence = parse_deregister_job_payload(payload.as_slice())?;
+
+                ParsedAction::DeregisterJob((
+                    MultiOrigin::Tezos(bounded_address(&origin)?),
+                    job_id_sequence,
+                ))
+            }
+            RawAction::FinalizeJob => {
+                let payload: Vec<u8> = (&payload).into();
+                let job_ids = parse_finalize_job_payload(payload.as_slice())?;
+
+                let address = bounded_address(&origin)?;
+                ParsedAction::FinalizeJob(
+                    job_ids
+                        .into_iter()
+                        .map(|job_id_seq| (MultiOrigin::Tezos(address.clone()), job_id_seq))
+                        .collect(),
                 )
             }
         })
@@ -136,7 +157,6 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Val
 ///     allowOnlyVerifiedSources=sp.TBool,
 ///     allowedSources=sp.TOption(sp.TSet(sp.TString)),
 ///     extra=sp.TRecord(
-///         expectedFulfillmentFee=sp.TMutez,
 ///         requirements=sp.TRecord(
 ///             instantMatch=sp.TOption(
 ///                 sp.TSet(
@@ -177,25 +197,21 @@ fn registration_payload_schema() -> &'static Micheline {
             option(set(bytes())),
             // RegistrationExtra
             pair(vec![
-                // expected_fulfillment_fee
-                mutez(),
                 // instant_match
-                pair(vec![
-                    option(
-                        // PlannedExecutions
-                        set(pair(vec![
-                        // source
-                        bytes(),
-                        // start_delay
-                        nat()
-                    ]))),
-                    // min_reputation
-                    option(nat()),
-                    // reward
-                    nat(),
-                    // slots
-                    nat(),
-                ])
+                option(
+                    // PlannedExecutions
+                    set(pair(vec![
+                    // source
+                    bytes(),
+                    // start_delay
+                    nat()
+                ]))),
+                // min_reputation
+                option(nat()),
+                // reward
+                nat(),
+                // slots
+                nat(),
             ]),
             // job_id
             nat(),
@@ -229,11 +245,35 @@ fn registration_payload_schema() -> &'static Micheline {
     })
 }
 
+/// The structure of a [`RawAction::DeregisterJob`] action before flattening:
+///
+/// ```txt
+/// jobId=sp.TNat
+/// ```
+#[cfg_attr(rustfmt, rustfmt::skip)]
+fn deregister_job_schema() -> &'static Micheline {
+    static DEREGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+    DEREGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
+        let schema: Micheline = nat();
+        Box::new(schema)
+    })
+}
+
+/// The structure of a [`RawAction::FinalizeJob`] action before flattening:
+///
+/// ```txt
+/// jobIds=sp.TSet(sp.TNat)
+/// ```
+#[cfg_attr(rustfmt, rustfmt::skip)]
+fn finalize_job_schema() -> &'static Micheline {
+    static DEREGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+    DEREGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
+        let schema: Micheline = set(nat());
+        Box::new(schema)
+    })
+}
+
 /// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
-///
-/// # Example
-/// A message's payload to register a job could look like:
-///
 fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, Extra>(
     encoded: &[u8],
 ) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
@@ -268,14 +308,6 @@ where
             })
         },
     )?;
-    // TODO: "expected_fulfillment_fee" field could be skipped (only used on the target chain)
-    let expected_fulfillment_fee = {
-        let v: Int = try_int(iter.next().ok_or(ValidationError::MissingField(
-            FieldError::ExpectedFulfillmentFee,
-        ))?)?;
-        let v: u128 = v.to_integer()?;
-        v.into()
-    };
     let instant_match = try_option(
         iter.next()
             .ok_or(ValidationError::MissingField(FieldError::InstantMatch))?,
@@ -435,7 +467,6 @@ where
             min_reputation,
             instant_match,
         },
-        expected_fulfillment_fee,
     }
     .into();
     Ok((
@@ -458,6 +489,34 @@ where
             extra,
         },
     ))
+}
+
+/// Parses an encoded [`RawAction::DeregisterJob`] action's payload into [`JobIdSequence`].
+fn parse_deregister_job_payload(encoded: &[u8]) -> Result<JobIdSequence, ValidationError> {
+    let unpacked: Micheline = Micheline::unpack(encoded, Some(deregister_job_schema()))
+        .map_err(|e| ValidationError::TezosMicheline(e))?;
+
+    let v: Int = try_nat(unpacked).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+    Ok(v.to_integer()?)
+}
+
+/// Parses an encoded [`RawAction::FinalizeJob`] action's payload into [[`JobIdSequence`]].
+fn parse_finalize_job_payload(encoded: &[u8]) -> Result<Vec<JobIdSequence>, ValidationError> {
+    let unpacked: Micheline = Micheline::unpack(encoded, Some(finalize_job_schema()))
+        .map_err(|e| ValidationError::TezosMicheline(e))?;
+
+    let ids = try_sequence::<JobIdSequence, _>(unpacked.try_into()?, |item| {
+        let job_id_seq: Int =
+            try_int(item).map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+        job_id_seq
+            .to_integer::<u32>()?
+            .try_into()
+            .map_err(|_| ValidationError::MissingField(FieldError::JobId))
+    })?
+    .try_into()
+    .map_err(|_| ValidationError::MissingField(FieldError::JobId))?;
+
+    Ok(ids)
 }
 
 fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, ValidationError> {
@@ -497,7 +556,6 @@ pub enum FieldError {
     AllowOnlyVerifiedSources,
     AllowedSources,
     Destination,
-    ExpectedFulfillmentFee,
     InstantMatch,
     Source,
     StartDelay,
@@ -557,6 +615,7 @@ fn try_sequence<R, O: Fn(Data) -> Result<R, ValidationError>>(
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use tezos_core::types::encoded::ImplicitAddress;
 
     use pallet_acurast::{JobRegistration, Script};
 
@@ -566,8 +625,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unpack() -> Result<(), ValidationError> {
-        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000ec050707030a0707050902000000250a0000002000000000000000000000000000000000000000000000000000000000000000000707070700a80f07070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
+    fn test_unpack_register_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000e7050707030a0707050902000000250a000000200000000000000000000000000000000000000000000000000000000000000000070707070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
         assert_eq!(RawAction::RegisterJob, action);
         let exp: TezosAddress = "KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1".try_into().unwrap();
@@ -578,7 +637,7 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
-                RegistrationExtra<AssetAmount, <Test as frame_system::Config>::AccountId>,
+                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
             >,
         ) = parse_job_registration_payload::<
             _,
@@ -622,12 +681,111 @@ mod tests {
                         start_delay: 0,
                     }]),
                 },
-                expected_fulfillment_fee: 1000,
             },
         };
 
         assert_eq!(expected, registration);
         assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_register_job2() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000ed050707030a0707050902000000250a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f070707070509020000002907070a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f000007070509000007070080c0a8ca9a3a000107070001070700a40107070001070702000000000707070700b40707070080da9ce59b62070700a0cf24070700909c010080bbd3e49b6207070a00000035697066733a2f2f516d536e317252737a444b354258634e516d4e367543767a4d376858636548555569426b61777758396b534d474b0000");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::RegisterJob, action);
+        let exp = TezosAddress::Implicit(ImplicitAddress::TZ1(
+            "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap(),
+        ));
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let (job_id, registration): (
+            JobIdSequence,
+            JobRegistration<
+                <Test as frame_system::Config>::AccountId,
+                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
+            >,
+        ) = parse_job_registration_payload::<
+            _,
+            <Test as Config>::ParsableAccountId,
+            <Test as frame_system::Config>::AccountId,
+            _,
+        >(payload.as_slice())?;
+
+        // JobRegistration { script: BoundedVec([105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75, 53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101, 72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75], 53), allowed_sources: Some([d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...)]), allow_only_verified_sources: true, schedule: Schedule { duration: 500, start_time: 1687356600000, end_time: 1687357200000, interval: 300000, max_start_delay: 10000 }, memory: 100, network_requests: 1, storage: 0, required_modules: BoundedVec([], 1), extra: RegistrationExtra { requirements: JobRequirements { slots: 1, reward: 1000000000000, min_reputation: Some(0), instant_match: Some([PlannedExecution { source: d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...), start_delay: 0 }]) } } }
+
+        let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
+            script: Script::try_from(vec![
+                105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75,
+                53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101,
+                72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75,
+            ])
+            .unwrap(),
+            allowed_sources: Some(vec![hex!(
+                "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
+            )
+            .into()]),
+            allow_only_verified_sources: true,
+            schedule: Schedule {
+                duration: 500,
+                start_time: 1687356600000,
+                end_time: 1687357200000,
+                interval: 300000,
+                max_start_delay: 10000,
+            },
+            memory: 100,
+            network_requests: 1,
+            storage: 0,
+            required_modules: vec![].try_into().unwrap(),
+            extra: RegistrationExtra {
+                requirements: JobRequirements {
+                    slots: 1,
+                    reward: 1000000000000,
+                    min_reputation: Some(0),
+                    instant_match: Some(vec![PlannedExecution {
+                        source: hex![
+                            "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
+                        ]
+                        .into(),
+                        start_delay: 0,
+                    }]),
+                },
+            },
+        };
+
+        assert_eq!(expected, registration);
+        assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_deregister_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000e444552454749535445525f4a4f4207070a0000001600006b82198cb179e8306c1bedd08f12dc863f3288860a00000003050001");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::DeregisterJob, action);
+        let exp: TezosAddress = "tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb".try_into().unwrap();
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let job_id: JobIdSequence = parse_deregister_job_payload(payload.as_slice())?;
+
+        assert_eq!(1, job_id);
+        Ok(())
+    }
+
+    #[test]
+    fn test_unpack_finalize_job() -> Result<(), ValidationError> {
+        let encoded = &hex!("050707010000000c46494e414c495a455f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000080502000000020001");
+        let (action, origin, payload) = parse_message(encoded)?;
+        assert_eq!(RawAction::FinalizeJob, action);
+        let exp: TezosAddress = "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap();
+        assert_eq!(exp, origin);
+
+        let payload: Vec<u8> = (&payload).into();
+        let job_id: Vec<JobIdSequence> = parse_finalize_job_payload(payload.as_slice())?;
+
+        assert_eq!(vec![1], job_id);
         Ok(())
     }
 }
