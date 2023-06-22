@@ -16,6 +16,236 @@ use crate::{
 use crate::{stub::*, PubKeys};
 use crate::{JobRequirements, PlannedExecution};
 
+/// Job is not assigned and gets deregistered successfully.
+#[test]
+fn test_valid_deregister() {
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let registration1 = JobRegistrationFor::<Test> {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        required_modules: JobModules::default(),
+        extra: JobRequirements {
+            slots: 1,
+            reward: 3_000_000 * 2,
+            min_reputation: None,
+            instant_match: None,
+            // instant_match: Some(vec![PlannedExecution { source: processor_account_id(), start_delay: 0 }]),
+        },
+    };
+
+    ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
+        assert_ok!(AcurastMarketplace::advertise(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+        assert_eq!(
+            Some(AdvertisementRestriction {
+                max_memory: 50_000,
+                network_request_quota: 8,
+                storage_capacity: 100_000,
+                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                available_modules: JobModules::default(),
+            }),
+            AcurastMarketplace::stored_advertisement(processor_account_id())
+        );
+        assert_eq!(
+            Some(ad.pricing.clone()),
+            AcurastMarketplace::stored_advertisement_pricing(processor_account_id())
+        );
+
+        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration1.clone(),
+        ));
+        assert_eq!(12_000_000, AcurastMarketplace::reserved(&job_id1));
+        assert_eq!(
+            Some(JobStatus::Open),
+            AcurastMarketplace::stored_job_status(
+                MultiOrigin::Acurast(alice_account_id()),
+                initial_job_id + 1
+            )
+        );
+        assert_eq!(
+            Some(100_000),
+            AcurastMarketplace::stored_storage_capacity(processor_account_id())
+        );
+
+        assert_ok!(Acurast::deregister(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            job_id1.1,
+        ));
+
+        // Job still assigned after last execution
+        // assert_eq!(
+        //     Some(JobStatus::Assigned(1)),
+        //     AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
+        // );
+        assert_eq!(
+            None,
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
+        );
+
+        // the remaining budget got refunded
+        assert_eq!(0, AcurastMarketplace::reserved(&job_id1));
+
+        assert_eq!(
+            events(),
+            [
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::LockReward((
+                    job_id1.clone(),
+                    12_000_000
+                ))),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration1.clone(),
+                    job_id1.clone(),
+                )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::RefundReward((
+                    job_id1.clone(),
+                    12000000
+                ))),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationRemoved(
+                    job_id1.clone()
+                )),
+            ]
+        );
+    });
+}
+
+/// Job is assigned with instant_match and therefore deregistering fails.
+#[test]
+fn test_invalid_deregister() {
+    let now = 1_671_789_600_000; // 23.12.2022 10:00;
+
+    // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
+    let ad = advertisement(1000, 1, 100_000, 50_000, 8);
+    let registration1 = JobRegistrationFor::<Test> {
+        script: script(),
+        allowed_sources: None,
+        allow_only_verified_sources: false,
+        schedule: Schedule {
+            duration: 5000,
+            start_time: 1_671_800_400_000, // 23.12.2022 13:00
+            end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
+            interval: 1_800_000,           // 30min
+            max_start_delay: 5000,
+        },
+        memory: 5_000u32,
+        network_requests: 5,
+        storage: 20_000u32,
+        required_modules: JobModules::default(),
+        extra: JobRequirements {
+            slots: 1,
+            reward: 3_000_000 * 2,
+            min_reputation: None,
+            instant_match: Some(vec![PlannedExecution {
+                source: processor_account_id(),
+                start_delay: 0,
+            }]),
+        },
+    };
+
+    ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
+        // pretend current time
+        later(now);
+
+        assert_ok!(AcurastMarketplace::advertise(
+            RuntimeOrigin::signed(processor_account_id()).into(),
+            ad.clone(),
+        ));
+        assert_eq!(
+            Some(AdvertisementRestriction {
+                max_memory: 50_000,
+                network_request_quota: 8,
+                storage_capacity: 100_000,
+                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                available_modules: JobModules::default(),
+            }),
+            AcurastMarketplace::stored_advertisement(processor_account_id())
+        );
+        assert_eq!(
+            Some(ad.pricing.clone()),
+            AcurastMarketplace::stored_advertisement_pricing(processor_account_id())
+        );
+
+        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration1.clone(),
+        ));
+        assert_eq!(12_000_000, AcurastMarketplace::reserved(&job_id1));
+        assert_eq!(
+            Some(JobStatus::Matched),
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1)
+        );
+        assert_eq!(
+            Some(80_000),
+            AcurastMarketplace::stored_storage_capacity(processor_account_id())
+        );
+
+        assert_err!(
+            Acurast::deregister(RuntimeOrigin::signed(alice_account_id()).into(), job_id1.1,),
+            Error::<Test>::JobRegistrationUnmodifiable
+        );
+
+        // Job still assigned after trying to deregister
+        assert_eq!(
+            Some(JobStatus::Matched),
+            AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
+        );
+
+        // the full budget got refunded
+        assert_eq!(12000000, AcurastMarketplace::reserved(&job_id1));
+
+        assert_eq!(
+            events(),
+            [
+                RuntimeEvent::AcurastMarketplace(crate::Event::AdvertisementStored(
+                    ad.clone(),
+                    processor_account_id()
+                )),
+                RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(Match {
+                    job_id: job_id1.clone(),
+                    sources: vec![PlannedExecution {
+                        source: processor_account_id(),
+                        start_delay: 0,
+                    }],
+                })),
+                RuntimeEvent::MockPallet(mock_pallet::Event::LockReward((
+                    job_id1.clone(),
+                    12_000_000
+                ))),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
+                    registration1.clone(),
+                    job_id1.clone(),
+                )),
+            ]
+        );
+    });
+}
+
 #[test]
 fn test_match() {
     let now = 1_671_789_600_000; // 23.12.2022 10:00;
