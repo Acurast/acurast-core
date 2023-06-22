@@ -1380,7 +1380,11 @@ pub mod pallet {
                         }
                     }
                     JobStatus::Assigned(_) => {
-                        if !Self::schedule_ended(&registration.schedule)? {
+                        // in the "good case" when all processors finalized their slot we can accept the finalization independent of schedule's latest end
+                        let some_assigned = <AssignedProcessors<T>>::iter_prefix(&job_id)
+                            .next()
+                            .is_some();
+                        if some_assigned && !Self::schedule_ended(&registration.schedule)? {
                             Err(Error::<T>::CannotFinalizeJob(job_status))?;
                         }
                     }
