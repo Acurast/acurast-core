@@ -744,7 +744,8 @@ pub mod pallet {
 
             match requirements.instant_match {
                 Some(sources) => {
-                    Self::process_matching(once(&Match {
+                    // ignore remaining rewards; do not pay out the matcher which is the same as the one registering
+                    let _ = Self::process_matching(once(&Match {
                         job_id: job_id.clone(),
                         sources,
                     }))?;

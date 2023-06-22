@@ -1,14 +1,15 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok, traits::Hooks};
-use pallet_acurast::MultiOrigin;
 use sp_runtime::Permill;
 
+use pallet_acurast::MultiOrigin;
 use pallet_acurast::{
     utils::validate_and_extract_attestation, JobModules, JobRegistrationFor, Schedule,
 };
 use reputation::{BetaReputation, ReputationEngine};
 
+use crate::payments::JobBudget;
 use crate::{
     mock::*, AdvertisementRestriction, Assignment, Error, ExecutionResult, JobStatus, Match, SLA,
 };
@@ -99,14 +100,19 @@ fn test_match() {
             AcurastMarketplace::stored_advertisement_pricing(processor_account_id())
         );
 
+        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+        let job_id2 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 2);
+
         assert_ok!(Acurast::register(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
+        assert_eq!(12_000_000, AcurastMarketplace::reserved(&job_id1));
         assert_ok!(Acurast::register(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration2.clone(),
         ));
+        assert_eq!(12_000_000, AcurastMarketplace::reserved(&job_id2));
         assert_eq!(
             Some(JobStatus::Open),
             AcurastMarketplace::stored_job_status(
@@ -119,7 +125,6 @@ fn test_match() {
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
-        let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
         let job_match1 = Match {
             job_id: job_id1.clone(),
             sources: vec![PlannedExecution {
@@ -127,7 +132,6 @@ fn test_match() {
                 start_delay: 0,
             }],
         };
-        let job_id2 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 2);
         let job_match2 = Match {
             job_id: job_id2.clone(),
             sources: vec![PlannedExecution {
@@ -150,6 +154,9 @@ fn test_match() {
             Some(60_000),
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
+        // matcher got payed out already so job budget decreased
+        assert_eq!(11804000, AcurastMarketplace::reserved(&job_id1));
+        assert_eq!(11804000, AcurastMarketplace::reserved(&job_id2));
 
         assert_ok!(AcurastMarketplace::acknowledge_match(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -171,6 +178,8 @@ fn test_match() {
             job_id1.clone(),
             ExecutionResult::Success(operation_hash())
         ));
+        // job budget decreased by reward worth one execution
+        assert_eq!(6784000, AcurastMarketplace::reserved(&job_id1));
         // average reward only updated at end of job
         assert_eq!(None, AcurastMarketplace::average_reward());
         // reputation still ~50%
@@ -211,10 +220,14 @@ fn test_match() {
             job_id1.clone(),
             ExecutionResult::Success(operation_hash())
         ));
+        // job budget decreased by reward worth one execution
+        assert_eq!(1764000, AcurastMarketplace::reserved(&job_id1));
 
         // pretend time moved on
         later(registration1.schedule.end_time + 1);
         assert_eq!(4, System::block_number());
+
+        assert_eq!(1764000, AcurastMarketplace::reserved(&job_id1));
 
         assert_ok!(AcurastMarketplace::finalize_job(
             RuntimeOrigin::signed(processor_account_id()).into(),
@@ -257,6 +270,10 @@ fn test_match() {
             None,
             AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
+        // the remaining budget got refunded
+        assert_eq!(0, AcurastMarketplace::reserved(&job_id1));
+        // but job2 still have full budget
+        assert_eq!(11804000, AcurastMarketplace::reserved(&job_id2));
 
         assert_eq!(
             events(),
@@ -346,7 +363,10 @@ fn test_match() {
                     }
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id1.clone())),
-                RuntimeEvent::MockPallet(mock_pallet::Event::RefundReward((job_id1.clone(), 0,))),
+                RuntimeEvent::MockPallet(mock_pallet::Event::RefundReward((
+                    job_id1.clone(),
+                    1764000
+                ))),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobFinalized(job_id1.clone(),)),
             ]
         );

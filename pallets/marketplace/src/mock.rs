@@ -266,16 +266,22 @@ impl<T: Config + mock_pallet::Config, Budget: JobBudget<T>> RewardManager<T>
     }
 
     fn pay_matcher_reward(
-        rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
+        remaining_rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
         matcher: &T::AccountId,
     ) -> Result<(), DispatchError> {
         mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward((
-            rewards.clone(),
+            remaining_rewards.clone(),
             matcher.clone(),
         )));
-        for (job_id, remaining_reward) in rewards.into_iter() {
-            Budget::unreserve(&job_id, remaining_reward).unwrap();
+
+        let mut matcher_reward: T::Balance = 0u8.into();
+        for (job_id, remaining_reward) in remaining_rewards.into_iter() {
+            let matcher_fee = FeeManagerImpl::get_matcher_percentage().mul_floor(remaining_reward);
+            Budget::unreserve(&job_id, matcher_fee)
+                .map_err(|_| DispatchError::Other("Severe Error: JobBudget::unreserve failed"))?;
+            matcher_reward += matcher_fee;
         }
+
         Ok(())
     }
 
