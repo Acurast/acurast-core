@@ -58,9 +58,9 @@ impl LeafEncoder for TezosEncoder {
                 Action::FinalizeJob(job_id, refund) => {
                     let data = data::pair(vec![
                         data::nat(Nat::from_integer(*job_id)),
-                        data::nat(Nat::from_integer(*refund)),
+                        data::int(Nat::from_integer(*refund)),
                     ]);
-                    Micheline::pack(data, Some(assign_payload_schema()))
+                    Micheline::pack(data, Some(finalize_payload_schema()))
                 }
                 Action::Noop => Ok(Default::default()),
             }?),
@@ -100,6 +100,20 @@ fn assign_payload_schema() -> &'static Micheline {
     })
 }
 
+#[cfg_attr(rustfmt, rustfmt::skip)]
+fn finalize_payload_schema() -> &'static Micheline {
+    static FINALIZE_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+    FINALIZE_PAYLOAD_SCHEMA.get_or_init(|| {
+        let schema: Micheline = pair(vec![
+            // job_id_seq
+            nat(),
+            // refund
+            nat()
+        ]);
+        Box::new(schema)
+    })
+}
+
 pub struct DefaultTezosConfig;
 
 impl TargetChainConfig for DefaultTezosConfig {
@@ -125,13 +139,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unpack() -> Result<(), <TezosEncoder as LeafEncoder>::Error> {
+    fn test_pack_assign_job() -> Result<(), <TezosEncoder as LeafEncoder>::Error> {
         let encoded = tezos::TezosEncoder::encode(&Message {
             id: 5,
             action: Action::AssignJob(4, tezos_account_id()),
         })?;
 
         let expected = &hex!("05070700050707010000001441535349474e5f4a4f425f50524f434553534f520a0000002005070700040a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f80467");
+        assert_eq!(expected, &*encoded);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pack_finalize_job() -> Result<(), <TezosEncoder as LeafEncoder>::Error> {
+        let encoded = tezos::TezosEncoder::encode(&Message {
+            id: 2,
+            action: Action::FinalizeJob(3, 10),
+        })?;
+
+        let expected =
+            &hex!("05070700020707010000000c46494e414c495a455f4a4f420a000000070507070003000a");
         assert_eq!(expected, &*encoded);
         Ok(())
     }
