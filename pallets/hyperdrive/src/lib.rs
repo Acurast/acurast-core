@@ -23,6 +23,7 @@ pub mod pallet {
 
     use frame_support::dispatch::PostDispatchInfo;
     use frame_support::traits::Get;
+    use frame_support::transactional;
     use frame_support::{
         pallet_prelude::*,
         sp_runtime::traits::{
@@ -409,9 +410,13 @@ pub mod pallet {
             <CurrentTargetChainOwner<T, I>>::set(owner);
         }
 
+        /// Processes a message with `key and `payload`.
+        ///
+        /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
+        /// See [`Self::process_action()`].
         fn process_message(
             key_bytes: &Vec<u8>,
-            message_bytes: &Vec<u8>,
+            payload_bytes: &Vec<u8>,
         ) -> Result<(), ProcessMessageResult> {
             let message_id = T::MessageParser::parse_key(key_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
@@ -422,6 +427,11 @@ pub mod pallet {
             );
             <MessageSequenceId<T, I>>::set(message_id);
 
+            Self::process_action(payload_bytes)
+        }
+
+        #[transactional]
+        fn process_action(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
             let action = T::MessageParser::parse_value(message_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
             let raw_action: RawAction = (&action).into();
