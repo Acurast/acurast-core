@@ -20,8 +20,6 @@ pub use traits::*;
 pub type JobRegistrationFor<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
 
-pub(crate) use pallet::STORAGE_VERSION;
-
 #[frame_support::pallet]
 pub mod pallet {
     use acurast_common::*;
@@ -188,7 +186,7 @@ pub mod pallet {
         }
     }
 
-    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
     #[pallet::without_storage_info]
@@ -299,7 +297,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
-            crate::migration::migrate_to_v2::<T>()
+            crate::migration::migrate::<T>()
         }
     }
 
