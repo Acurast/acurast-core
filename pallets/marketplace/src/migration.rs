@@ -1,6 +1,9 @@
 #![allow(deprecated)]
 
-use frame_support::{traits::GetStorageVersion, weights::Weight};
+use frame_support::{
+    traits::{GetStorageVersion, StorageVersion},
+    weights::Weight,
+};
 use pallet_acurast::JobModules;
 use sp_core::Get;
 
@@ -25,46 +28,55 @@ pub mod v1 {
     }
 }
 
-pub fn migrate_to_v2<T: Config>() -> Weight {
+pub fn migrate<T: Config>() -> Weight {
+    let migrations: [(u16, &dyn Fn() -> Weight); 3] = [
+        (2, &migrate_to_v2::<T>),
+        (3, &migrate_to_v3::<T>),
+        (4, &migrate_to_v4::<T>),
+    ];
+
     let onchain_version = Pallet::<T>::on_chain_storage_version();
-    if onchain_version < crate::STORAGE_VERSION {
-        StoredAdvertisementRestriction::<T>::translate_values::<
-            v1::AdvertisementRestriction<T::AccountId>,
-            _,
-        >(|ad| {
-            Some(AdvertisementRestriction {
-                max_memory: ad.max_memory,
-                network_request_quota: ad.network_request_quota,
-                storage_capacity: ad.storage_capacity,
-                allowed_consumers: ad.allowed_consumers,
-                available_modules: JobModules::default(),
-            })
-        });
-        STORAGE_VERSION.put::<Pallet<T>>();
-        let count = StoredAdvertisementRestriction::<T>::iter_values().count() as u64;
-        T::DbWeight::get().reads_writes(count + 1, count + 1)
-    } else {
-        Weight::zero()
+    let mut weight: Weight = Default::default();
+    for (i, f) in migrations.into_iter() {
+        if onchain_version < StorageVersion::new(i) {
+            weight += f();
+        }
     }
+
+    STORAGE_VERSION.put::<Pallet<T>>();
+    weight + T::DbWeight::get().writes(1)
 }
 
-pub fn migrate_to_v3<T: Config>() -> Weight {
-    let onchain_version = Pallet::<T>::on_chain_storage_version();
-    if onchain_version < crate::STORAGE_VERSION {
-        let mut count = 0u32;
-        count += StoredJobStatus::<T>::clear(10_000, None).loops;
-        count += StoredAdvertisementRestriction::<T>::clear(10_000, None).loops;
-        count += StoredAdvertisementPricing::<T>::clear(10_000, None).loops;
-        count += StoredStorageCapacity::<T>::clear(10_000, None).loops;
-        count += StoredReputation::<T>::clear(10_000, None).loops;
-        count += StoredTotalAssignedV2::<T>::clear(10_000, None).loops;
-        count += StoredAverageRewardV2::<T>::clear(10_000, None).loops;
-        count += StoredMatches::<T>::clear(10_000, None).loops;
-        count += StoredMatchesReverseIndex::<T>::clear(10_000, None).loops;
+fn migrate_to_v2<T: Config>() -> Weight {
+    StoredAdvertisementRestriction::<T>::translate_values::<
+        v1::AdvertisementRestriction<T::AccountId>,
+        _,
+    >(|ad| {
+        Some(AdvertisementRestriction {
+            max_memory: ad.max_memory,
+            network_request_quota: ad.network_request_quota,
+            storage_capacity: ad.storage_capacity,
+            allowed_consumers: ad.allowed_consumers,
+            available_modules: JobModules::default(),
+        })
+    });
+    let count = StoredAdvertisementRestriction::<T>::iter_values().count() as u64;
+    T::DbWeight::get().reads_writes(count + 1, count + 1)
+}
 
-        STORAGE_VERSION.put::<Pallet<T>>();
-        T::DbWeight::get().reads_writes((count + 1).into(), (count + 1).into())
-    } else {
-        Weight::zero()
-    }
+fn migrate_to_v3<T: Config>() -> Weight {
+    let mut count = 0u32;
+    count += StoredJobStatus::<T>::clear(10_000, None).loops;
+    count += StoredAdvertisementRestriction::<T>::clear(10_000, None).loops;
+    count += StoredAdvertisementPricing::<T>::clear(10_000, None).loops;
+    count += StoredStorageCapacity::<T>::clear(10_000, None).loops;
+    count += StoredReputation::<T>::clear(10_000, None).loops;
+    count += StoredMatches::<T>::clear(10_000, None).loops;
+
+    T::DbWeight::get().writes((count + 1).into())
+}
+
+fn migrate_to_v4<T: Config>() -> Weight {
+    // clear again all storages since we want to clear at the same time as pallet acurast for consistent state
+    migrate_to_v3::<T>()
 }
