@@ -360,10 +360,12 @@ fn test_verify_proof() {
 }
 
 #[test]
-fn test_send_message() {
+fn test_send_message_value_parsing_fails() {
     let mut test = new_test_ext();
 
     test.execute_with(|| {
+        let seq_id_before = TezosHyperdrive::message_seq_id();
+
         let actions = vec![
             StateTransmitterUpdate::Add(
                 alice_account_id(),
@@ -428,6 +430,100 @@ fn test_send_message() {
                 key,
                 value
             )
+        );
+
+        // seq_id was incremented despite payload parsing failed
+        assert_eq!(TezosHyperdrive::message_seq_id(), seq_id_before + 1);
+
+        assert_eq!(
+            events()[5],
+            RuntimeEvent::TezosHyperdrive(crate::Event::MessageProcessed(ProcessMessageResult::ParsingValueFailed)),
+        );
+    });
+}
+
+#[test]
+fn test_send_message() {
+    let mut test = new_test_ext();
+
+    test.execute_with(|| {
+        // pretend given message seq_id was just before test message 75 arrives
+        let seq_id_before = 74;
+        <crate::MessageSequenceId::<Test>>::set(seq_id_before);
+
+
+        let actions = vec![
+            StateTransmitterUpdate::Add(
+                alice_account_id(),
+                ActivityWindow {
+                    start_block: 10,
+                    end_block: 20,
+                },
+            ),
+            StateTransmitterUpdate::Add(
+                bob_account_id(),
+                ActivityWindow {
+                    start_block: 10,
+                    end_block: 50,
+                },
+            ),
+        ];
+
+        let tezos_contract = StateOwner::try_from(hex!("050a000000160199651cbe1a155a5c8e5af7d6ea5c3f48eebb8c9c00").to_vec()).unwrap();
+        assert_ok!(TezosHyperdrive::update_target_chain_owner(
+            RuntimeOrigin::root().into(),
+            tezos_contract.clone()
+        ));
+
+        assert_eq!(TezosHyperdrive::current_target_chain_owner(), tezos_contract);
+
+        assert_ok!(TezosHyperdrive::update_state_transmitters(
+            RuntimeOrigin::root().into(),
+            StateTransmitterUpdates::<Test>::try_from(actions).unwrap()
+        ));
+
+        System::set_block_number(10);
+
+        let snapshot_root_1 = H256(hex!(
+            "8303857bb23c1b072d9b52409fffe7cf6de57c33b2776c7de170ec94d01f02fc"
+        ));
+        assert_ok!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(alice_account_id()),
+                1,
+                snapshot_root_1
+            )
+        );
+        assert_ok!(
+            TezosHyperdrive::submit_state_merkle_root(
+                RuntimeOrigin::signed(bob_account_id()),
+                1,
+                snapshot_root_1
+            )
+        );
+
+        assert_eq!(TezosHyperdrive::validate_state_merkle_root(1, snapshot_root_1), true);
+
+        let proof: StateProof<H256> = bounded_vec![];
+        let key = StateKey::try_from(hex!("05008b01").to_vec()).unwrap();
+        let value = StateValue::try_from(hex!("050707010000000c52454749535445525f4a4f4207070a00000016000016e64994c2ddbd293695b63e4cade029d3c8b5e30a000000ec050707030a0707050902000000250a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f070707070509020000002907070a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f00000707050900000707008080e898a9bf8d0700010707001d0707000107070001070702000000000707070700b40707070080cfb1eca062070700a0a9070707000000a0a5aaeca06207070a00000035697066733a2f2f516d536e317252737a444b354258634e516d4e367543767a4d376858636548555569426b61777758396b534d474b0000").to_vec()).unwrap();
+
+        assert_ok!(
+            TezosHyperdrive::submit_message(
+                RuntimeOrigin::signed(alice_account_id()),
+                1,
+                proof,
+                key,
+                value
+            )
+        );
+
+        // seq_id was incremented despite payload parsing failed
+        assert_eq!(TezosHyperdrive::message_seq_id(), seq_id_before + 1);
+
+        assert_eq!(
+            events()[5],
+            RuntimeEvent::TezosHyperdrive(crate::Event::MessageProcessed(ProcessMessageResult::ActionSuccess)),
         );
     });
 }

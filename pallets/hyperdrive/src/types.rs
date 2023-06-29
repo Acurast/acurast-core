@@ -170,4 +170,11 @@ pub enum ProcessMessageResult {
     ActionFailed(RawAction),
     ActionSuccess,
     InvalidSequenceId,
+    ProcessingFailed(DispatchError),
+}
+
+impl From<DispatchError> for ProcessMessageResult {
+    fn from(value: DispatchError) -> Self {
+        ProcessMessageResult::ProcessingFailed(value)
+    }
 }
