@@ -38,7 +38,7 @@ impl<T: Config> KeyAttestationBarrier<T> for () {
 pub trait WeightInfo {
     fn register() -> Weight;
     fn deregister() -> Weight;
-    fn update_allowed_sources() -> Weight;
+    fn update_allowed_sources(x: u32) -> Weight;
     fn submit_attestation() -> Weight;
     fn update_certificate_revocation_list() -> Weight;
 }

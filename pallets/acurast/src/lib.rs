@@ -6,7 +6,7 @@ pub mod mock;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-pub mod benchmarking;
+mod benchmarking;
 
 mod migration;
 mod traits;
@@ -14,6 +14,8 @@ pub mod utils;
 pub mod weights;
 
 pub use acurast_common::*;
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 pub use pallet::*;
 pub use traits::*;
 
@@ -25,6 +27,8 @@ pub type JobRegistrationFor<T> = JobRegistration<
 
 #[frame_support::pallet]
 pub mod pallet {
+    #[cfg(feature = "runtime-benchmarks")]
+    use super::BenchmarkHelper;
     use acurast_common::*;
     use core::ops::AddAssign;
     use frame_support::{
@@ -61,7 +65,7 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
 
         #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
+        type BenchmarkHelper: BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]
@@ -313,7 +317,7 @@ pub mod pallet {
             registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let multi_origin = MultiOrigin::Acurast(who);
             let job_id = (multi_origin, Self::next_job_id());
             Self::register_for(job_id, registration)
         }
@@ -326,7 +330,7 @@ pub mod pallet {
             local_job_id: JobIdSequence,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let multi_origin = MultiOrigin::Acurast(who);
             let job_id = (multi_origin, local_job_id);
 
             <T as Config>::JobHooks::deregister_hook(&job_id)?;
@@ -339,7 +343,7 @@ pub mod pallet {
 
         /// Updates the allowed sources list of a [JobRegistration].
         #[pallet::call_index(2)]
-        #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources())]
+        #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources(updates.len() as u32))]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             local_job_id: JobIdSequence,
@@ -350,7 +354,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
-            let job_id: JobId<T::AccountId> = (multi_origin.clone(), local_job_id);
+            let job_id: JobId<T::AccountId> = (multi_origin, local_job_id);
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
@@ -419,6 +423,7 @@ pub mod pallet {
             let attestation = validate_and_extract_attestation::<T>(&who, &attestation_chain)?;
 
             if !T::KeyAttestationBarrier::accept_attestation_for_origin(&who, &attestation) {
+                #[cfg(not(feature = "runtime-benchmarks"))]
                 return Err(Error::<T>::AttestationRejected.into());
             }
 

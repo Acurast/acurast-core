@@ -168,7 +168,7 @@ impl crate::Config for Test {
 }
 
 #[cfg(feature = "runtime-benchmarks")]
-impl<T: Config> BenchmarkHelper<T> for ()
+impl<T: crate::Config> BenchmarkHelper<T> for ()
 where
     T::RegistrationExtra: Default,
     T::AccountId: Into<AccountId32>,

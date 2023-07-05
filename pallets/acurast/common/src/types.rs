@@ -268,14 +268,26 @@ impl<const T: u32> Get<u32> for CU32<T> {
         T
     }
 }
+
 impl<const T: u32> Get<Option<u32>> for CU32<T> {
     fn get() -> Option<u32> {
         Some(T)
     }
 }
+
 impl<const T: u32> TypedGet for CU32<T> {
     type Type = u32;
     fn get() -> u32 {
         T
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'de, const T: u32> Deserialize<'de> for CU32<T> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(CU32::<T>)
     }
 }

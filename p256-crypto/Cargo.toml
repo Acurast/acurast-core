@@ -28,9 +28,8 @@ sp-application-crypto = { git = "https://github.com/paritytech/substrate", defau
 hex-literal = "0.3"
 
 [features]
-default = ["std", "full_crypto"]
+default = ["std"]
 std = [
-	"full_crypto",
     "sp-core/std",
     "sp-std/std",
     "sp-runtime/std",
@@ -43,7 +42,4 @@ std = [
 	"hex/std",
     "substrate-bip39",
     "tiny-bip39",
-]
-full_crypto = [
-	"sp-core/full_crypto",
 ]

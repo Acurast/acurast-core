@@ -11,6 +11,8 @@ use frame_support::{
     },
 };
 use frame_system::{EnsureRoot, EnsureRootWithSuccess};
+#[cfg(feature = "runtime-benchmarks")]
+use sp_core::crypto::UncheckedFrom;
 use sp_std::prelude::*;
 
 use crate::stub::*;
@@ -143,6 +145,16 @@ impl Config for Test {
     type Advertisement = ();
     type AdvertisementHandler = ();
     type WeightInfo = ();
+
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl crate::BenchmarkHelper<Test> for () {
+    fn dummy_proof() -> <Test as Config>::Proof {
+        MultiSignature::Sr25519(sp_core::sr25519::Signature::unchecked_from([0u8; 64]))
+    }
 }
 
 pub struct AcurastManagerIdProvider;

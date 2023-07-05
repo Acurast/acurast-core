@@ -13,6 +13,7 @@ use pallet_acurast::CU32;
 use sp_core::H256;
 use sp_core::*;
 use sp_runtime::traits::Keccak256;
+use sp_runtime::MultiSignature;
 use sp_runtime::{
     testing::Header,
     traits::{BlakeTwo256, IdentityLookup},
@@ -24,7 +25,7 @@ use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::tezos::TezosParser;
 use crate::types::RawAction;
-use crate::{weights, ActionExecutor, ParsedAction, StateOwner};
+use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -110,7 +111,10 @@ impl crate::Config for Test {
         Self::RegistrationExtra,
     >;
     type ActionExecutor = ();
-    type WeightInfo = weights::Weights<Test>;
+    type WeightInfo = weights::WeightInfo<Test>;
+
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 // Build genesis storage according to the mock runtime.
@@ -142,5 +146,14 @@ pub type Balance = u128;
 impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
     fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
+    }
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl crate::BenchmarkHelper<<Test as crate::Config>::TargetChainHash> for () {
+    fn dummy_proof() -> StateProof<<Test as crate::Config>::TargetChainHash> {
+        vec![StateProofNode::Left([0u8; 32].into())]
+            .try_into()
+            .unwrap()
     }
 }

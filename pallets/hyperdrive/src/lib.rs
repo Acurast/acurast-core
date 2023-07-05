@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use traits::*;
 pub use types::*;
 
 #[cfg(test)]
@@ -12,10 +13,14 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod traits;
 
 pub mod tezos;
 mod types;
 pub mod weights;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -38,8 +43,6 @@ pub mod pallet {
     use sp_std::vec;
 
     use pallet_acurast_marketplace::types::RegistrationExtra;
-
-    use crate::weights::WeightInfo;
 
     use super::*;
 
@@ -131,6 +134,8 @@ pub mod pallet {
         >;
 
         type WeightInfo: WeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self::TargetChainHash>;
     }
 
     #[pallet::event]
@@ -228,7 +233,7 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Used to add, update or remove state transmitters.
         #[pallet::call_index(0)]
-        #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters())]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters(actions.len() as u32))]
         pub fn update_state_transmitters(
             origin: OriginFor<T>,
             actions: StateTransmitterUpdates<T>,
@@ -372,7 +377,8 @@ pub mod pallet {
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             if !Self::validate_state_merkle_root(block, derived_root) {
-                Err(Error::<T, I>::ProofInvalid)?
+                #[cfg(not(feature = "runtime-benchmarks"))]
+                return Err(Error::<T, I>::ProofInvalid)?;
             }
 
             // don't fail extrinsic from here onwards
@@ -387,7 +393,7 @@ pub mod pallet {
 
         /// Updates the target chain owner (contract address) in storage. Can only be called by a privileged/root account.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 0)))]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_target_chain_owner())]
         pub fn update_target_chain_owner(
             origin: OriginFor<T>,
             owner: StateOwner,

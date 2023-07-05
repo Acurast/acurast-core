@@ -17,8 +17,8 @@
 
 use core::fmt::Debug;
 
-use alloc::string::String;
-use codec::alloc;
+#[cfg(not(feature = "std"))]
+use codec::alloc::string::String;
 use frame_support::pallet_prelude::*;
 pub use mmr_lib;
 use scale_info::TypeInfo;
@@ -29,7 +29,6 @@ use serde::{Deserialize, Serialize};
 use sp_core::RuntimeDebug;
 use sp_runtime::traits;
 #[cfg(not(feature = "std"))]
-use sp_std::prelude::Vec;
 use sp_std::prelude::*;
 use strum_macros::{EnumString, IntoStaticStr};
 

@@ -44,15 +44,17 @@ xcm = { git = "https://github.com/paritytech/polkadot", default-features = false
 xcm-executor = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.41" }
 xcm-builder = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.41" }
 
+# Acurast
+pallet-acurast = { path = "../acurast", default-features = false}
+pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
+acurast-reputation = { path = "./reputation", default-features = false }
+
 # benchmarks
 hex-literal = { version = "0.3", optional = true }
 parachain-info = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
 parachains-common = { git = "https://github.com/paritytech/cumulus", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-
-pallet-acurast = { path = "../acurast", default-features = false}
-pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
-acurast-reputation = { path = "./reputation", default-features = false }
+pallet-acurast-processor-manager = { path = "../processor-manager", default-features = false, optional = true }
 
 [dev-dependencies]
 base64 = { version = "0.13.0", default-features = false, features = ["alloc"] }
@@ -71,10 +73,11 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"hex-literal",
 	"parachain-info",
-	"pallet-balances",
+	"pallet-balances/runtime-benchmarks",
 	"parachains-common",
 	"pallet-acurast/runtime-benchmarks",
 	"pallet-acurast-assets-manager/runtime-benchmarks",
+	"pallet-acurast-processor-manager/runtime-benchmarks",
 ]
 
 std = [

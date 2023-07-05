@@ -1,16 +1,21 @@
 use frame_benchmarking::benchmarks_instance_pallet;
 use frame_benchmarking::whitelist_account;
+use frame_benchmarking::whitelisted_caller;
 use frame_support::assert_ok;
 use frame_system::RawOrigin;
 use sp_core::crypto::AccountId32;
 use sp_core::H256;
-use sp_std::iter;
+use sp_std::{iter, prelude::*};
 
 pub use crate::stub::*;
 use crate::types::*;
 use crate::Pallet as AcurastHyperdrive;
 
 use super::*;
+
+pub trait BenchmarkHelper<Hash> {
+    fn dummy_proof() -> StateProof<Hash>;
+}
 
 fn assert_last_event<T: Config<I>, I: 'static>(generic_event: <T as Config<I>>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
@@ -26,9 +31,9 @@ fn update_state_transmitters_helper<T: Config<I>, I: 'static>(
 ) -> (T::AccountId, StateTransmitterUpdates<T>)
 where
     T::AccountId: From<AccountId32>,
-    T::BlockNumber: From<u64>,
+    T::BlockNumber: From<u32>,
 {
-    let caller: T::AccountId = alice_account_id().into();
+    let caller: T::AccountId = whitelisted_caller();
     whitelist_account!(caller);
 
     let actions = StateTransmitterUpdates::<T>::try_from(
@@ -60,7 +65,7 @@ benchmarks_instance_pallet! {
         where
         T: Config<I>,
         T::AccountId: From<AccountId32>,
-        T::BlockNumber: From<u64>,
+        T::BlockNumber: From<u32>,
         <T as pallet::Config<I>>::TargetChainBlockNumber: From<u64>,
         <T as pallet::Config<I>>::TargetChainHash: From<H256>,
     }
@@ -68,12 +73,12 @@ benchmarks_instance_pallet! {
         let l in 0 .. STATE_TRANSMITTER_UPDATES_MAX_LENGTH;
 
         // just create the data, do not submit the actual call (it gets executed by the benchmark call)
-        let (caller, actions) = update_state_transmitters_helper::<T, I>(l as usize, false);
+        let (account, actions) = update_state_transmitters_helper::<T, I>(l as usize, false);
     }: _(RawOrigin::Root, actions.clone())
     verify {
         assert_last_event::<T, I>(Event::StateTransmittersUpdate{
                     added: iter::repeat((
-                            alice_account_id().into(),
+                            account.into(),
                             ActivityWindow {
                                 start_block: 0.into(),
                                 end_block: 100.into()
@@ -97,6 +102,17 @@ benchmarks_instance_pallet! {
                     state_merkle_root: HASH.into()
                 }.into());
     }
+
+    submit_message {
+        let caller: T::AccountId = whitelisted_caller();
+        let proof = T::BenchmarkHelper::dummy_proof();
+        let key: StateKey = StateKey::truncate_from([0u8; KEY_MAX_LENGTH as usize].to_vec());
+        let value: StateValue = StateValue::truncate_from([0u8; VALUE_MAX_LENGTH as usize].to_vec());
+    }: _(RawOrigin::Signed(caller.clone()), 1u8.into(), proof, key, value)
+
+    update_target_chain_owner {
+        let owner: StateOwner = vec![0u8].try_into().unwrap();
+    }: _(RawOrigin::Root, owner)
 
     impl_benchmark_test_suite!(AcurastHyperdrive, crate::mock::new_test_ext(), mock::Test);
 }

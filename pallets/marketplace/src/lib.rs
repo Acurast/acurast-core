@@ -14,7 +14,7 @@ mod stub;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-pub mod benchmarking;
+mod benchmarking;
 
 mod functions;
 mod migration;
@@ -25,13 +25,15 @@ pub mod traits;
 pub mod types;
 mod utils;
 pub mod weights;
-pub mod weights_with_hooks;
 
 pub(crate) use pallet::STORAGE_VERSION;
 
 use frame_support::pallet_prelude::Get;
 use pallet_acurast::MultiOrigin;
 use sp_std::prelude::*;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -74,9 +76,8 @@ pub mod pallet {
         /// The maximum matches that can be proposed with one extrinsic call.
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
-        /// The maximum jobs that can be finalized with one extrinsic call.
         #[pallet::constant]
-        type MaxFinalizedJobs: Get<u32>;
+        type MaxFinalizeJobs: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirementsFor<Self>>;
@@ -669,7 +670,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs())]
         pub fn finalize_jobs(
             origin: OriginFor<T>,
-            job_ids: BoundedVec<JobIdSequence, <T as Config>::MaxFinalizedJobs>,
+            job_ids: BoundedVec<JobIdSequence, T::MaxFinalizeJobs>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
