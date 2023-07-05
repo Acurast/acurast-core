@@ -7,7 +7,7 @@ use frame_support::{assert_err, assert_ok, traits::fungible::Inspect};
 #[test]
 fn test_update_processor_pairings_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -75,7 +75,7 @@ fn test_update_processor_pairings_succeed_1() {
 #[test]
 fn test_update_processor_pairings_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -94,7 +94,7 @@ fn test_update_processor_pairings_succeed_2() {
         assert_ok!(call);
         _ = events();
 
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let signature = generate_signature(&signer, &bob_account_id(), timestamp, 1);
         let updates = vec![ProcessorPairingUpdateFor::<Test> {
             operation: ListUpdateOperation::Add,
@@ -137,7 +137,7 @@ fn test_update_processor_pairings_succeed_2() {
 #[test]
 fn test_update_processor_pairings_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -160,7 +160,7 @@ fn test_update_processor_pairings_failure_1() {
 #[test]
 fn test_update_processor_pairings_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature_1 = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -194,7 +194,7 @@ fn test_update_processor_pairings_failure_2() {
 #[test]
 fn test_update_processor_pairings_failure_3() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature_1 = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -232,7 +232,7 @@ fn test_update_processor_pairings_failure_3() {
 #[test]
 fn test_recover_funds_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -277,7 +277,7 @@ fn test_recover_funds_succeed_1() {
 #[test]
 fn test_recover_funds_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -315,7 +315,7 @@ fn test_recover_funds_succeed_2() {
 #[test]
 fn test_recover_funds_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -332,7 +332,7 @@ fn test_recover_funds_failure_1() {
             updates.clone().try_into().unwrap(),
         ));
 
-        let (_, processor_account) = generate_account();
+        let (_, processor_account) = generate_pair_account();
 
         let call = AcurastProcessorManager::recover_funds(
             RuntimeOrigin::signed(alice_account_id()),
@@ -347,7 +347,7 @@ fn test_recover_funds_failure_1() {
 #[test]
 fn test_recover_funds_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_account();
+        let (signer, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
@@ -382,8 +382,8 @@ fn test_recover_funds_failure_2() {
 #[test]
 fn test_pair_with_manager() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, manager_account) = generate_account();
-        let (_, processor_account) = generate_account();
+        let (signer, manager_account) = generate_pair_account();
+        let (_, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &manager_account, timestamp, 1);
@@ -424,8 +424,8 @@ fn test_pair_with_manager() {
 #[test]
 fn test_advertise_for_success() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, manager_account) = generate_account();
-        let (_, processor_account) = generate_account();
+        let (signer, manager_account) = generate_pair_account();
+        let (_, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &manager_account, timestamp, 1);
@@ -459,8 +459,8 @@ fn test_advertise_for_success() {
 #[test]
 fn test_advertise_for_failure() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, manager_account) = generate_account();
-        let (_, processor_account) = generate_account();
+        let (signer, manager_account) = generate_pair_account();
+        let (_, processor_account) = generate_pair_account();
         let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
         let timestamp = 1657363915002u128;
         let signature = generate_signature(&signer, &manager_account, timestamp, 1);
@@ -474,8 +474,8 @@ fn test_advertise_for_failure() {
             update,
         ));
 
-        let (signer, manager_account_2) = generate_account();
-        let (_, processor_account_2) = generate_account();
+        let (signer, manager_account_2) = generate_pair_account();
+        let (_, processor_account_2) = generate_pair_account();
 
         let signature = generate_signature(&signer, &manager_account_2, timestamp, 1);
         let update = ProcessorPairingFor::<Test>::new_with_proof(

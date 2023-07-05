@@ -347,7 +347,7 @@ mod receiver {
 }
 ```
 
-It is possible to directly call the fulfill method directly from the processors. The example script below shows how to call the above smart contract deployed on the Shibuya parachain:
+It is possible to directly call the fulfill method from the processors. The example script below shows how to call the above smart contract deployed on the Shibuya parachain:
 
 ```javascript
 const callIndex = '0x4606'; // the call index for the "call" extrinsic of pallet-contracts

@@ -19,7 +19,8 @@ pub mod p256 {
         ByteArray, CryptoType, CryptoTypeId, CryptoTypePublicPair, Derive, Public as TraitPublic,
         UncheckedFrom,
     };
-    #[cfg(feature = "full_crypto")]
+
+    #[cfg(feature = "std")]
     use sp_core::{
         crypto::{DeriveJunction, Pair as TraitPair, SecretStringError},
         hashing::blake2_256,
@@ -29,7 +30,7 @@ pub mod p256 {
     pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"p256");
 
     /// The ECDSA compressed public key.
-    #[cfg_attr(feature = "full_crypto", derive(Hash))]
+    #[cfg_attr(feature = "std", derive(Hash))]
     #[derive(
         Clone,
         Copy,
@@ -105,7 +106,7 @@ pub mod p256 {
     }
 
     impl CryptoType for Public {
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         type Pair = Pair;
     }
 
@@ -178,11 +179,11 @@ pub mod p256 {
     const SIGNATURE_LENGTH: usize = 65;
     const PUBLIC_KEY_LENGTH: usize = 33;
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     type Seed = [u8; SEED_LENGTH];
 
     /// A signature (a 512-bit value, plus 8 bits for recovery ID).
-    #[cfg_attr(any(feature = "std", feature = "full_crypto"), derive(Hash))]
+    #[cfg_attr(any(feature = "std"), derive(Hash))]
     #[derive(Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
     pub struct Signature(pub [u8; SIGNATURE_LENGTH]);
 
@@ -283,7 +284,7 @@ pub mod p256 {
     }
 
     impl CryptoType for Signature {
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         type Pair = Pair;
     }
 
@@ -313,7 +314,7 @@ pub mod p256 {
     #[derive(Clone)]
     pub struct Pair {
         public: Public,
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         secret: SecretKey,
     }
 
@@ -324,7 +325,7 @@ pub mod p256 {
             let pub_bytes = public.to_bytes().map_err(|_| elliptic_curve::Error)?;
             Ok(Pair {
                 public: Public(pub_bytes),
-                #[cfg(feature = "full_crypto")]
+                #[cfg(feature = "std")]
                 secret,
             })
         }
@@ -334,20 +335,20 @@ pub mod p256 {
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl CryptoType for Pair {
         type Pair = Pair;
     }
 
     /// An error when deriving a key.
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     pub enum DeriveError {
         /// A soft key was found in the path (and is unsupported).
         SoftKeyInPath,
     }
 
     /// Derive a single hard junction.
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; SEED_LENGTH]) -> Seed {
         ("Secp256r1", secret_seed, cc).using_encoded(blake2_256)
     }
@@ -364,7 +365,7 @@ pub mod p256 {
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl TraitPair for Pair {
         type Public = Public;
         type Seed = Seed;
@@ -478,7 +479,7 @@ pub mod p256 {
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl Pair {
         /// Get the seed for this key.
         pub fn seed(&self) -> Seed {

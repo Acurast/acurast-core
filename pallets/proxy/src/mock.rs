@@ -279,7 +279,7 @@ pub mod acurast_runtime {
     }
 
     #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_acurast::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+    impl pallet_acurast::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
         fn registration_extra() -> <Runtime as pallet_acurast::Config>::RegistrationExtra {
             JobRequirements {
                 slots: 1,
@@ -327,6 +327,7 @@ pub mod acurast_runtime {
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
         type MaxFinalizedJobs = frame_support::traits::ConstU32<10>;
         type MaxSlots = CU32<64>;
+        type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
         type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
@@ -341,7 +342,7 @@ pub mod acurast_runtime {
     }
 
     #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_acurast_marketplace::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+    impl pallet_acurast_marketplace::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
         fn registration_extra(
             r: pallet_acurast_marketplace::JobRequirementsFor<Runtime>,
         ) -> <Runtime as pallet_acurast_marketplace::Config>::RegistrationExtra {
@@ -606,6 +607,7 @@ pub mod proxy_runtime {
     impl crate::benchmarking::BenchmarkHelper<Runtime> for BenchmarkHelper {
         fn create_job_registration() -> acurast_common::JobRegistration<
             <Runtime as frame_system::Config>::AccountId,
+            <Runtime as crate::Config>::MaxAllowedSources,
             <Runtime as crate::Config>::RegistrationExtra,
         > {
             registration()

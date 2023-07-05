@@ -11,6 +11,16 @@ pub trait BenchmarkHelper<T: frame_system::Config> {
     fn manager_account() -> T::AccountId;
 }
 
+impl<T> BenchmarkHelper<T> for ()
+where
+    T: frame_system::Config,
+    T::AccountId: From<[u8; 32]>,
+{
+    fn manager_account() -> T::AccountId {
+        return [0; 32].into();
+    }
+}
+
 benchmarks! {
     where_clause { where
         T: pallet_assets::Config<Balance = u128>,

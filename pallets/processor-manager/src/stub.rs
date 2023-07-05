@@ -8,7 +8,9 @@ use frame_support::{
     PalletId,
 };
 use hex_literal::hex;
-use sp_core::{sr25519, Pair};
+use sp_core::sr25519;
+#[cfg(feature = "std")]
+use sp_core::Pair;
 #[cfg(feature = "std")]
 pub type UncheckedExtrinsic<T> = frame_system::mocking::MockUncheckedExtrinsic<T>;
 #[cfg(feature = "std")]
@@ -65,13 +67,31 @@ pub const fn eve_account_id() -> AccountId {
     AccountId32::new([4u8; 32])
 }
 
-pub fn generate_account() -> (sr25519::Pair, AccountId) {
+pub fn generate_account(index: u32) -> AccountId {
+    let mut buffer = [0u8; 32];
+    let byte1: u8 = (index >> 24) as u8;
+    let byte2: u8 = ((index << 8) >> 24) as u8;
+    let byte3: u8 = ((index << 16) >> 24) as u8;
+    let byte4: u8 = ((index << 24) >> 24) as u8;
+    buffer[28] = byte1;
+    buffer[29] = byte2;
+    buffer[30] = byte3;
+    buffer[31] = byte4;
+
+    let account_id: AccountId = buffer.into();
+
+    account_id
+}
+
+#[cfg(feature = "std")]
+pub fn generate_pair_account() -> (sr25519::Pair, AccountId) {
     let (pair, _) = sr25519::Pair::generate();
     let account_id: AccountId = pair.public().into();
 
     (pair, account_id)
 }
 
+#[cfg(feature = "std")]
 pub fn generate_signature(
     signer: &sr25519::Pair,
     account: &AccountId,

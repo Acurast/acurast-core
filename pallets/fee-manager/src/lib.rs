@@ -8,13 +8,16 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod traits;
+pub mod weights;
 
 use core::ops::AddAssign;
 
-use frame_support::{dispatch::Weight, traits::Get};
+use frame_support::traits::Get;
 use sp_arithmetic::Percent;
 
 pub use pallet::*;
+pub use traits::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -32,6 +35,7 @@ pub mod pallet {
         #[pallet::constant]
         type DefaultFeePercentage: Get<Percent>;
         type UpdateOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+        type WeightInfo: WeightInfo;
     }
 
     #[pallet::type_value]
@@ -58,7 +62,7 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Updates the fee percentage. Can only be called by a privileged/root account.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 2)))]
+        #[pallet::weight(T::WeightInfo::update_fee_percentage())]
         pub fn update_fee_percentage(origin: OriginFor<T>, fee: Percent) -> DispatchResult {
             T::UpdateOrigin::ensure_origin(origin)?;
             let (new_version, _) = Self::set_fee_percentage(fee);
