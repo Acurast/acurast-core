@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 
 use frame_support::{parameter_types, sp_runtime::AccountId32};
-use sp_runtime::DispatchError;
-
-use crate::{Config, VestingBalance};
 
 #[cfg(feature = "std")]
 pub type UncheckedExtrinsic<T> = frame_system::mocking::MockUncheckedExtrinsic<T>;
@@ -39,34 +36,4 @@ pub const fn dave_account_id() -> AccountId {
 
 pub const fn eve_account_id() -> AccountId {
     AccountId32::new([4u8; 32])
-}
-
-impl<T: Config + frame_system::Config> VestingBalance<T> for () {
-    fn lock_stake(
-        _target: &T::AccountId,
-        _reward: <T as Config>::Balance,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
-
-    fn pay_accrued(
-        _target: &T::AccountId,
-        _accrued: <T as Config>::Balance,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
-
-    fn pay_kicker(
-        _target: &T::AccountId,
-        _accrued: <T as Config>::Balance,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
-
-    fn unlock_stake(
-        _target: &T::AccountId,
-        _reward: <T as Config>::Balance,
-    ) -> Result<(), DispatchError> {
-        Ok(())
-    }
 }
