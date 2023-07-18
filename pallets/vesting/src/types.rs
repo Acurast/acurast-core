@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::Config;
 
-pub type VestingFor<T> = Vesting<<T as Config>::Balance, <T as Config>::BlockNumber>;
-pub type VesterStateFor<T> = VesterState<<T as Config>::Balance, <T as Config>::BlockNumber>;
-pub type PoolStateFor<T> = PoolState<<T as Config>::Balance>;
+pub type VestingFor<T, I> = Vesting<<T as Config<I>>::Balance, <T as Config<I>>::BlockNumber>;
+pub type VesterStateFor<T, I> =
+    VesterState<<T as Config<I>>::Balance, <T as Config<I>>::BlockNumber>;
+pub type PoolStateFor<T, I> = PoolState<<T as Config<I>>::Balance>;
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -44,18 +45,3 @@ impl<Balance, BlockNumber> From<VesterState<Balance, BlockNumber>>
         }
     }
 }
-
-// /// Vesting states for defining transition operations [`VestingOps`].
-// #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq, Copy)]
-// pub enum VestingState {
-//     VESTING,
-//     COOLDOWN,
-// }
-//
-// /// Vesting operations for that transition between various [`VestingState`].
-// #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq, Copy)]
-// pub enum VestingOps {
-//     VEST,
-//     COOLDOWN,
-//     REVEST,
-// }

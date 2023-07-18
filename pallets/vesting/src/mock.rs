@@ -118,7 +118,9 @@ pub mod mock_pallet {
 
 pub struct MockVestingBalance<T>(PhantomData<T>);
 
-impl<T: Config + mock_pallet::Config> VestingBalance<T> for MockVestingBalance<T> {
+impl<T: Config + mock_pallet::Config> VestingBalance<T::AccountId, T::Balance>
+    for MockVestingBalance<T>
+{
     fn lock_stake(
         target: &T::AccountId,
         stake: <T as Config>::Balance,
