@@ -1,26 +1,12 @@
 use frame_support::{dispatch::Weight, sp_runtime::DispatchError};
 
-use crate::Config;
-
 /// Trait used to manage vesting stakes and accrued rewards.
-pub trait VestingBalance<T: frame_system::Config + Config> {
+pub trait VestingBalance<AccountId, Balance> {
     ///
-    fn lock_stake(
-        target: &T::AccountId,
-        stake: <T as Config>::Balance,
-    ) -> Result<(), DispatchError>;
-    fn pay_accrued(
-        target: &T::AccountId,
-        accrued: <T as Config>::Balance,
-    ) -> Result<(), DispatchError>;
-    fn pay_kicker(
-        target: &T::AccountId,
-        accrued: <T as Config>::Balance,
-    ) -> Result<(), DispatchError>;
-    fn unlock_stake(
-        target: &T::AccountId,
-        stake: <T as Config>::Balance,
-    ) -> Result<(), DispatchError>;
+    fn lock_stake(target: &AccountId, stake: Balance) -> Result<(), DispatchError>;
+    fn pay_accrued(target: &AccountId, accrued: Balance) -> Result<(), DispatchError>;
+    fn pay_kicker(target: &AccountId, accrued: Balance) -> Result<(), DispatchError>;
+    fn unlock_stake(target: &AccountId, stake: Balance) -> Result<(), DispatchError>;
 }
 
 pub trait WeightInfo {

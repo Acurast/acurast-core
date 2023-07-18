@@ -36,20 +36,21 @@ pub mod pallet {
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config<I: 'static = ()>: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
-        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self, I>>
+            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The the tolerance before a vester can be kicked out after his cooldown ended, as a time delta in milliseconds.
         ///
         /// A valid exit call that claims the full reward has to occur within `[cooldown end, now + DivestTolerance]`.
         /// Since the `now` timestmap is behind the current time up to the block time, the actual tolerance is sometimes higher than the configured.
-        type DivestTolerance: Get<<Self as Config>::BlockNumber>;
+        type DivestTolerance: Get<<Self as Config<I>>::BlockNumber>;
         /// The maximum locking period in number of blocks. Vesting weights are linearly raised with [`Vesting`]`::locking_period / MaximumLockingPeriod`.
         #[pallet::constant]
-        type MaximumLockingPeriod: Get<<Self as Config>::BlockNumber>;
+        type MaximumLockingPeriod: Get<<Self as Config<I>>::BlockNumber>;
         type Balance: Parameter + IsType<u128> + Div + Balance + MaybeSerializeDeserialize;
         #[pallet::constant]
-        type BalanceUnit: Get<<Self as Config>::Balance>;
+        type BalanceUnit: Get<<Self as Config<I>>::Balance>;
         type BlockNumber: Parameter
             + codec::Codec
             + MaxEncodedLen
@@ -59,18 +60,18 @@ pub mod pallet {
             + Into<u128>
             + IsType<<Self as frame_system::Config>::BlockNumber>
             + MaybeSerializeDeserialize;
-        type VestingBalance: VestingBalance<Self>;
+        type VestingBalance: VestingBalance<Self::AccountId, Self::Balance>;
         /// Weight Info for extrinsics.
         type WeightInfo: WeightInfo;
     }
 
     #[pallet::genesis_config]
-    pub struct GenesisConfig<T: Config> {
-        pub vesters: Vec<(T::AccountId, VestingFor<T>)>,
+    pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
+        pub vesters: Vec<(T::AccountId, VestingFor<T, I>)>,
     }
 
     #[cfg(feature = "std")]
-    impl<T: Config> Default for GenesisConfig<T> {
+    impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
         fn default() -> Self {
             Self {
                 vesters: Default::default(),
@@ -79,10 +80,10 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+    impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
         fn build(&self) {
             for (who, vesting) in &self.vesters {
-                if let Err(e) = Pallet::<T>::vest_for(&who, vesting.to_owned()) {
+                if let Err(e) = Pallet::<T, I>::vest_for(&who, vesting.to_owned()) {
                     log::error!(
                         target: "runtime::acurast_vesting",
                         "Vesting Genesis error: {:?}",
@@ -95,36 +96,37 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn pool)]
-    pub(super) type Pool<T: Config> = StorageValue<_, PoolStateFor<T>, ValueQuery>;
+    pub(super) type Pool<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, PoolStateFor<T, I>, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn vester_states)]
-    pub(super) type VesterStates<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, VesterStateFor<T>>;
+    pub(super) type VesterStates<T: Config<I>, I: 'static = ()> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, VesterStateFor<T, I>>;
 
     #[pallet::pallet]
-    pub struct Pallet<T>(_);
+    pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
-    pub enum Event<T: Config> {
+    pub enum Event<T: Config<I>, I: 'static = ()> {
         /// A vester started vesting. [vester_state, vesting]
-        Vested(T::AccountId, VesterStateFor<T>),
+        Vested(T::AccountId, VesterStateFor<T, I>),
         /// A vester revested. [vester, new_vester_state, during_cooldown]
-        Revested(T::AccountId, VesterStateFor<T>, bool),
+        Revested(T::AccountId, VesterStateFor<T, I>, bool),
         /// A vester started cooldown. [vester, vester_state]
-        CooldownStarted(T::AccountId, VesterStateFor<T>),
+        CooldownStarted(T::AccountId, VesterStateFor<T, I>),
         /// A vester divests after his cooldown ended, claiming accrued rewards. [vester, vester_state_at_divest]
-        Divested(T::AccountId, VesterStateFor<T>),
+        Divested(T::AccountId, VesterStateFor<T, I>),
         /// A vester that exceeded his divest tolerance got kicked out. [vester, kicker, vester_state_at_divest, reward_cut]
-        KickedOut(T::AccountId, T::AccountId, VesterStateFor<T>),
+        KickedOut(T::AccountId, T::AccountId, VesterStateFor<T, I>),
         /// A reward got distributed. [amount]
         RewardDistributed(T::Balance),
     }
 
     // Errors inform users that something went wrong.
     #[pallet::error]
-    pub enum Error<T> {
+    pub enum Error<T, I = ()> {
         AlreadyVesting,
         MaximumLockingPeriodExceeded,
         NotVesting,
@@ -140,37 +142,40 @@ pub mod pallet {
     }
 
     #[pallet::call]
-    impl<T: Config> Pallet<T> {
+    impl<T: Config<I>, I: 'static> Pallet<T, I> {
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::vest())]
-        pub fn vest(origin: OriginFor<T>, vesting: VestingFor<T>) -> DispatchResultWithPostInfo {
+        pub fn vest(origin: OriginFor<T>, vesting: VestingFor<T, I>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
             let vester_state = Self::vest_for(&who, vesting)?;
 
-            Self::deposit_event(Event::<T>::Vested(who, vester_state));
+            Self::deposit_event(Event::<T, I>::Vested(who, vester_state));
 
             Ok(().into())
         }
 
         #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::revest())]
-        pub fn revest(origin: OriginFor<T>, vesting: VestingFor<T>) -> DispatchResultWithPostInfo {
+        pub fn revest(
+            origin: OriginFor<T>,
+            vesting: VestingFor<T, I>,
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let (vester_state, cooldown_started_before) = <VesterStates<T>>::try_mutate(
+            let (vester_state, cooldown_started_before) = <VesterStates<T, I>>::try_mutate(
                 &who,
-                |state| -> Result<(VesterStateFor<T>, bool), DispatchError> {
-                    let state = state.as_mut().ok_or(Error::<T>::NotVesting)?;
+                |state| -> Result<(VesterStateFor<T, I>, bool), DispatchError> {
+                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
 
                     if vesting.stake < state.stake {
-                        Err(Error::<T>::CannotRevestLess)?
+                        Err(Error::<T, I>::CannotRevestLess)?
                     }
                     if vesting.locking_period < state.locking_period {
-                        Err(Error::<T>::CannotRevestWithShorterLockingPeriod)?
+                        Err(Error::<T, I>::CannotRevestWithShorterLockingPeriod)?
                     }
-                    if vesting.locking_period > <T as Config>::MaximumLockingPeriod::get() {
-                        Err(Error::<T>::MaximumLockingPeriodExceeded)?
+                    if vesting.locking_period > <T as Config<I>>::MaximumLockingPeriod::get() {
+                        Err(Error::<T, I>::MaximumLockingPeriodExceeded)?
                     }
 
                     Self::accrue(state)?;
@@ -185,17 +190,17 @@ pub mod pallet {
                     state.weight = weight;
                     state.stake = vesting.stake;
                     // record global s upper bound at time of revest
-                    state.s = <Pool<T>>::get().s.1;
+                    state.s = <Pool<T, I>>::get().s.1;
                     state.cooldown_started = None;
 
-                    <Pool<T>>::try_mutate(|pool| -> Result<(), Error<T>> {
+                    <Pool<T, I>>::try_mutate(|pool| -> Result<(), Error<T, I>> {
                         // due to rounding we need to substract the difference and not the new weight!
                         pool.total_weight.saturating_add(
                             // the new weight is always greater than the old weight, so check_sub should never fail
                             state
                                 .weight
                                 .checked_sub(&weight_before)
-                                .ok_or(Error::<T>::CalculationOverflow)?,
+                                .ok_or(Error::<T, I>::CalculationOverflow)?,
                         );
                         Ok(())
                     })?;
@@ -204,7 +209,7 @@ pub mod pallet {
                 },
             )?;
 
-            Self::deposit_event(Event::<T>::Revested(
+            Self::deposit_event(Event::<T, I>::Revested(
                 who,
                 vester_state,
                 cooldown_started_before,
@@ -218,13 +223,13 @@ pub mod pallet {
         pub fn cooldown(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let vester_state = <VesterStates<T>>::try_mutate(
+            let vester_state = <VesterStates<T, I>>::try_mutate(
                 &who,
-                |state| -> Result<VesterStateFor<T>, DispatchError> {
-                    let state = state.as_mut().ok_or(Error::<T>::NotVesting)?;
+                |state| -> Result<VesterStateFor<T, I>, DispatchError> {
+                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
 
                     if let Some(_) = state.cooldown_started {
-                        Err(Error::<T>::CannotCooldownDuringCooldown)?;
+                        Err(Error::<T, I>::CannotCooldownDuringCooldown)?;
                     }
 
                     Self::accrue(state)?;
@@ -235,15 +240,15 @@ pub mod pallet {
                     let weight_before = state.weight;
                     state.weight /= 2u128.into();
 
-                    <Pool<T>>::try_mutate(|pool| -> Result<(), Error<T>> {
+                    <Pool<T, I>>::try_mutate(|pool| -> Result<(), Error<T, I>> {
                         // due to rounding we need to substract the difference and not the new weight!
                         pool.total_weight
                             .checked_sub(
                                 &weight_before
                                     .checked_sub(&state.weight)
-                                    .ok_or(Error::<T>::CalculationOverflow)?,
+                                    .ok_or(Error::<T, I>::CalculationOverflow)?,
                             )
-                            .ok_or(Error::<T>::CalculationOverflow)?;
+                            .ok_or(Error::<T, I>::CalculationOverflow)?;
                         Ok(())
                     })?;
 
@@ -251,7 +256,7 @@ pub mod pallet {
                 },
             )?;
 
-            Self::deposit_event(Event::<T>::CooldownStarted(who, vester_state));
+            Self::deposit_event(Event::<T, I>::CooldownStarted(who, vester_state));
 
             Ok(().into())
         }
@@ -261,32 +266,32 @@ pub mod pallet {
         pub fn divest(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let vester_state = <VesterStates<T>>::try_mutate(
+            let vester_state = <VesterStates<T, I>>::try_mutate(
                 &who,
-                |state_| -> Result<VesterStateFor<T>, DispatchError> {
-                    let state = state_.as_mut().ok_or(Error::<T>::NotVesting)?;
+                |state_| -> Result<VesterStateFor<T, I>, DispatchError> {
+                    let state = state_.as_mut().ok_or(Error::<T, I>::NotVesting)?;
 
                     let cooldown_started = state
                         .cooldown_started
-                        .ok_or(Error::<T>::CannotDivestBeforeCooldownStarted)?;
+                        .ok_or(Error::<T, I>::CannotDivestBeforeCooldownStarted)?;
 
                     let current_block = <frame_system::Pallet<T>>::block_number();
                     if cooldown_started
                         .checked_add(&state.locking_period)
-                        .ok_or(Error::<T>::CalculationOverflow)?
+                        .ok_or(Error::<T, I>::CalculationOverflow)?
                         > current_block.into()
                     {
-                        Err(Error::<T>::CannotDivestBeforeCooldownEnds)?
+                        Err(Error::<T, I>::CannotDivestBeforeCooldownEnds)?
                     }
 
                     if cooldown_started
                         .checked_add(&state.locking_period)
-                        .ok_or(Error::<T>::CalculationOverflow)?
-                        .checked_add(&<T as Config>::DivestTolerance::get().into())
-                        .ok_or(Error::<T>::CalculationOverflow)?
+                        .ok_or(Error::<T, I>::CalculationOverflow)?
+                        .checked_add(&<T as Config<I>>::DivestTolerance::get().into())
+                        .ok_or(Error::<T, I>::CalculationOverflow)?
                         < current_block.into()
                     {
-                        Err(Error::<T>::CannotDivestWhenToleranceEnded)?
+                        Err(Error::<T, I>::CannotDivestWhenToleranceEnded)?
                     }
 
                     Self::accrue(state)?;
@@ -300,7 +305,7 @@ pub mod pallet {
             T::VestingBalance::pay_accrued(&who, vester_state.accrued)?;
             T::VestingBalance::unlock_stake(&who, vester_state.stake)?;
 
-            Self::deposit_event(Event::<T>::Divested(who, vester_state));
+            Self::deposit_event(Event::<T, I>::Divested(who, vester_state));
 
             Ok(().into())
         }
@@ -310,24 +315,24 @@ pub mod pallet {
         pub fn kick_out(origin: OriginFor<T>, vester: T::AccountId) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let vester_state = <VesterStates<T>>::try_mutate(
+            let vester_state = <VesterStates<T, I>>::try_mutate(
                 &vester,
-                |state| -> Result<VesterStateFor<T>, DispatchError> {
-                    let state = state.as_mut().ok_or(Error::<T>::NotVesting)?;
+                |state| -> Result<VesterStateFor<T, I>, DispatchError> {
+                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
 
                     let cooldown_started = state
                         .cooldown_started
-                        .ok_or(Error::<T>::CannotKickoutBeforeCooldown)?;
+                        .ok_or(Error::<T, I>::CannotKickoutBeforeCooldown)?;
 
                     let current_block = <frame_system::Pallet<T>>::block_number();
                     if cooldown_started
                         .checked_add(&state.locking_period)
-                        .ok_or(Error::<T>::CalculationOverflow)?
-                        .checked_add(&<T as Config>::DivestTolerance::get().into())
-                        .ok_or(Error::<T>::CalculationOverflow)?
+                        .ok_or(Error::<T, I>::CalculationOverflow)?
+                        .checked_add(&<T as Config<I>>::DivestTolerance::get().into())
+                        .ok_or(Error::<T, I>::CalculationOverflow)?
                         >= current_block.into()
                     {
-                        Err(Error::<T>::CannotKickoutBeforeCooldownToleranceEnded)?
+                        Err(Error::<T, I>::CannotKickoutBeforeCooldownToleranceEnded)?
                     }
 
                     Self::accrue(state)?;
@@ -340,54 +345,54 @@ pub mod pallet {
             T::VestingBalance::pay_kicker(&who, vester_state.accrued)?;
             T::VestingBalance::unlock_stake(&vester, vester_state.stake)?;
 
-            Self::deposit_event(Event::<T>::KickedOut(vester, who, vester_state));
+            Self::deposit_event(Event::<T, I>::KickedOut(vester, who, vester_state));
 
             Ok(().into())
         }
     }
 
-    impl<T: Config> Pallet<T> {
+    impl<T: Config<I>, I: 'static> Pallet<T, I> {
         pub fn vest_for(
             who: &T::AccountId,
-            vesting: VestingFor<T>,
-        ) -> Result<VesterStateFor<T>, DispatchError> {
+            vesting: VestingFor<T, I>,
+        ) -> Result<VesterStateFor<T, I>, DispatchError> {
             // update vester state
-            let vester_state = <VesterStates<T>>::try_mutate(
+            let vester_state = <VesterStates<T, I>>::try_mutate(
                 &who,
-                |state| -> Result<VesterStateFor<T>, DispatchError> {
+                |state| -> Result<VesterStateFor<T, I>, DispatchError> {
                     if let Some(_) = state {
-                        Err(Error::<T>::AlreadyVesting)?
+                        Err(Error::<T, I>::AlreadyVesting)?
                     }
 
-                    if vesting.locking_period > <T as Config>::MaximumLockingPeriod::get() {
-                        Err(Error::<T>::MaximumLockingPeriodExceeded)?
+                    if vesting.locking_period > <T as Config<I>>::MaximumLockingPeriod::get() {
+                        Err(Error::<T, I>::MaximumLockingPeriodExceeded)?
                     }
 
                     let weight = Self::calculate_weight(&vesting)?;
 
-                    let s = VesterStateFor::<T> {
+                    let s = VesterStateFor::<T, I> {
                         locking_period: vesting.locking_period,
                         weight: weight,
                         stake: vesting.stake,
                         accrued: 0u128.into(),
                         // record global s upper bound at time of vest
-                        s: <Pool<T>>::get().s.1,
+                        s: <Pool<T, I>>::get().s.1,
                         cooldown_started: None,
                     };
                     *state = Some(s);
 
                     // update global state
-                    <Pool<T>>::try_mutate(|state| -> Result<(), DispatchError> {
+                    <Pool<T, I>>::try_mutate(|state| -> Result<(), DispatchError> {
                         // total_stake += stake
                         state
                             .total_stake
                             .ensure_add_assign(vesting.stake)
-                            .map_err(|_| Error::<T>::CalculationOverflow)?;
+                            .map_err(|_| Error::<T, I>::CalculationOverflow)?;
                         // total_weight += weight
                         state
                             .total_weight
                             .ensure_add_assign(weight)
-                            .map_err(|_| Error::<T>::CalculationOverflow)?;
+                            .map_err(|_| Error::<T, I>::CalculationOverflow)?;
 
                         Ok(())
                     })?;
@@ -403,16 +408,17 @@ pub mod pallet {
         pub fn distribute_reward(reward: T::Balance) -> DispatchResult {
             // s = s + reward / total_weight = s + reward * MaximumLockingPeriod / total_weight_numerator
 
-            <Pool<T>>::try_mutate(|state| -> Result<(), DispatchError> {
+            <Pool<T, I>>::try_mutate(|state| -> Result<(), DispatchError> {
                 if state.total_weight > 0u128.into() {
                     state.s = (
                         state
                             .s
                             .0
                             .checked_add(
-                                &(reward * <T as Config>::BalanceUnit::get() / state.total_weight),
+                                &(reward * <T as Config<I>>::BalanceUnit::get()
+                                    / state.total_weight),
                             )
-                            .ok_or(Error::<T>::CalculationOverflow)?,
+                            .ok_or(Error::<T, I>::CalculationOverflow)?,
                         state
                             .s
                             .1
@@ -421,23 +427,23 @@ pub mod pallet {
                                     // integer division, rounded up
                                     // (we already checked for state.total_weight > 0 to avoid DivisionByZero)
                                     .checked_add(&(state.total_weight - 1u128.into()))
-                                    .ok_or(Error::<T>::CalculationOverflow)?
-                                    * <T as Config>::BalanceUnit::get()
+                                    .ok_or(Error::<T, I>::CalculationOverflow)?
+                                    * <T as Config<I>>::BalanceUnit::get()
                                     / state.total_weight),
                             )
-                            .ok_or(Error::<T>::CalculationOverflow)?,
+                            .ok_or(Error::<T, I>::CalculationOverflow)?,
                     );
                 }
 
                 Ok(())
             })?;
 
-            Self::deposit_event(Event::<T>::RewardDistributed(reward));
+            Self::deposit_event(Event::<T, I>::RewardDistributed(reward));
 
             Ok(().into())
         }
 
-        fn accrue(state: &mut VesterStateFor<T>) -> Result<(), Error<T>> {
+        fn accrue(state: &mut VesterStateFor<T, I>) -> Result<(), Error<T, I>> {
             let pool = Self::pool();
             // reward = self.data.weight * (self.model.data.s - self.data.s)
             let reward = state
@@ -450,26 +456,26 @@ pub mod pallet {
                         .checked_sub(&state.s)
                         .unwrap_or(0u128.into()),
                 )
-                .ok_or(Error::<T>::CalculationOverflow)?
-                / <T as Config>::BalanceUnit::get();
+                .ok_or(Error::<T, I>::CalculationOverflow)?
+                / <T as Config<I>>::BalanceUnit::get();
             // accrued += reward
             state
                 .accrued
                 .ensure_add_assign(reward)
-                .map_err(|_| Error::<T>::CalculationOverflow)?;
+                .map_err(|_| Error::<T, I>::CalculationOverflow)?;
             // memorize maximum possible s
             state.s = pool.s.1;
 
             Ok(())
         }
 
-        fn calculate_weight(vesting: &VestingFor<T>) -> Result<T::Balance, Error<T>> {
+        fn calculate_weight(vesting: &VestingFor<T, I>) -> Result<T::Balance, Error<T, I>> {
             let locking_period: u128 = vesting.locking_period.into();
-            let max_locking_period: u128 = <T as Config>::MaximumLockingPeriod::get().into();
+            let max_locking_period: u128 = <T as Config<I>>::MaximumLockingPeriod::get().into();
             // weight = locking_period / MaximumLockingPeriod * stake = locking_period * stake / MaximumLockingPeriod
             Ok((locking_period
                 .checked_mul(vesting.stake.into())
-                .ok_or(Error::<T>::CalculationOverflow)?
+                .ok_or(Error::<T, I>::CalculationOverflow)?
                 / max_locking_period)
                 .into())
         }
