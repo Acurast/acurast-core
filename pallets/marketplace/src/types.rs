@@ -11,17 +11,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::Config;
 
-pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
+pub(crate) const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
 
-pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
-pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
-pub const MAX_SLOTS: u32 = 64;
+pub(crate) const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
+pub(crate) const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
+pub(crate) const MAX_SLOTS: u32 = 64;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
+pub type PlannedExecutions<AccountId> =
+    BoundedVec<PlannedExecution<AccountId>, ConstU32<MAX_SLOTS>>;
 
 pub type JobRegistrationForMarketplace<T> =
     JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+
+pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId>;
 
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
@@ -185,16 +189,16 @@ pub struct JobRequirements<Reward, AccountId> {
     pub min_reputation: Option<u128>,
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
-    pub instant_match: Option<Vec<PlannedExecution<AccountId>>>,
+    pub instant_match: Option<PlannedExecutions<AccountId>>,
 }
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub struct Match<AcurastAccountId> {
+pub struct Match<AccountId> {
     /// The job to match.
-    pub job_id: JobId<AcurastAccountId>,
+    pub job_id: JobId<AccountId>,
     /// The sources to match each of the job's slots with.
-    pub sources: Vec<PlannedExecution<AcurastAccountId>>,
+    pub sources: PlannedExecutions<AccountId>,
 }
 
 /// Structure representing a job registration partially specified.

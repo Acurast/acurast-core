@@ -25,7 +25,9 @@ use tezos_michelson::{
 };
 
 use pallet_acurast::{JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32};
-use pallet_acurast_marketplace::{JobRequirements, PlannedExecution, RegistrationExtra};
+use pallet_acurast_marketplace::{
+    JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+};
 
 use crate::types::{MessageParser, RawAction};
 use crate::{MessageIdentifier, ParsedAction};
@@ -345,7 +347,8 @@ where
                 })
             })?;
 
-            Ok(sources)
+            Ok(PlannedExecutions::<AccountId>::try_from(sources)
+                .map_err(|_| ValidationError::InstantMatchPlannedExecutionsOutOfBounds)?)
         },
     )?;
     let min_reputation = try_option(
@@ -538,6 +541,7 @@ pub enum ValidationError {
     InvalidMessage,
     InvalidAction,
     ScriptOutOfBounds,
+    InstantMatchPlannedExecutionsOutOfBounds,
     TezosAddressOutOfBounds,
     InvalidReward,
     MissingField(FieldError),
@@ -615,6 +619,7 @@ fn try_sequence<R, O: Fn(Data) -> Result<R, ValidationError>>(
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use sp_runtime::bounded_vec;
     use tezos_core::types::encoded::ImplicitAddress;
 
     use pallet_acurast::{JobRegistration, Script};
@@ -673,7 +678,7 @@ mod tests {
                     slots: 1,
                     reward: 1000,
                     min_reputation: None,
-                    instant_match: Some(vec![PlannedExecution {
+                    instant_match: Some(bounded_vec![PlannedExecution {
                         source: hex![
                             "1111111111111111111111111111111111111111111111111111111111111111"
                         ]
@@ -743,7 +748,7 @@ mod tests {
                     slots: 1,
                     reward: 1000000000000,
                     min_reputation: Some(0),
-                    instant_match: Some(vec![PlannedExecution {
+                    instant_match: Some(bounded_vec![PlannedExecution {
                         source: hex![
                             "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
                         ]

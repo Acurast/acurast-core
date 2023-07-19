@@ -67,6 +67,7 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedConsumers: Get<u32> + Parameter;
+        #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
@@ -184,7 +185,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully matched. [Match]
-        JobRegistrationMatched(Match<T::AccountId>),
+        JobRegistrationMatched(MatchFor<T>),
         /// A registration was successfully matched. [JobId, SourceId, Assignment]
         JobRegistrationAssigned(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
         /// A report for an execution has arrived. [JobId, SourceId, Assignment]
@@ -416,7 +417,7 @@ pub mod pallet {
         #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
         pub fn propose_matching(
             origin: OriginFor<T>,
-            matches: BoundedVec<Match<T::AccountId>, <T as Config>::MaxProposedMatches>,
+            matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -819,7 +820,7 @@ pub mod pallet {
         ///
         /// Every other invalidity in a provided [`Match`] fails the entire call.
         fn process_matching<'a>(
-            matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
+            matching: impl IntoIterator<Item = &'a MatchFor<T>>,
         ) -> Result<Vec<(JobId<T::AccountId>, T::Balance)>, DispatchError> {
             let mut remaining_rewards: Vec<(JobId<T::AccountId>, T::Balance)> = Default::default();
 
