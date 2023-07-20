@@ -7,16 +7,16 @@ use sp_core::Get;
 use super::*;
 
 pub mod v1 {
-    use acurast_common::{Schedule, Script};
+    use acurast_common::{AllowedSources, Schedule, Script};
     use frame_support::pallet_prelude::*;
     use sp_std::prelude::*;
 
     #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-    pub struct JobRegistration<AccountId, Extra> {
+    pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
         /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
         pub script: Script,
         /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-        pub allowed_sources: Option<Vec<AccountId>>,
+        pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
         /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
         pub allow_only_verified_sources: bool,
         /// The schedule describing the desired (multiple) execution(s) of the script.
@@ -50,7 +50,7 @@ pub fn migrate<T: Config>() -> Weight {
 
 fn migrate_to_v2<T: Config>() -> Weight {
     StoredJobRegistration::<T>::translate::<
-        v1::JobRegistration<T::AccountId, T::RegistrationExtra>,
+        v1::JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
         _,
     >(|_k1, _k2, job| {
         Some(JobRegistration {

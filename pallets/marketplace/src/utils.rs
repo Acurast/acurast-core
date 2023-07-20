@@ -1,11 +1,12 @@
 use crate::Config;
-use pallet_acurast::MultiOrigin;
+use frame_support::BoundedVec;
+use pallet_acurast::{AllowedSources, MultiOrigin};
 use sp_std::prelude::*;
 
 /// Checks if a consumer is whitelisted/
 pub(crate) fn is_consumer_whitelisted<T: Config>(
     consumer: &MultiOrigin<T::AccountId>,
-    allowed_consumers: &Option<Vec<MultiOrigin<T::AccountId>>>,
+    allowed_consumers: &Option<BoundedVec<MultiOrigin<T::AccountId>, T::MaxAllowedConsumers>>,
 ) -> bool {
     allowed_consumers
         .as_ref()
@@ -20,7 +21,7 @@ pub(crate) fn is_consumer_whitelisted<T: Config>(
 /// Checks if a source/processor is whitelisted
 pub fn is_source_whitelisted<T: Config>(
     source: &T::AccountId,
-    allowed_sources: &Option<Vec<T::AccountId>>,
+    allowed_sources: &Option<AllowedSources<T::AccountId, T::MaxAllowedSources>>,
 ) -> bool {
     allowed_sources
         .as_ref()

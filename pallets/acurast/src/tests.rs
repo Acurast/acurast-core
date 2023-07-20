@@ -5,7 +5,7 @@ use crate::{
     CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
 use acurast_common::MultiOrigin;
-use frame_support::{assert_err, assert_ok};
+use frame_support::{assert_err, assert_ok, bounded_vec};
 use hex_literal::hex;
 use sp_runtime::AccountId32;
 
@@ -116,24 +116,7 @@ fn test_job_registration_failure_3() {
     ExtBuilder::default().build().execute_with(|| {
         let initial_job_id = Acurast::job_id_sequence();
 
-        let registration_1 = job_registration(
-            Some(vec![
-                alice_account_id(),
-                bob_account_id(),
-                charlie_account_id(),
-                dave_account_id(),
-                eve_account_id(),
-            ]),
-            false,
-        );
-        let registration_2 = job_registration(Some(vec![]), false);
-        assert_err!(
-            Acurast::register(
-                RuntimeOrigin::signed(alice_account_id()).into(),
-                registration_1.clone()
-            ),
-            Error::<Test>::TooManyAllowedSources
-        );
+        let registration = job_registration(Some(bounded_vec![]), false);
 
         assert_eq!(
             None,
@@ -146,7 +129,7 @@ fn test_job_registration_failure_3() {
         assert_err!(
             Acurast::register(
                 RuntimeOrigin::signed(alice_account_id()).into(),
-                registration_2.clone()
+                registration.clone()
             ),
             Error::<Test>::TooFewAllowedSources
         );
@@ -169,8 +152,10 @@ fn test_update_allowed_sources() {
         let initial_job_id = Acurast::job_id_sequence();
 
         let registration_1 = job_registration(None, false);
-        let registration_2 =
-            job_registration(Some(vec![alice_account_id(), bob_account_id()]), false);
+        let registration_2 = job_registration(
+            Some(bounded_vec![alice_account_id(), bob_account_id()]),
+            false,
+        );
         let updates_1 = vec![
             AllowedSourcesUpdate {
                 operation: ListUpdateOperation::Add,
@@ -249,7 +234,7 @@ fn test_update_allowed_sources() {
 #[test]
 fn test_update_allowed_sources_failure() {
     let registration = job_registration(
-        Some(vec![
+        Some(bounded_vec![
             alice_account_id(),
             bob_account_id(),
             charlie_account_id(),

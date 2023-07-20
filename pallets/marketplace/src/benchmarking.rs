@@ -62,7 +62,7 @@ pub fn job_registration_with_reward<T: Config>(
         slots: 1,
         reward,
         min_reputation: Some(0),
-        instant_match: instant_match_processor.map(|m| vec![m]),
+        instant_match: instant_match_processor.map(|m| bounded_vec![m]),
     };
     let r: <T as Config>::RegistrationExtra = <T as Config>::BenchmarkHelper::registration_extra(r);
     let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();

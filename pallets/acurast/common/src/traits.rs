@@ -1,14 +1,9 @@
-/// TODO: can be removed once we migrate to newer substrate version with XCMv3 and use [frame_support::traits::tokens::fungibles::Transfer] instead.
-pub trait AssetTransfer {
-    type AssetId;
-    type Balance;
-    type AccountId;
-    type Error;
+use frame_support::traits::Get;
+use sp_std::fmt;
+use sp_std::prelude::*;
 
-    fn transfer(
-        asset: Self::AssetId,
-        from: &Self::AccountId,
-        to: &Self::AccountId,
-        amount: Self::Balance,
-    ) -> Result<(), Self::Error>;
-}
+/// A bound that can be used to restrict length sequence types such as [`frame_support::BoundedVec`] appearing in types used in dispatchable functions.
+///
+/// Similar to [`frame_support::Parameter`] without encoding traits, since bounds are never encoded.
+pub trait ParameterBound: Get<u32> + Clone + Eq + fmt::Debug + scale_info::TypeInfo {}
+impl<T> ParameterBound for T where T: Get<u32> + Clone + Eq + fmt::Debug + scale_info::TypeInfo {}

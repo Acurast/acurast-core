@@ -17,8 +17,11 @@ pub use acurast_common::*;
 pub use pallet::*;
 pub use traits::*;
 
-pub type JobRegistrationFor<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+pub type JobRegistrationFor<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::MaxAllowedSources,
+    <T as Config>::RegistrationExtra,
+>;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -40,7 +43,7 @@ pub mod pallet {
         type RegistrationExtra: Parameter + Member;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32>;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxCertificateRevocationListUpdates: Get<u32>;
         /// The ID for this pallet
@@ -352,8 +355,11 @@ pub mod pallet {
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-            let mut current_allowed_sources =
-                registration.allowed_sources.clone().unwrap_or_default();
+            let mut current_allowed_sources = registration
+                .allowed_sources
+                .clone()
+                .unwrap_or_default()
+                .into_inner();
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
@@ -368,16 +374,13 @@ pub mod pallet {
                     _ => {}
                 }
             }
-            let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
-            let allowed_sources_len = current_allowed_sources.len();
-            ensure!(
-                allowed_sources_len <= max_allowed_sources_len,
-                Error::<T>::TooManyAllowedSources
-            );
             let allowed_sources = if current_allowed_sources.is_empty() {
                 None
             } else {
-                Some(current_allowed_sources)
+                Some(
+                    AllowedSources::try_from(current_allowed_sources)
+                        .map_err(|_| Error::<T>::TooManyAllowedSources)?,
+                )
             };
             <StoredJobRegistration<T>>::insert(
                 &job_id.0,

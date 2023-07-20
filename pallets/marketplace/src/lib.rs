@@ -29,6 +29,7 @@ pub mod weights_with_hooks;
 
 pub(crate) use pallet::STORAGE_VERSION;
 
+use frame_support::pallet_prelude::Get;
 use pallet_acurast::MultiOrigin;
 use sp_std::prelude::*;
 
@@ -50,7 +51,7 @@ pub mod pallet {
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
         AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
-        Schedule, StoredJobRegistration,
+        ParameterBound, Schedule, StoredJobRegistration,
     };
 
     use crate::traits::*;
@@ -66,7 +67,11 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedConsumers: Get<u32> + Parameter;
+        type MaxAllowedConsumers: Get<u32> + ParameterBound;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
+        #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
@@ -117,8 +122,12 @@ pub mod pallet {
     /// advertisement per client is allowed.
     #[pallet::storage]
     #[pallet::getter(fn stored_advertisement)]
-    pub type StoredAdvertisementRestriction<T: Config> =
-        StorageMap<_, Blake2_128, T::AccountId, AdvertisementRestriction<T::AccountId>>;
+    pub type StoredAdvertisementRestriction<T: Config> = StorageMap<
+        _,
+        Blake2_128,
+        T::AccountId,
+        AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
+    >;
 
     /// The storage for advertisements' pricings. They are stored as a map [`AccountId`] `(source)` -> [`Pricing`] since only one
     /// advertisement per client, and at most one pricing for each distinct `AssetID` is allowed.
@@ -184,7 +193,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully matched. [Match]
-        JobRegistrationMatched(Match<T::AccountId>),
+        JobRegistrationMatched(MatchFor<T>),
         /// A registration was successfully matched. [JobId, SourceId, Assignment]
         JobRegistrationAssigned(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
         /// A report for an execution has arrived. [JobId, SourceId, Assignment]
@@ -416,7 +425,7 @@ pub mod pallet {
         #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
         pub fn propose_matching(
             origin: OriginFor<T>,
-            matches: BoundedVec<Match<T::AccountId>, <T as Config>::MaxProposedMatches>,
+            matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -713,7 +722,7 @@ pub mod pallet {
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
             ensure!(
-                requirements.slots as u32 <= MAX_SLOTS,
+                requirements.slots as u32 <= <T as Config>::MaxSlots::get(),
                 Error::<T>::TooManySlots
             );
 
@@ -819,7 +828,7 @@ pub mod pallet {
         ///
         /// Every other invalidity in a provided [`Match`] fails the entire call.
         fn process_matching<'a>(
-            matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
+            matching: impl IntoIterator<Item = &'a MatchFor<T>>,
         ) -> Result<Vec<(JobId<T::AccountId>, T::Balance)>, DispatchError> {
             let mut remaining_rewards: Vec<(JobId<T::AccountId>, T::Balance)> = Default::default();
 
@@ -1044,7 +1053,7 @@ pub mod pallet {
         }
 
         fn check_network_request_quota_sufficient(
-            ad: &AdvertisementRestriction<T::AccountId>,
+            ad: &AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
             schedule: &Schedule,
             network_requests: u32,
         ) -> Result<(), Error<T>> {
@@ -1090,7 +1099,7 @@ pub mod pallet {
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
         pub fn filter_matching_sources(
-            registration: PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: PartialJobRegistration<T::Balance, T::AccountId, T::MaxAllowedSources>,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
@@ -1124,7 +1133,7 @@ pub mod pallet {
         }
 
         fn check(
-            registration: &PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: &PartialJobRegistrationForMarketplace<T>,
             source: &T::AccountId,
             consumer: Option<&MultiOrigin<T::AccountId>>,
         ) -> Result<(), Error<T>> {
@@ -1384,7 +1393,7 @@ pub mod pallet {
                         *c = c.unwrap_or(0).checked_add(registration.storage.into())
                     });
                 }
-                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, MAX_SLOTS, None);
+                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
 
                 T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
 
@@ -1409,9 +1418,9 @@ pub mod pallet {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with Acurast marketplace pallet.
-    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec> {
+    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>> {
          fn filter_matching_sources(
-            registration: PartialJobRegistration<R, AccountId>,
+            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources>,
             sources: Vec<AccountId>,
             consumer: Option<MultiOrigin<AccountId>>,
             latest_seen_after: Option<u128>,

@@ -18,6 +18,7 @@ pub(crate) const SCRIPT_LENGTH: u32 = 53;
 /// Type representing the utf8 bytes of a string containing the value of an ipfs url.
 /// The ipfs url is expected to point to a script.
 pub type Script = BoundedVec<u8, ConstU32<SCRIPT_LENGTH>>;
+pub type AllowedSources<AccountId, MaxAllowedSources> = BoundedVec<AccountId, MaxAllowedSources>;
 
 pub fn is_valid_script(script: &Script) -> bool {
     let script_len: u32 = script.len().try_into().unwrap_or(0);
@@ -71,11 +72,11 @@ pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct JobRegistration<AccountId, Extra> {
+pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<AccountId>>,
+    pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
     /// The schedule describing the desired (multiple) execution(s) of the script.

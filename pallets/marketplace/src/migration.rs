@@ -11,12 +11,12 @@ use super::*;
 
 pub mod v1 {
     use frame_support::pallet_prelude::*;
-    use pallet_acurast::MultiOrigin;
+    use pallet_acurast::{MultiOrigin, ParameterBound};
     use sp_std::prelude::*;
 
     /// The resource advertisement by a source containing the base restrictions.
     #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-    pub struct AdvertisementRestriction<AccountId> {
+    pub struct AdvertisementRestriction<AccountId, MaxAllowedConsumers: ParameterBound> {
         /// Maximum memory in bytes not to be exceeded during any job's execution.
         pub max_memory: u32,
         /// Maximum network requests per second not to be exceeded.
@@ -24,7 +24,7 @@ pub mod v1 {
         /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
         pub storage_capacity: u32,
         /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-        pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
+        pub allowed_consumers: Option<BoundedVec<MultiOrigin<AccountId>, MaxAllowedConsumers>>,
     }
 }
 
@@ -49,7 +49,7 @@ pub fn migrate<T: Config>() -> Weight {
 
 fn migrate_to_v2<T: Config>() -> Weight {
     StoredAdvertisementRestriction::<T>::translate_values::<
-        v1::AdvertisementRestriction<T::AccountId>,
+        v1::AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
         _,
     >(|ad| {
         Some(AdvertisementRestriction {

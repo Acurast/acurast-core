@@ -31,7 +31,7 @@ pub mod pallet {
     #[cfg(feature = "runtime-benchmarks")]
     use crate::benchmarking::BenchmarkHelper;
     use crate::WeightInfo;
-    use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration};
+    use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration, ParameterBound};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -40,9 +40,10 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: Parameter + Member;
+        /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32>;
-        type MaxAllowedConsumers: Get<u32> + Parameter;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
+        type MaxAllowedConsumers: Get<u32> + ParameterBound;
         type Balance: Parameter;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;
@@ -63,7 +64,7 @@ pub mod pallet {
     pub enum ProxyCall<T: Config> {
         #[codec(index = 0u8)]
         Register {
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
         },
 
         #[codec(index = 1u8)]
@@ -187,7 +188,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::register())]
         pub fn register(
             origin: OriginFor<T>,
-            registration: JobRegistration<T::AccountId, T::RegistrationExtra>,
+            registration: JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
         ) -> DispatchResult {
             let caller = ensure_signed(origin)?;
             let proxy_call = ProxyCall::Register { registration };
