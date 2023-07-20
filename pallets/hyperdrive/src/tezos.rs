@@ -3,6 +3,8 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use derive_more::Error as DError;
 use derive_more::{Display, From};
+use frame_support::traits::Get;
+use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
 use sp_core::RuntimeDebug;
@@ -24,7 +26,9 @@ use tezos_michelson::{
     michelson::ComparableTypePrimitive,
 };
 
-use pallet_acurast::{JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32};
+use pallet_acurast::{
+    AllowedSources, JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32,
+};
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
@@ -36,12 +40,14 @@ pub struct TezosParser<Balance, ParsableAccountId, AccountId, Extra>(
     PhantomData<(Balance, ParsableAccountId, AccountId, Extra)>,
 );
 
-impl<Balance, ParsableAccountId, AccountId, Extra> MessageParser<AccountId, Extra>
+impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, Extra>
+    MessageParser<AccountId, MaxAllowedSources, Extra>
     for TezosParser<Balance, ParsableAccountId, AccountId, Extra>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
+    MaxAllowedSources: Get<u32> + Parameter,
 {
     type Error = ValidationError;
 
@@ -55,16 +61,21 @@ where
         value.to_integer().map_err(|_| ValidationError::InvalidKey)
     }
 
-    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, ValidationError> {
+    fn parse_value(
+        encoded: &[u8],
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, ValidationError> {
         let (action, origin, payload) = parse_message(encoded)?;
 
         Ok(match action {
             RawAction::RegisterJob => {
                 let payload: Vec<u8> = (&payload).into();
-                let (job_id_sequence, registration) =
-                    parse_job_registration_payload::<Balance, ParsableAccountId, AccountId, Extra>(
-                        payload.as_slice(),
-                    )?;
+                let (job_id_sequence, registration) = parse_job_registration_payload::<
+                    Balance,
+                    ParsableAccountId,
+                    AccountId,
+                    MaxAllowedSources,
+                    Extra,
+                >(payload.as_slice())?;
 
                 ParsedAction::RegisterJob(
                     (
@@ -276,13 +287,20 @@ fn finalize_job_schema() -> &'static Micheline {
 }
 
 /// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
-fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, Extra>(
+fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, MaxAllowedSources, Extra>(
     encoded: &[u8],
-) -> Result<(JobIdSequence, JobRegistration<AccountId, Extra>), ValidationError>
+) -> Result<
+    (
+        JobIdSequence,
+        JobRegistration<AccountId, MaxAllowedSources, Extra>,
+    ),
+    ValidationError,
+>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
+    MaxAllowedSources: Get<u32> + Parameter,
 {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
@@ -302,12 +320,15 @@ where
         iter.next()
             .ok_or(ValidationError::MissingField(FieldError::AllowedSources))?,
         |value| {
-            try_sequence(value, |source| {
+            let seq = try_sequence(value, |source| {
                 let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(source)?).into();
                 let parsed: ParsableAccountId =
                     s.try_into().map_err(|_| ValidationError::AddressParsing)?;
                 Ok(parsed.into())
-            })
+            })?;
+            Ok(AllowedSources::try_from(seq).map_err(|_| {
+                ValidationError::LengthExceeded(LengthExceededError::AllowedSources)
+            })?)
         },
     )?;
     let instant_match = try_option(
@@ -545,6 +566,7 @@ pub enum ValidationError {
     TezosAddressOutOfBounds,
     InvalidReward,
     MissingField(FieldError),
+    LengthExceeded(LengthExceededError),
     InvalidBool,
     InvalidOption,
     AddressParsing,
@@ -577,6 +599,12 @@ pub enum FieldError {
     StartTime,
     Script,
     Storage,
+}
+
+#[derive(RuntimeDebug, Display, From)]
+#[cfg_attr(feature = "std", derive(DError))]
+pub enum LengthExceededError {
+    AllowedSources,
 }
 
 /// Utility function to parse a tezos [`Bool`] into a Rust bool.
@@ -642,22 +670,28 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
+                MaxAllowedSources,
                 RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
+            <Test as Config>::MaxAllowedSources,
             _,
         >(payload.as_slice())?;
-        let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
+        let expected = JobRegistration::<
+            <Test as frame_system::Config>::AccountId,
+            <Test as Config>::MaxAllowedSources,
+            _,
+        > {
             script: Script::try_from(vec![
                 105, 112, 102, 115, 58, 47, 47, 81, 109, 100, 72, 76, 105, 66, 89, 97, 116, 98,
                 110, 97, 80, 100, 85, 115, 84, 77, 77, 71, 70, 87, 69, 52, 50, 99, 83, 65, 74, 67,
                 72, 89, 55, 66, 111, 55, 65, 68, 88, 50, 99, 100, 68, 101, 97,
             ])
             .unwrap(),
-            allowed_sources: Some(vec![hex!(
+            allowed_sources: Some(bounded_vec![hex!(
                 "0000000000000000000000000000000000000000000000000000000000000000"
             )
             .into()]),
@@ -709,25 +743,31 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
+                <Test as Config>::MaxAllowedSources,
                 RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
+            <Test as Config>::MaxAllowedSources,
             _,
         >(payload.as_slice())?;
 
         // JobRegistration { script: BoundedVec([105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75, 53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101, 72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75], 53), allowed_sources: Some([d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...)]), allow_only_verified_sources: true, schedule: Schedule { duration: 500, start_time: 1687356600000, end_time: 1687357200000, interval: 300000, max_start_delay: 10000 }, memory: 100, network_requests: 1, storage: 0, required_modules: BoundedVec([], 1), extra: RegistrationExtra { requirements: JobRequirements { slots: 1, reward: 1000000000000, min_reputation: Some(0), instant_match: Some([PlannedExecution { source: d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f (5GwyLDtS...), start_delay: 0 }]) } } }
 
-        let expected = JobRegistration::<<Test as frame_system::Config>::AccountId, _> {
+        let expected = JobRegistration::<
+            <Test as frame_system::Config>::AccountId,
+            <Test as Config>::MaxAllowedSources,
+            _,
+        > {
             script: Script::try_from(vec![
                 105, 112, 102, 115, 58, 47, 47, 81, 109, 83, 110, 49, 114, 82, 115, 122, 68, 75,
                 53, 66, 88, 99, 78, 81, 109, 78, 54, 117, 67, 118, 122, 77, 55, 104, 88, 99, 101,
                 72, 85, 85, 105, 66, 107, 97, 119, 119, 88, 57, 107, 83, 77, 71, 75,
             ])
             .unwrap(),
-            allowed_sources: Some(vec![hex!(
+            allowed_sources: Some(bounded_vec![hex!(
                 "d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f"
             )
             .into()]),

@@ -1,7 +1,7 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast::{AllowedSources, JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
 
 use core::fmt::Debug;
 #[cfg(feature = "std")]
@@ -22,8 +22,17 @@ pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MES
 pub type PlannedExecutions<AccountId> =
     BoundedVec<PlannedExecution<AccountId>, ConstU32<MAX_SLOTS>>;
 
-pub type JobRegistrationForMarketplace<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+pub type JobRegistrationForMarketplace<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
+    <T as Config>::RegistrationExtra,
+>;
+
+pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
+>;
 
 pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId>;
 
@@ -207,9 +216,9 @@ pub struct Match<AccountId> {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct PartialJobRegistration<Reward, AccountId> {
+pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>> {
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<AccountId>>,
+    pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
     /// The schedule describing the desired (multiple) execution(s) of the script.

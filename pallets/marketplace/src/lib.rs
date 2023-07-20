@@ -29,6 +29,7 @@ pub mod weights_with_hooks;
 
 pub(crate) use pallet::STORAGE_VERSION;
 
+use frame_support::pallet_prelude::Get;
 use pallet_acurast::MultiOrigin;
 use sp_std::prelude::*;
 
@@ -1091,7 +1092,7 @@ pub mod pallet {
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
         pub fn filter_matching_sources(
-            registration: PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: PartialJobRegistration<T::Balance, T::AccountId, T::MaxAllowedSources>,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
@@ -1125,7 +1126,7 @@ pub mod pallet {
         }
 
         fn check(
-            registration: &PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: &PartialJobRegistrationForMarketplace<T>,
             source: &T::AccountId,
             consumer: Option<&MultiOrigin<T::AccountId>>,
         ) -> Result<(), Error<T>> {
@@ -1410,9 +1411,9 @@ pub mod pallet {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with Acurast marketplace pallet.
-    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec> {
+    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>> {
          fn filter_matching_sources(
-            registration: PartialJobRegistration<R, AccountId>,
+            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources>,
             sources: Vec<AccountId>,
             consumer: Option<MultiOrigin<AccountId>>,
             latest_seen_after: Option<u128>,

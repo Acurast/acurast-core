@@ -56,8 +56,9 @@ pub struct AcurastRegistrationExtra {
 	/// my extra registration parameters
 }
 
+pub type MaxAllowedSources = CU32<10>;
+
 parameter_types! {
-    pub const MaxAllowedSources: u16 = 100;
 	pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
 }
 

@@ -17,6 +17,8 @@ pub type Balance = u128;
 
 pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
+pub type MaxAllowedSources = CU32<10>;
+
 pub fn alice_account_id() -> AcurastAccountId {
     [0; 32].into()
 }
@@ -24,7 +26,8 @@ pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
 pub fn registration(
-) -> JobRegistration<AcurastAccountId, JobRequirements<Balance, AcurastAccountId>> {
+) -> JobRegistration<AcurastAccountId, MaxAllowedSources, JobRequirements<Balance, AcurastAccountId>>
+{
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -260,7 +263,7 @@ pub mod acurast_runtime {
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<Balance, AccountId>;
-        type MaxAllowedSources = frame_support::traits::ConstU32<1000>;
+        type MaxAllowedSources = super::MaxAllowedSources;
         type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
@@ -580,7 +583,7 @@ pub mod proxy_runtime {
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
         type RegistrationExtra = JobRequirements<Balance, AccountId>;
-        type MaxAllowedSources = ConstU32<10>;
+        type MaxAllowedSources = super::MaxAllowedSources;
         type MaxAllowedConsumers = CU32<10>;
         type Balance = Balance;
         type XcmSender = XcmRouter;

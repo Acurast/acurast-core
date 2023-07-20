@@ -4,6 +4,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use crate::{MarketplaceRuntimeApi, PartialJobRegistration, RuntimeApiError};
 use codec::Codec;
+use frame_support::pallet_prelude::Get;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -24,6 +25,7 @@ pub trait MarketplaceApi<
     BlockHash,
     Reward: MaybeSerializeDeserialize,
     AccountId: MaybeSerializeDeserialize,
+    MaxAllowedSources: Get<u32>,
 >
 {
     /// Filters the given `sources` by those recently seen and matching partially specified `registration`
@@ -31,7 +33,7 @@ pub trait MarketplaceApi<
     #[method(name = "filterMatchingSources")]
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<Reward, AccountId>,
+        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
@@ -55,18 +57,20 @@ impl<C, B> Marketplace<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, Reward, AccountId> MarketplaceApiServer<HashFor<Block>, Reward, AccountId>
+impl<Client, Block, Reward, AccountId, MaxAllowedSources>
+    MarketplaceApiServer<HashFor<Block>, Reward, AccountId, MaxAllowedSources>
     for Marketplace<Client, (Block, Reward, AccountId)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: MarketplaceRuntimeApi<Block, Reward, AccountId>,
+    Client::Api: MarketplaceRuntimeApi<Block, Reward, AccountId, MaxAllowedSources>,
     Reward: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     AccountId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
+    MaxAllowedSources: Get<u32>,
 {
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<Reward, AccountId>,
+        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,

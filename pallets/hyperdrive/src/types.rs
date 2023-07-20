@@ -129,8 +129,10 @@ pub enum RawAction {
     FinalizeJob,
 }
 
-impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
-    fn from(action: &ParsedAction<AccountId, Extra>) -> Self {
+impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
+    From<&ParsedAction<AccountId, MaxAllowedSources, Extra>> for RawAction
+{
+    fn from(action: &ParsedAction<AccountId, MaxAllowedSources, Extra>) -> Self {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
@@ -140,26 +142,36 @@ impl<AccountId, Extra> From<&ParsedAction<AccountId, Extra>> for RawAction {
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<AccountId, Extra> {
-    RegisterJob(JobId<AccountId>, JobRegistration<AccountId, Extra>),
+pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+    RegisterJob(
+        JobId<AccountId>,
+        JobRegistration<AccountId, MaxAllowedSources, Extra>,
+    ),
     DeregisterJob(JobId<AccountId>),
     FinalizeJob(Vec<JobId<AccountId>>),
 }
 
 pub type MessageIdentifier = u128;
 
-pub type JobRegistrationFor<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+pub type JobRegistrationFor<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::RegistrationExtra,
+    <T as Config>::MaxAllowedSources,
+>;
 
-pub trait MessageParser<AccountId, Extra> {
+pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     type Error;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
-    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, Extra>, Self::Error>;
+    fn parse_value(
+        encoded: &[u8],
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
 }
 
-pub trait ActionExecutor<AccountId, Extra> {
-    fn execute(action: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo;
+pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+    fn execute(
+        action: ParsedAction<AccountId, MaxAllowedSources, Extra>,
+    ) -> DispatchResultWithPostInfo;
 }
 
 /// Tracks the progress during `submit_message`, intended to be included in events.

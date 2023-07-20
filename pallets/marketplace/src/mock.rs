@@ -8,7 +8,7 @@ use sp_std::prelude::*;
 use std::marker::PhantomData;
 
 use pallet_acurast::{
-    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier,
+    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier, CU32,
 };
 
 use crate::stub::*;
@@ -169,7 +169,7 @@ impl parachain_info::Config for Test {}
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
-    type MaxAllowedSources = frame_support::traits::ConstU32<4>;
+    type MaxAllowedSources = CU32<4>;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;

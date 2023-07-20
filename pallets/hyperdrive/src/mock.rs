@@ -9,6 +9,7 @@ use frame_support::{
 };
 use frame_system as system;
 use hex_literal::hex;
+use pallet_acurast::CU32;
 use sp_core::H256;
 use sp_core::*;
 use sp_runtime::traits::Keccak256;
@@ -84,6 +85,8 @@ impl system::Config for Test {
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+pub type MaxAllowedSources = CU32<4>;
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AcurastAccountId;
@@ -93,6 +96,7 @@ impl crate::Config for Test {
     type Balance = Balance;
     type RegistrationExtra =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId>;
+    type MaxAllowedSources = MaxAllowedSources;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
@@ -132,8 +136,8 @@ pub fn events() -> Vec<RuntimeEvent> {
 
 pub type Balance = u128;
 
-impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
-    fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
+impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
+    fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
 }
