@@ -23,18 +23,17 @@ pub mod pallet {
 
     use frame_support::dispatch::PostDispatchInfo;
     use frame_support::traits::Get;
-    use frame_support::transactional;
     use frame_support::{
         pallet_prelude::*,
         sp_runtime::traits::{
             AtLeast32BitUnsigned, Bounded, CheckEqual, MaybeDisplay, SimpleBitOps,
         },
     };
+    use frame_support::{transactional, BoundedBTreeSet};
     use frame_system::pallet_prelude::*;
     use pallet_acurast::ParameterBound;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
-    use sp_std::collections::btree_set::BTreeSet;
     use sp_std::prelude::*;
     use sp_std::vec;
 
@@ -46,7 +45,6 @@ pub mod pallet {
 
     /// A instantiable pallet for receiving secure state synchronizations into Acurast.
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     /// Configures the pallet instance for a specific target chain from which we synchronize state into Acurast.
@@ -108,6 +106,9 @@ pub mod pallet {
         /// The maximum allowed slots and therefore maximum length of the planned executions per job.
         #[pallet::constant]
         type MaxSlots: Get<u32> + ParameterBound;
+        /// The maximum transmitters accepted to submit a state root per snapshot.
+        #[pallet::constant]
+        type MaxTransmittersPerSnapshot: Get<u32> + ParameterBound;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -200,7 +201,7 @@ pub mod pallet {
         T::TargetChainBlockNumber,
         Identity,
         T::TargetChainHash,
-        BTreeSet<T::AccountId>,
+        BoundedBTreeSet<T::AccountId, T::MaxTransmittersPerSnapshot>,
     >;
 
     #[pallet::type_value]
@@ -311,11 +312,12 @@ pub mod pallet {
                     // This can be improved once [let chains feature](https://github.com/rust-lang/rust/issues/53667) lands
                     if let Some(transmitters) = submissions {
                         if !transmitters.contains(&who) {
-                            transmitters.insert(who.clone());
+                            _ = transmitters.try_insert(who.clone());
                         }
                     } else {
-                        let mut set = BTreeSet::<T::AccountId>::new();
-                        set.insert(who.clone());
+                        let mut set =
+                            BoundedBTreeSet::<T::AccountId, T::MaxTransmittersPerSnapshot>::new();
+                        _ = set.try_insert(who.clone());
                         *submissions = Some(set);
                     }
 

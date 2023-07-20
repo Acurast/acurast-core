@@ -192,7 +192,7 @@ pub type JobRequirementsFor<T> = JobRequirements<
 >;
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,

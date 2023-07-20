@@ -71,7 +71,7 @@ pub type AllowedSourcesUpdate<AccountId> = ListUpdate<AccountId>;
 pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
@@ -129,7 +129,7 @@ pub type JobModules = BoundedVec<JobModule, ConstU32<MAX_JOB_MODULES>>;
 ///   ```
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.
     pub duration: u64,
