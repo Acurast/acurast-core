@@ -122,8 +122,12 @@ pub mod pallet {
     /// advertisement per client is allowed.
     #[pallet::storage]
     #[pallet::getter(fn stored_advertisement)]
-    pub type StoredAdvertisementRestriction<T: Config> =
-        StorageMap<_, Blake2_128, T::AccountId, AdvertisementRestriction<T::AccountId>>;
+    pub type StoredAdvertisementRestriction<T: Config> = StorageMap<
+        _,
+        Blake2_128,
+        T::AccountId,
+        AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
+    >;
 
     /// The storage for advertisements' pricings. They are stored as a map [`AccountId`] `(source)` -> [`Pricing`] since only one
     /// advertisement per client, and at most one pricing for each distinct `AssetID` is allowed.
@@ -1049,7 +1053,7 @@ pub mod pallet {
         }
 
         fn check_network_request_quota_sufficient(
-            ad: &AdvertisementRestriction<T::AccountId>,
+            ad: &AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
             schedule: &Schedule,
             network_requests: u32,
         ) -> Result<(), Error<T>> {

@@ -47,10 +47,7 @@ impl<T: Config> Pallet<T> {
                 max_memory: advertisement.max_memory,
                 network_request_quota: advertisement.network_request_quota,
                 storage_capacity: advertisement.storage_capacity,
-                allowed_consumers: advertisement
-                    .allowed_consumers
-                    .clone()
-                    .map(|value| value.to_vec()),
+                allowed_consumers: advertisement.allowed_consumers.clone(),
                 available_modules: advertisement.available_modules.clone(),
             },
         );

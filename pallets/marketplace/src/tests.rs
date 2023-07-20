@@ -56,7 +56,7 @@ fn test_valid_deregister() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -178,7 +178,7 @@ fn test_invalid_deregister() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -319,7 +319,7 @@ fn test_match() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -880,7 +880,7 @@ fn test_more_reports_than_expected() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
