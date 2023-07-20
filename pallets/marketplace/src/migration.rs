@@ -66,6 +66,7 @@ fn migrate_to_v2<T: Config>() -> Weight {
 
 fn migrate_to_v3<T: Config>() -> Weight {
     let mut count = 0u32;
+    // we know they are reasonably few items and we can clear them within a single migration
     count += StoredJobStatus::<T>::clear(10_000, None).loops;
     count += StoredAdvertisementRestriction::<T>::clear(10_000, None).loops;
     count += StoredAdvertisementPricing::<T>::clear(10_000, None).loops;

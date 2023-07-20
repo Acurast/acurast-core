@@ -71,6 +71,7 @@ fn migrate_to_v2<T: Config>() -> Weight {
 
 fn migrate_to_v3<T: Config>() -> Weight {
     let mut count = 0u32;
+    // we know they are reasonably few items and we can clear them within a single migration
     count += StoredJobRegistration::<T>::clear(10_000, None).loops;
 
     T::DbWeight::get().writes((count + 1).into())
