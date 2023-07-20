@@ -1,7 +1,9 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
-use pallet_acurast::{AllowedSources, JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast::{
+    AllowedSources, JobId, JobModules, JobRegistration, MultiOrigin, ParameterBound, Schedule,
+};
 
 use core::fmt::Debug;
 #[cfg(feature = "std")]
@@ -15,12 +17,10 @@ pub(crate) const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 s
 
 pub(crate) const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
 pub(crate) const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
-pub(crate) const MAX_SLOTS: u32 = 64;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
-pub type PlannedExecutions<AccountId> =
-    BoundedVec<PlannedExecution<AccountId>, ConstU32<MAX_SLOTS>>;
+pub type PlannedExecutions<AccountId, MaxSlots> = BoundedVec<PlannedExecution<AccountId>, MaxSlots>;
 
 pub type JobRegistrationForMarketplace<T> = JobRegistration<
     <T as frame_system::Config>::AccountId,
@@ -34,18 +34,19 @@ pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
     <T as pallet_acurast::Config>::MaxAllowedSources,
 >;
 
-pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId>;
+pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId, <T as Config>::MaxSlots>;
 
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
-pub struct RegistrationExtra<Reward, AccountId> {
-    pub requirements: JobRequirements<Reward, AccountId>,
+pub struct RegistrationExtra<Reward, AccountId, MaxSlots: ParameterBound> {
+    pub requirements: JobRequirements<Reward, AccountId, MaxSlots>,
 }
 
-impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
-    for JobRequirements<Reward, AccountId>
+impl<Reward, AccountId, MaxSlots: ParameterBound>
+    From<RegistrationExtra<Reward, AccountId, MaxSlots>>
+    for JobRequirements<Reward, AccountId, MaxSlots>
 {
-    fn from(extra: RegistrationExtra<Reward, AccountId>) -> Self {
+    fn from(extra: RegistrationExtra<Reward, AccountId, MaxSlots>) -> Self {
         extra.requirements
     }
 }
@@ -184,12 +185,15 @@ pub struct SLA {
     pub met: u64,
 }
 
-pub type JobRequirementsFor<T> =
-    JobRequirements<<T as Config>::Balance, <T as frame_system::Config>::AccountId>;
+pub type JobRequirementsFor<T> = JobRequirements<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::MaxSlots,
+>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements<Reward, AccountId> {
+pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// Reward offered for each slot and scheduled execution of the job.
@@ -198,16 +202,16 @@ pub struct JobRequirements<Reward, AccountId> {
     pub min_reputation: Option<u128>,
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
-    pub instant_match: Option<PlannedExecutions<AccountId>>,
+    pub instant_match: Option<PlannedExecutions<AccountId, MaxSlots>>,
 }
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub struct Match<AccountId> {
+pub struct Match<AccountId, MaxSlots: ParameterBound> {
     /// The job to match.
     pub job_id: JobId<AccountId>,
     /// The sources to match each of the job's slots with.
-    pub sources: PlannedExecutions<AccountId>,
+    pub sources: PlannedExecutions<AccountId, MaxSlots>,
 }
 
 /// Structure representing a job registration partially specified.

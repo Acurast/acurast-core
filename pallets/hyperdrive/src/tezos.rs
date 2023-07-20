@@ -3,7 +3,6 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use derive_more::Error as DError;
 use derive_more::{Display, From};
-use frame_support::traits::Get;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
 use sp_core::RuntimeDebug;
@@ -36,18 +35,19 @@ use pallet_acurast_marketplace::{
 use crate::types::{MessageParser, RawAction};
 use crate::{MessageIdentifier, ParsedAction};
 
-pub struct TezosParser<Balance, ParsableAccountId, AccountId, Extra>(
-    PhantomData<(Balance, ParsableAccountId, AccountId, Extra)>,
+pub struct TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>(
+    PhantomData<(Balance, ParsableAccountId, AccountId, MaxSlots, Extra)>,
 );
 
-impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, Extra>
+impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, MaxSlots, Extra>
     MessageParser<AccountId, MaxAllowedSources, Extra>
-    for TezosParser<Balance, ParsableAccountId, AccountId, Extra>
+    for TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId>>,
+    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
+    MaxSlots: ParameterBound,
 {
     type Error = ValidationError;
 
@@ -74,6 +74,7 @@ where
                     ParsableAccountId,
                     AccountId,
                     MaxAllowedSources,
+                    MaxSlots,
                     Extra,
                 >(payload.as_slice())?;
 
@@ -287,7 +288,14 @@ fn finalize_job_schema() -> &'static Micheline {
 }
 
 /// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
-fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, MaxAllowedSources, Extra>(
+fn parse_job_registration_payload<
+    Balance,
+    ParsableAccountId,
+    AccountId,
+    MaxAllowedSources,
+    MaxSlots,
+    Extra,
+>(
     encoded: &[u8],
 ) -> Result<
     (
@@ -298,9 +306,10 @@ fn parse_job_registration_payload<Balance, ParsableAccountId, AccountId, MaxAllo
 >
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId>>,
+    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
+    MaxSlots: ParameterBound,
 {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
@@ -368,7 +377,7 @@ where
                 })
             })?;
 
-            Ok(PlannedExecutions::<AccountId>::try_from(sources)
+            Ok(PlannedExecutions::<AccountId, MaxSlots>::try_from(sources)
                 .map_err(|_| ValidationError::InstantMatchPlannedExecutionsOutOfBounds)?)
         },
     )?;
@@ -671,13 +680,18 @@ mod tests {
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
                 MaxAllowedSources,
-                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
+                RegistrationExtra<
+                    Balance,
+                    <Test as frame_system::Config>::AccountId,
+                    <Test as Config>::MaxSlots,
+                >,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
             <Test as Config>::MaxAllowedSources,
+            <Test as Config>::MaxSlots,
             _,
         >(payload.as_slice())?;
         let expected = JobRegistration::<
@@ -744,13 +758,18 @@ mod tests {
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
                 <Test as Config>::MaxAllowedSources,
-                RegistrationExtra<Balance, <Test as frame_system::Config>::AccountId>,
+                RegistrationExtra<
+                    Balance,
+                    <Test as frame_system::Config>::AccountId,
+                    <Test as Config>::MaxSlots,
+                >,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
             <Test as Config>::MaxAllowedSources,
+            <Test as Config>::MaxSlots,
             _,
         >(payload.as_slice())?;
 

@@ -18,6 +18,7 @@ pub type Balance = u128;
 pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
 pub type MaxAllowedSources = CU32<10>;
+pub type MaxSlots = CU32<64>;
 
 pub fn alice_account_id() -> AcurastAccountId {
     [0; 32].into()
@@ -25,9 +26,11 @@ pub fn alice_account_id() -> AcurastAccountId {
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn registration(
-) -> JobRegistration<AcurastAccountId, MaxAllowedSources, JobRequirements<Balance, AcurastAccountId>>
-{
+pub fn registration() -> JobRegistration<
+    AcurastAccountId,
+    MaxAllowedSources,
+    JobRequirements<Balance, AcurastAccountId, MaxSlots>,
+> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -262,7 +265,7 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, super::MaxSlots>;
         type MaxAllowedSources = super::MaxAllowedSources;
         type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
         type PalletId = AcurastPalletId;
@@ -322,7 +325,8 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
+        type MaxSlots = CU32<64>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
         type Balance = Balance;
@@ -582,7 +586,7 @@ pub mod proxy_runtime {
 
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, super::MaxSlots>;
         type MaxAllowedSources = super::MaxAllowedSources;
         type MaxAllowedConsumers = CU32<10>;
         type Balance = Balance;

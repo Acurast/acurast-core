@@ -99,10 +99,15 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type RegistrationExtra: From<RegistrationExtra<Self::Balance, Self::AccountId>>;
+        type RegistrationExtra: From<
+            RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
+        >;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u32> + ParameterBound;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;

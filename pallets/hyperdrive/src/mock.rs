@@ -95,8 +95,9 @@ impl crate::Config for Test {
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
     type RegistrationExtra =
-        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId>;
+        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
+    type MaxSlots = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
@@ -104,6 +105,7 @@ impl crate::Config for Test {
         Self::Balance,
         AcurastAccountId,
         <Self as frame_system::Config>::AccountId,
+        Self::MaxSlots,
         Self::RegistrationExtra,
     >;
     type ActionExecutor = ();

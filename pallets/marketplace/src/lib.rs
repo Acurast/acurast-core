@@ -68,6 +68,9 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedConsumers: Get<u32> + ParameterBound;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.
@@ -715,7 +718,7 @@ pub mod pallet {
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
             ensure!(
-                requirements.slots as u32 <= MAX_SLOTS,
+                requirements.slots as u32 <= <T as Config>::MaxSlots::get(),
                 Error::<T>::TooManySlots
             );
 
@@ -1386,7 +1389,7 @@ pub mod pallet {
                         *c = c.unwrap_or(0).checked_add(registration.storage.into())
                     });
                 }
-                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, MAX_SLOTS, None);
+                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
 
                 T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
 
