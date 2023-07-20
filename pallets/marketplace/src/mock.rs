@@ -318,6 +318,7 @@ impl Config for Test {
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
     type MaxSlots = pallet_acurast::CU32<64>;
     type MaxProposedMatches = frame_support::traits::ConstU32<10>;
+    type MaxFinalizedJobs = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type ReportTolerance = ReportTolerance;

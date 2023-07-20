@@ -325,6 +325,7 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
+        type MaxFinalizedJobs = frame_support::traits::ConstU32<10>;
         type MaxSlots = CU32<64>;
         type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
         type PalletId = AcurastPalletId;
