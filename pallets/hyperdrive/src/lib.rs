@@ -31,6 +31,7 @@ pub mod pallet {
         },
     };
     use frame_system::pallet_prelude::*;
+    use pallet_acurast::ParameterBound;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
     use sp_std::collections::btree_set::BTreeSet;
@@ -101,7 +102,7 @@ pub mod pallet {
         type RegistrationExtra: From<RegistrationExtra<Self::Balance, Self::AccountId>>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32> + Parameter;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;

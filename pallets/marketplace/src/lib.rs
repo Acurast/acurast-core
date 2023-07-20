@@ -51,7 +51,7 @@ pub mod pallet {
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
         AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
-        Schedule, StoredJobRegistration,
+        ParameterBound, Schedule, StoredJobRegistration,
     };
 
     use crate::traits::*;
@@ -67,7 +67,7 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedConsumers: Get<u32> + Parameter;
+        type MaxAllowedConsumers: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
         /// Extra structure to include in the registration of a job.

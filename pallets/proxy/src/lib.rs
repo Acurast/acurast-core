@@ -31,7 +31,7 @@ pub mod pallet {
     #[cfg(feature = "runtime-benchmarks")]
     use crate::benchmarking::BenchmarkHelper;
     use crate::WeightInfo;
-    use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration};
+    use acurast_common::{AllowedSourcesUpdate, JobIdSequence, JobRegistration, ParameterBound};
     use pallet_acurast_marketplace::Advertisement;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -42,8 +42,8 @@ pub mod pallet {
         type RegistrationExtra: Parameter + Member;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32> + Parameter;
-        type MaxAllowedConsumers: Get<u32> + Parameter;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
+        type MaxAllowedConsumers: Get<u32> + ParameterBound;
         type Balance: Parameter;
         type XcmSender: SendXcm;
         type AcurastPalletId: Get<u8>;

@@ -43,7 +43,7 @@ pub mod pallet {
         type RegistrationExtra: Parameter + Member;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32> + Parameter;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxCertificateRevocationListUpdates: Get<u32>;
         /// The ID for this pallet

@@ -4,7 +4,6 @@ use core::marker::PhantomData;
 use derive_more::Error as DError;
 use derive_more::{Display, From};
 use frame_support::traits::Get;
-use frame_support::Parameter;
 use once_cell::race::OnceBox;
 use sp_core::bounded::BoundedVec;
 use sp_core::RuntimeDebug;
@@ -27,7 +26,8 @@ use tezos_michelson::{
 };
 
 use pallet_acurast::{
-    AllowedSources, JobIdSequence, JobModule, JobRegistration, MultiOrigin, Schedule, CU32,
+    AllowedSources, JobIdSequence, JobModule, JobRegistration, MultiOrigin, ParameterBound,
+    Schedule, CU32,
 };
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
@@ -47,7 +47,7 @@ where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
-    MaxAllowedSources: Get<u32> + Parameter,
+    MaxAllowedSources: ParameterBound,
 {
     type Error = ValidationError;
 
@@ -300,7 +300,7 @@ where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
     Extra: From<RegistrationExtra<Balance, AccountId>>,
     Balance: From<u128>,
-    MaxAllowedSources: Get<u32> + Parameter,
+    MaxAllowedSources: ParameterBound,
 {
     let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
         .map_err(|e| ValidationError::TezosMicheline(e))?;
