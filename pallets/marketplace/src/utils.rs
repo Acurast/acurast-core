@@ -1,7 +1,6 @@
 use crate::Config;
 use frame_support::BoundedVec;
 use pallet_acurast::{AllowedSources, MultiOrigin};
-use sp_std::prelude::*;
 
 /// Checks if a consumer is whitelisted/
 pub(crate) fn is_consumer_whitelisted<T: Config>(

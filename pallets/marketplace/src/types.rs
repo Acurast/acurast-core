@@ -144,7 +144,7 @@ pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
 
 pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
 
-/// The public keys of the processor releaved when a job is acknowledge.
+/// The public keys of the processor revealed when a job is acknowledged.
 pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
 
 /// The public key revealed by a processor.

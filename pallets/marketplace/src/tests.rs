@@ -491,7 +491,7 @@ fn test_match() {
 
         assert_ok!(AcurastMarketplace::finalize_jobs(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            vec![job_id1.1],
+            bounded_vec![job_id1.1],
         ));
 
         // Job no longer assigned after finalization

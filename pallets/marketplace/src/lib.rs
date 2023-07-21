@@ -71,8 +71,12 @@ pub mod pallet {
         /// The maximum allowed slots and therefore maximum length of the planned executions per job.
         #[pallet::constant]
         type MaxSlots: Get<u32> + ParameterBound;
+        /// The maximum matches that can be proposed with one extrinsic call.
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
+        /// The maximum jobs that can be finalized with one extrinsic call.
+        #[pallet::constant]
+        type MaxFinalizedJobs: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirementsFor<Self>>;
@@ -666,7 +670,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs())]
         pub fn finalize_jobs(
             origin: OriginFor<T>,
-            job_ids: Vec<JobIdSequence>,
+            job_ids: BoundedVec<JobIdSequence, <T as Config>::MaxFinalizedJobs>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
