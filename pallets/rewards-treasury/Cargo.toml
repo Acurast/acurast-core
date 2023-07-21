@@ -56,14 +56,4 @@ std = [
 	"acurast-common/std",
 	"serde",
 ]
-runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"sp-io",
-	"sp-core",
-	"pallet-balances/runtime-benchmarks",
-	"pallet-assets/runtime-benchmarks",
-	"pallet-uniques/runtime-benchmarks",
-	"pallet-timestamp/runtime-benchmarks",
-	"hex-literal",
-]
 try-runtime = ["frame-support/try-runtime"]
