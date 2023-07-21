@@ -13,10 +13,6 @@ use crate::Pallet as AcurastHyperdrive;
 
 use super::*;
 
-pub trait BenchmarkHelper<Hash> {
-    fn dummy_proof() -> StateProof<Hash>;
-}
-
 fn assert_last_event<T: Config<I>, I: 'static>(generic_event: <T as Config<I>>::RuntimeEvent) {
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
@@ -104,14 +100,21 @@ benchmarks_instance_pallet! {
     }
 
     submit_message {
-        let caller: T::AccountId = whitelisted_caller();
-        let proof = T::BenchmarkHelper::dummy_proof();
-        let key: StateKey = StateKey::truncate_from([0u8; KEY_MAX_LENGTH as usize].to_vec());
-        let value: StateValue = StateValue::truncate_from([0u8; VALUE_MAX_LENGTH as usize].to_vec());
-    }: _(RawOrigin::Signed(caller.clone()), 1u8.into(), proof, key, value)
+        let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
+        let proof = proof().into_iter().map(|node| {
+            match node {
+                StateProofNode::Left(hash) => StateProofNode::Left(hash.into()),
+                StateProofNode::Right(hash) => StateProofNode::Right(hash.into()),
+            }
+        }).collect::<Vec<_>>().try_into().unwrap();
+        let key: StateKey = key();
+        let value: StateValue = value();
+        assert_ok!(AcurastHyperdrive::<T, I>::submit_state_merkle_root(RawOrigin::Signed(caller.clone()).into(), 1.into(), ROOT_HASH.into()));
+        assert_ok!(AcurastHyperdrive::<T, I>::update_target_chain_owner(RawOrigin::Root.into(), state_owner()));
+    }: _(RawOrigin::Signed(caller), 1u8.into(), proof, key, value)
 
     update_target_chain_owner {
-        let owner: StateOwner = vec![0u8].try_into().unwrap();
+        let owner: StateOwner = state_owner();
     }: _(RawOrigin::Root, owner)
 
     impl_benchmark_test_suite!(AcurastHyperdrive, crate::mock::new_test_ext(), mock::Test);

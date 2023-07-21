@@ -112,9 +112,6 @@ impl crate::Config for Test {
     >;
     type ActionExecutor = ();
     type WeightInfo = weights::WeightInfo<Test>;
-
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = ();
 }
 
 // Build genesis storage according to the mock runtime.
@@ -146,14 +143,5 @@ pub type Balance = u128;
 impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
     fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
-    }
-}
-
-#[cfg(feature = "runtime-benchmarks")]
-impl crate::BenchmarkHelper<<Test as crate::Config>::TargetChainHash> for () {
-    fn dummy_proof() -> StateProof<<Test as crate::Config>::TargetChainHash> {
-        vec![StateProofNode::Left([0u8; 32].into())]
-            .try_into()
-            .unwrap()
     }
 }

@@ -1,11 +1,6 @@
 use frame_support::weights::Weight;
 
+/// Weight functions needed for pallet_acurast_fee_manager.
 pub trait WeightInfo {
     fn update_fee_percentage() -> Weight;
-}
-
-impl WeightInfo for () {
-    fn update_fee_percentage() -> Weight {
-        Weight::from_parts(10_000_000, 0)
-    }
 }

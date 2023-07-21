@@ -19,9 +19,6 @@ pub mod tezos;
 mod types;
 pub mod weights;
 
-#[cfg(feature = "runtime-benchmarks")]
-pub use benchmarking::BenchmarkHelper;
-
 #[frame_support::pallet]
 pub mod pallet {
     use core::{fmt::Debug, str::FromStr};
@@ -134,8 +131,6 @@ pub mod pallet {
         >;
 
         type WeightInfo: WeightInfo;
-        #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper: BenchmarkHelper<Self::TargetChainHash>;
     }
 
     #[pallet::event]
@@ -377,7 +372,6 @@ pub mod pallet {
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             if !Self::validate_state_merkle_root(block, derived_root) {
-                #[cfg(not(feature = "runtime-benchmarks"))]
                 return Err(Error::<T, I>::ProofInvalid)?;
             }
 

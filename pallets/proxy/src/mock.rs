@@ -325,7 +325,6 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
-        type MaxFinalizedJobs = frame_support::traits::ConstU32<10>;
         type MaxSlots = CU32<64>;
         type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
         type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
@@ -336,7 +335,7 @@ pub mod acurast_runtime {
         type RewardManager = AssetRewardManager<FeeManagerImpl, Balances, AcurastMarketplace>;
         type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
         type MarketplaceHooks = ();
-        type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
+        type WeightInfo = pallet_acurast_marketplace::weights::WeightInfo<Runtime>;
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper = TestBenchmarkHelper;
     }
