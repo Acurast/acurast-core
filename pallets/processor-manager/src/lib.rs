@@ -11,6 +11,8 @@ mod stub;
 #[cfg(test)]
 mod tests;
 
+pub mod weights;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
@@ -193,7 +195,7 @@ pub mod pallet {
         T::AccountId: IsType<<<T::Proof as Verify>::Signer as IdentifyAccount>::AccountId>,
     {
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::update_processor_pairings())]
+        #[pallet::weight(T::WeightInfo::update_processor_pairings(pairing_updates.len() as u32))]
         pub fn update_processor_pairings(
             origin: OriginFor<T>,
             pairing_updates: ProcessorUpdatesFor<T>,

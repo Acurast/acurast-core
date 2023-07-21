@@ -35,6 +35,7 @@ impl<T: Config> KeyAttestationBarrier<T> for () {
     }
 }
 
+/// Weight functions needed for pallet_acurast.
 pub trait WeightInfo {
     fn register() -> Weight;
     fn deregister() -> Weight;

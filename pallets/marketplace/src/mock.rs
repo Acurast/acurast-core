@@ -185,7 +185,9 @@ impl pallet_acurast::Config for Test {
 pub struct TestBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
 impl pallet_acurast::BenchmarkHelper<Test> for TestBenchmarkHelper {
-    fn registration_extra() -> <Test as pallet_acurast::Config>::RegistrationExtra {
+    fn registration_extra(
+        _instant_match: bool,
+    ) -> <Test as pallet_acurast::Config>::RegistrationExtra {
         JobRequirements {
             slots: 1,
             reward: 1,
@@ -327,7 +329,7 @@ impl Config for Test {
     type RewardManager = MockRewardManager<Pallet<Self>>;
     type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
-    type WeightInfo = weights::Weights<Test>;
+    type WeightInfo = weights::WeightInfo<Test>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = TestBenchmarkHelper;
 }

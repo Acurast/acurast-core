@@ -173,7 +173,7 @@ where
     T::RegistrationExtra: Default,
     T::AccountId: Into<AccountId32>,
 {
-    fn registration_extra() -> T::RegistrationExtra {
+    fn registration_extra(_instant_match: bool) -> T::RegistrationExtra {
         Default::default()
     }
 

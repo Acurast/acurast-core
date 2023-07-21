@@ -18,6 +18,7 @@ use sp_std::prelude::*;
 
 pub trait BenchmarkHelper<T: Config> {
     fn dummy_proof() -> T::Proof;
+    fn advertisement() -> T::Advertisement;
 }
 
 fn generate_pairing_update_add<T: Config>(index: u32) -> ProcessorPairingUpdateFor<T>
@@ -52,21 +53,6 @@ benchmarks! {
         }
     }: _(RawOrigin::Signed(caller), updates.try_into().unwrap())
 
-    update_processor_pairings_2 {
-        let x in 1 .. T::MaxPairingUpdates::get();
-        let mut updates_add = Vec::<ProcessorPairingUpdateFor<T>>::new();
-        let caller: T::AccountId = alice_account_id().into();
-        whitelist_account!(caller);
-        for i in 0..x {
-            updates_add.push(generate_pairing_update_add::<T>(i));
-        }
-        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), updates_add.clone().try_into().unwrap())?;
-        let updates_remove = updates_add.into_iter().map(|update| ProcessorPairingUpdateFor::<T> {
-            operation: ListUpdateOperation::Remove,
-            item: ProcessorPairingFor::<T>::new(update.item.account),
-        }).collect::<Vec<_>>();
-    }: update_processor_pairings(RawOrigin::Signed(caller), updates_remove.try_into().unwrap())
-
     pair_with_manager {
         let manager_account = generate_account(0).into();
         let processor_account = generate_account(1).into();
@@ -88,7 +74,15 @@ benchmarks! {
         whitelist_account!(caller);
         let update = generate_pairing_update_add::<T>(0);
         Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()].try_into().unwrap())?;
-    }: _(RawOrigin::Signed(caller.clone()))
+    }: _(RawOrigin::Signed(caller))
+
+    advertise_for {
+        let caller: T::AccountId = alice_account_id().into();
+        whitelist_account!(caller);
+        let update = generate_pairing_update_add::<T>(0);
+        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()].try_into().unwrap())?;
+        let ad = T::BenchmarkHelper::advertisement();
+    }: _(RawOrigin::Signed(caller), update.item.account.into().into(), ad)
 
     impl_benchmark_test_suite!(Pallet, mock::ExtBuilder::default().build(), mock::Test);
 }

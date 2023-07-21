@@ -28,37 +28,11 @@ impl<T: Config> AdvertisementHandler<T> for () {
     }
 }
 
+/// Weight functions needed for pallet_acurast_processor_manager.
 pub trait WeightInfo {
-    fn create_manager() -> Weight;
-    fn update_processor_pairings() -> Weight;
+    fn update_processor_pairings(x: u32) -> Weight;
     fn pair_with_manager() -> Weight;
     fn recover_funds() -> Weight;
     fn heartbeat() -> Weight;
     fn advertise_for() -> Weight;
-}
-
-impl WeightInfo for () {
-    fn create_manager() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
-
-    fn update_processor_pairings() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
-
-    fn pair_with_manager() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
-
-    fn recover_funds() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
-
-    fn heartbeat() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
-
-    fn advertise_for() -> Weight {
-        Weight::from_parts(10_000, 0)
-    }
 }

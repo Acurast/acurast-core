@@ -144,7 +144,7 @@ impl Config for Test {
     type UnixTime = pallet_timestamp::Pallet<Test>;
     type Advertisement = ();
     type AdvertisementHandler = ();
-    type WeightInfo = ();
+    type WeightInfo = weights::WeightInfo<Self>;
 
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
@@ -154,6 +154,10 @@ impl Config for Test {
 impl crate::BenchmarkHelper<Test> for () {
     fn dummy_proof() -> <Test as Config>::Proof {
         MultiSignature::Sr25519(sp_core::sr25519::Signature::unchecked_from([0u8; 64]))
+    }
+
+    fn advertisement() -> <Test as Config>::Advertisement {
+        ()
     }
 }
 

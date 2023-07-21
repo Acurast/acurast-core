@@ -25,7 +25,7 @@ pub const LEAF_CERT: [u8; 672] = hex!("3082029c30820241a003020102020101300c06082
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
 pub trait BenchmarkHelper<T: Config> {
-    fn registration_extra() -> T::RegistrationExtra;
+    fn registration_extra(instant_match: bool) -> T::RegistrationExtra;
     fn funded_account(index: u32) -> T::AccountId;
 }
 
@@ -39,7 +39,7 @@ pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrati
         allowed_sources: None,
         allow_only_verified_sources: false,
         schedule: Schedule {
-            duration: 5000,
+            duration: 500,
             start_time: 1_671_800_400_000, // 23.12.2022 13:00
             end_time: 1_671_804_000_000,   // 23.12.2022 14:00 (one hour later)
             interval: 1_800_000,           // 30min
@@ -77,11 +77,16 @@ pub fn attestation_chain() -> AttestationChain {
     }
 }
 
-fn register_job<T: Config>(submit: bool) -> (T::AccountId, JobRegistrationFor<T>) {
+fn register_job<T: Config>(
+    submit: bool,
+    instant_match: bool,
+) -> (T::AccountId, JobRegistrationFor<T>) {
     let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0);
     whitelist_account!(caller);
 
-    let job = job_registration::<T>(<T as Config>::BenchmarkHelper::registration_extra());
+    let job = job_registration::<T>(<T as Config>::BenchmarkHelper::registration_extra(
+        instant_match,
+    ));
 
     if submit {
         let register_call =
@@ -100,7 +105,7 @@ benchmarks! {
     }
 
     register {
-        let (caller, job) = register_job::<T>(false);
+        let (caller, job) = register_job::<T>(false, true);
     }: _(RawOrigin::Signed(caller.clone()), job.clone())
     verify {
         assert_last_event::<T>(Event::<T>::JobRegistrationStored(
@@ -109,7 +114,7 @@ benchmarks! {
     }
 
     deregister {
-        let (caller, job) = register_job::<T>(true);
+        let (caller, job) = register_job::<T>(true, false);
         let local_job_id = 1;
     }: _(RawOrigin::Signed(caller.clone()), local_job_id.clone())
     verify {
@@ -120,7 +125,7 @@ benchmarks! {
 
     update_allowed_sources {
         let x in 1 .. T::MaxAllowedSources::get();
-        let (caller, job) = register_job::<T>(true);
+        let (caller, job) = register_job::<T>(true, false);
         let mut updates: Vec<AllowedSourcesUpdate<T::AccountId>> = vec![];
         for i in 0..x {
             (&mut updates).push(AllowedSourcesUpdate {

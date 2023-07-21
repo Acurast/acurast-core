@@ -59,7 +59,6 @@ pub mod pallet {
     use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
-    use crate::weights::WeightInfo;
     use crate::{JobBudget, RewardManager};
 
     #[pallet::config]
@@ -426,7 +425,7 @@ pub mod pallet {
 
         /// Proposes processors to match with a job. The match fails if it conflicts with the processor's schedule.
         #[pallet::call_index(2)]
-        #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
+        #[pallet::weight(< T as Config >::WeightInfo::propose_matching(matches.len() as u32))]
         pub fn propose_matching(
             origin: OriginFor<T>,
             matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
@@ -667,7 +666,7 @@ pub mod pallet {
         ///
         /// For details see [`Pallet<T>::finalize_jobs_for`].
         #[pallet::call_index(6)]
-        #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs())]
+        #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs(job_ids.len() as u32))]
         pub fn finalize_jobs(
             origin: OriginFor<T>,
             job_ids: BoundedVec<JobIdSequence, T::MaxFinalizeJobs>,
