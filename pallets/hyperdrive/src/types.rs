@@ -22,7 +22,7 @@ pub type StateTransmitterUpdateFor<T> = StateTransmitterUpdate<
 >;
 
 /// Defines the transmitter activity window.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
 pub struct ActivityWindow<BlockNumber> {
     /// From this block on, the transmitter is permitted to submit Merkle roots.
     pub start_block: BlockNumber,

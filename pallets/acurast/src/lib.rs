@@ -40,7 +40,7 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member;
+        type RegistrationExtra: Parameter + Member + MaxEncodedLen;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u32> + ParameterBound;
@@ -192,7 +192,6 @@ pub mod pallet {
     pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 

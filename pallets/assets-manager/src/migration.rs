@@ -23,6 +23,7 @@ pub fn migrate<T: Config<I>, I: 'static>() -> Weight {
 
 fn migrate_to_v2<T: Config<I>, I: 'static>() -> Weight {
     let mut count = 0u32;
+    // we know they are reasonably few items and we can clear them within a single migration
     count += AssetIndex::<T, I>::clear(100, None).loops;
     count += ReverseAssetIndex::<T, I>::clear(100, None).loops;
 

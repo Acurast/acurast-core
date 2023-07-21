@@ -23,7 +23,6 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     #[pallet::config]

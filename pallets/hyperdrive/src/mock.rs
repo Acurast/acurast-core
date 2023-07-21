@@ -98,6 +98,7 @@ impl crate::Config for Test {
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
     type MaxSlots = CU32<64>;
+    type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
