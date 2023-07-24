@@ -52,7 +52,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config<I>, I: 'static = ()> {
-        /// A vester started vesting. [amount_burnt]
+        /// Burnt penultimate epoch's accumulated balance from treasury. [amount_burnt]
         BurntFromTreasuryAtEndOfEpoch(T::Balance),
     }
 
