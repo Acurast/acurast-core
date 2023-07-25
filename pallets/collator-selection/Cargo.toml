@@ -26,6 +26,8 @@ frame-system = { default-features = false, git = "https://github.com/paritytech/
 pallet-authorship = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-session = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 
+nimbus-primitives = { git = "https://github.com/acurast/nimbus", default-features = false, branch = "polkadot-v0.9.43" }
+
 frame-benchmarking = { default-features = false, optional = true, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 
 [dev-dependencies]
@@ -58,6 +60,7 @@ std = [
 	"frame-benchmarking/std",
 	"pallet-authorship/std",
 	"pallet-session/std",
+	"nimbus-primitives/std"
 ]
 
 try-runtime = [ "frame-support/try-runtime" ]
