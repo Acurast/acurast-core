@@ -8,3 +8,4 @@ members = [
 	"pallets/marketplace/reputation",
 	"p256-crypto",
 ]
+exclude = ["pallets/proxy"]
