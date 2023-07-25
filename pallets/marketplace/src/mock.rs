@@ -162,6 +162,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 impl parachain_info::Config for Test {}
@@ -198,10 +203,7 @@ impl pallet_acurast::BenchmarkHelper<Test> for TestBenchmarkHelper {
 
     fn funded_account(index: u32) -> AccountId {
         let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
-            &caller,
-            u32::MAX.into(),
-        );
+        <Balances as fungible::Mutate<_>>::set_balance(&caller, u32::MAX.into());
 
         caller
     }
@@ -342,7 +344,7 @@ impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
 
     fn funded_account(index: u32, amount: Balance) -> AccountId {
         let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(&caller, amount);
+        <Balances as fungible::Mutate<_>>::set_balance(&caller, amount);
 
         caller
     }

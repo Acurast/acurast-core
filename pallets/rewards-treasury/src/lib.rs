@@ -11,6 +11,8 @@ mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use frame_support::traits::fungible::Inspect;
+    use frame_support::traits::tokens::{Fortitude, Precision, Preservation};
     use frame_support::{
         log,
         pallet_prelude::*,
@@ -69,14 +71,20 @@ pub mod pallet {
             if Self::latest_burn() + T::Epoch::get() <= current_block {
                 (match <PenultimateBalance<T, I>>::try_mutate(
                     |penultimate_balance| -> Result<T::Balance, DispatchError> {
-                        let actual_burnt = pallet_balances::Pallet::<T, I>::burn_from(
+                        let actual_burnt = <pallet_balances::Pallet<T, I> as Mutate<_>>::burn_from(
                             &T::Treasury::get(),
                             penultimate_balance.to_owned(),
+                            Precision::BestEffort,
+                            Fortitude::Polite,
                         )?;
                         <LatestBurn<T, I>>::put(current_block);
 
                         *penultimate_balance =
-                            pallet_balances::Pallet::<T, I>::free_balance(T::Treasury::get());
+                            <pallet_balances::Pallet<T, I> as Inspect<_>>::reducible_balance(
+                                &T::Treasury::get(),
+                                Preservation::Preserve,
+                                Fortitude::Polite,
+                            );
 
                         Ok(actual_burnt)
                     },

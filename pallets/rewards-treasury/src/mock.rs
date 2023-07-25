@@ -1,4 +1,5 @@
 use frame_support::parameter_types;
+use frame_support::traits::ConstU32;
 use frame_support::{
     sp_runtime::{
         generic,
@@ -67,7 +68,7 @@ impl frame_system::Config for Test {
     type BlockLength = ();
     type SS58Prefix = ();
     type OnSetCode = ();
-    type MaxConsumers = frame_support::traits::ConstU32<16>;
+    type MaxConsumers = ConstU32<16>;
 }
 
 parameter_types! {
@@ -88,6 +89,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 parameter_types! {

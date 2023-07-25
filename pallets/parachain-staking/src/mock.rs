@@ -12,7 +12,7 @@ use frame_support::{
     traits::{Everything, GenesisBuild, LockIdentifier, OnFinalize, OnInitialize},
     weights::{constants::RocksDbWeight, Weight},
 };
-use sp_core::H256;
+use sp_core::{ConstU32, H256};
 use sp_io;
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
@@ -86,6 +86,11 @@ impl pallet_balances::Config for Test {
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 impl block_author::Config for Test {}
 const GENESIS_BLOCKS_PER_ROUND: u32 = 5;
