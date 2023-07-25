@@ -1,3 +1,4 @@
+use frame_support::traits::tokens::{Fortitude, Precision, Preservation};
 use frame_support::{
     sp_runtime::{
         generic,
@@ -101,6 +102,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 impl pallet_uniques::Config for Test {
@@ -197,9 +203,18 @@ impl ProcessorAssetRecovery<Test> for AcurastProcessorAssetRecovery {
         processor: &<Test as frame_system::Config>::AccountId,
         destination_account: &<Test as frame_system::Config>::AccountId,
     ) -> frame_support::pallet_prelude::DispatchResult {
-        let usable_balance = Balances::reducible_balance(processor, true);
+        let usable_balance = <Balances as Inspect<_>>::reducible_balance(
+            processor,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
         if usable_balance > 0 {
-            let burned = Balances::burn_from(processor, usable_balance)?;
+            let burned = <Balances as Mutate<_>>::burn_from(
+                processor,
+                usable_balance,
+                Precision::BestEffort,
+                Fortitude::Polite,
+            )?;
             Balances::mint_into(destination_account, burned)?;
         }
         Ok(())

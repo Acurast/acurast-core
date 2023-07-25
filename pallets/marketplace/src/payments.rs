@@ -1,11 +1,13 @@
 use core::marker::PhantomData;
 
+use frame_support::traits::tokens::Preservation;
 use frame_support::{
     pallet_prelude::Member,
     sp_runtime::{
         traits::{AccountIdConversion, Get},
         DispatchError, Percent,
     },
+    traits::tokens::fungible,
     PalletId,
 };
 use sp_runtime::SaturatedConversion;
@@ -91,10 +93,8 @@ impl<T, AssetSplit, Currency, Budget> RewardManager<T>
 where
     T: Config + frame_system::Config,
     AssetSplit: FeeManager,
-    Currency: frame_support::traits::Currency<T::AccountId, Balance = T::Balance>
-        + frame_support::traits::tokens::fungible::Mutate<T::AccountId>,
-    <Currency as frame_support::traits::tokens::fungible::Inspect<T::AccountId>>::Balance:
-        Member + From<T::Balance>,
+    Currency: fungible::Mutate<T::AccountId>,
+    <Currency as fungible::Inspect<T::AccountId>>::Balance: Member + From<T::Balance>,
     Budget: JobBudget<T>,
 {
     fn lock_reward(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), DispatchError> {
@@ -104,13 +104,17 @@ where
                 Currency::transfer(
                     who,
                     &pallet_account,
-                    reward,
-                    frame_support::traits::ExistenceRequirement::KeepAlive,
+                    reward.saturated_into(),
+                    Preservation::Preserve,
                 )?;
             }
             MultiOrigin::Tezos(_who) => {
                 // The availability of these funds was ensured on Tezos side, so we just mint the amount here
-                Currency::mint_into(&pallet_account, reward.saturated_into::<<Currency as frame_support::traits::tokens::fungible::Inspect<T::AccountId>>::Balance>())?;
+                Currency::mint_into(
+                    &pallet_account,
+                    reward
+                        .saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+                )?;
             }
         };
 
@@ -143,14 +147,15 @@ where
         Currency::transfer(
             &pallet_account,
             &fee_pallet_account,
-            fee,
-            frame_support::traits::ExistenceRequirement::KeepAlive,
+            fee.saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+            Preservation::Preserve,
         )?;
         Currency::transfer(
             &pallet_account,
             target,
-            reward_after_fee,
-            frame_support::traits::ExistenceRequirement::KeepAlive,
+            reward_after_fee
+                .saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+            Preservation::Preserve,
         )?;
 
         Ok(())
@@ -185,14 +190,15 @@ where
         Currency::transfer(
             &pallet_account,
             &fee_pallet_account,
-            fee,
-            frame_support::traits::ExistenceRequirement::KeepAlive,
+            fee.saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+            Preservation::Preserve,
         )?;
         Currency::transfer(
             &pallet_account,
             matcher,
-            reward_after_fee,
-            frame_support::traits::ExistenceRequirement::KeepAlive,
+            reward_after_fee
+                .saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+            Preservation::Preserve,
         )?;
 
         Ok(())

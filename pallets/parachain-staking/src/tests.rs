@@ -7743,33 +7743,34 @@ fn test_hotfix_remove_delegation_requests_exited_candidates_errors_when_candidat
         });
 }
 
-#[test]
-fn locking_zero_amount_is_ignored() {
-    use frame_support::traits::{LockableCurrency, WithdrawReasons};
-
-    // this test demonstrates the behavior of pallet Balance's `LockableCurrency` implementation of
-    // `set_locks()` when an amount of 0 is provided: it is a no-op
-
-    ExtBuilder::default()
-        .with_balances(vec![(1, 100)])
-        .build()
-        .execute_with(|| {
-            assert_eq!(crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID), None);
-
-            Balances::set_lock(DELEGATOR_LOCK_ID, &1, 1, WithdrawReasons::all());
-            assert_eq!(
-                crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID),
-                Some(1)
-            );
-
-            Balances::set_lock(DELEGATOR_LOCK_ID, &1, 0, WithdrawReasons::all());
-            // Note that we tried to call `set_lock(0)` and it ignored it, we still have our lock
-            assert_eq!(
-                crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID),
-                Some(1)
-            );
-        });
-}
+// TODO this is no longer ignored. reactivate when we migrated parachain_staking to use only fungible traits (no Currency, no direct extrinsic calls)
+// #[test]
+// fn locking_zero_amount_is_ignored() {
+//     use frame_support::traits::{LockableCurrency, WithdrawReasons};
+//
+//     // this test demonstrates the behavior of pallet Balance's `LockableCurrency` implementation of
+//     // `set_locks()` when an amount of 0 is provided: it is a no-op
+//
+//     ExtBuilder::default()
+//         .with_balances(vec![(1, 100)])
+//         .build()
+//         .execute_with(|| {
+//             assert_eq!(crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID), None);
+//
+//             Balances::set_lock(DELEGATOR_LOCK_ID, &1, 1, WithdrawReasons::all());
+//             assert_eq!(
+//                 crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID),
+//                 Some(1)
+//             );
+//
+//             Balances::set_lock(DELEGATOR_LOCK_ID, &1, 0, WithdrawReasons::all());
+//             // Note that we tried to call `set_lock(0)` and it ignored it, we still have our lock
+//             assert_eq!(
+//                 crate::mock::query_lock_amount(1, DELEGATOR_LOCK_ID),
+//                 Some(1)
+//             );
+//         });
+// }
 
 #[test]
 fn revoke_last_removes_lock() {

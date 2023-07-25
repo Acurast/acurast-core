@@ -84,6 +84,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = ();
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 pub struct Author4;

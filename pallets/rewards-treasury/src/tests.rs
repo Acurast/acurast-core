@@ -44,7 +44,10 @@ fn test_single_vest_no_rewards() {
         add_blocks(1);
         assert_eq!(System::block_number(), 5);
 
-        assert_eq!(RewardsTreasury::penultimate_balance(), 4 * UNIT);
+        assert_eq!(
+            RewardsTreasury::penultimate_balance(),
+            4 * UNIT - ExistentialDeposit::get()
+        );
 
         assert_ok!(Balances::transfer(
             RuntimeOrigin::signed(alice_account_id()),
@@ -63,25 +66,24 @@ fn test_single_vest_no_rewards() {
         assert_eq!(
             events(),
             [
+                RuntimeEvent::Balances(pallet_balances::Event::Burned {
+                    who: Treasury::get(),
+                    amount: 0 * UNIT
+                }),
                 RuntimeEvent::RewardsTreasury(crate::Event::BurntFromTreasuryAtEndOfEpoch(0)),
                 RuntimeEvent::Balances(pallet_balances::Event::Transfer {
                     from: alice_account_id(),
                     to: Treasury::get(),
                     amount: 3 * UNIT
                 }),
-                // A burn leads to a withdraw first
-                RuntimeEvent::Balances(pallet_balances::Event::Withdraw {
+                RuntimeEvent::Balances(pallet_balances::Event::Burned {
                     who: Treasury::get(),
-                    amount: 4 * UNIT
+                    amount: 4 * UNIT - ExistentialDeposit::get()
                 }),
                 RuntimeEvent::RewardsTreasury(crate::Event::BurntFromTreasuryAtEndOfEpoch(
-                    4 * UNIT
+                    4 * UNIT - ExistentialDeposit::get()
                 )),
-                // A burn leads to a withdraw first and kills the treasury account since no more transfers to treasure for two consecutives epochs
-                RuntimeEvent::System(frame_system::Event::KilledAccount {
-                    account: Treasury::get()
-                }),
-                RuntimeEvent::Balances(pallet_balances::Event::Withdraw {
+                RuntimeEvent::Balances(pallet_balances::Event::Burned {
                     who: Treasury::get(),
                     amount: 3 * UNIT
                 }),

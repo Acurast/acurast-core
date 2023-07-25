@@ -206,6 +206,11 @@ pub mod acurast_runtime {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl frame_system::Config for Runtime {
@@ -553,6 +558,11 @@ pub mod proxy_runtime {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl super::mock_msg_queue::Config for Runtime {
@@ -788,6 +798,11 @@ pub mod relay_chain {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl shared::Config for Runtime {}

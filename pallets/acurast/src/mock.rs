@@ -1,3 +1,4 @@
+use frame_support::traits::ConstU32;
 use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;
@@ -146,6 +147,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 impl parachain_info::Config for Test {}
@@ -179,10 +185,7 @@ where
 
     fn funded_account(index: u32) -> T::AccountId {
         let caller: T::AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
-            &caller.clone().into(),
-            u32::MAX.into(),
-        );
+        <Balances as fungible::Mutate<_>>::set_balance(&caller.clone().into(), u32::MAX.into());
 
         caller
     }

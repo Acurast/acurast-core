@@ -54,12 +54,24 @@ decl_test_parachain! {
     }
 }
 
-decl_test_relay_chain! {
+decl_test_relay_chains! {
     pub struct Relay {
-        Runtime = relay_chain::Runtime,
-        XcmConfig = relay_chain::XcmConfig,
-        new_ext = relay_ext(),
-    }
+        genesis = polkadot::genesis(),
+        on_init = (),
+        runtime = {
+            Runtime: relay_chain::Runtime,
+            RuntimeOrigin: relay_chain::RuntimeOrigin,
+            RuntimeCall: relay_chain::RuntimeCall,
+            RuntimeEvent: relay_chain::RuntimeEvent,
+            XcmConfig: relay_chain::xcm_config::XcmConfig,
+            SovereignAccountOf: relay_chain::xcm_config::SovereignAccountOf,
+            System: relay_chain::System,
+            Balances: relay_chain::Balances,
+        },
+        pallets_extra = {
+            XcmPallet: relay_chain::XcmPallet,
+        }
+    },
 }
 
 decl_test_network! {
