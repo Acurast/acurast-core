@@ -14,9 +14,9 @@ pub mod p256 {
     use sp_runtime_interface::pass_by::PassByInner;
 
     #[cfg(feature = "std")]
-    use sp_core::crypto::Ss58Codec;
+    use sp_core::crypto::{Ss58Codec, DeriveError};
     use sp_core::crypto::{
-        ByteArray, CryptoType, CryptoTypeId, CryptoTypePublicPair, Derive, Public as TraitPublic,
+        ByteArray, CryptoType, CryptoTypeId, Derive, Public as TraitPublic,
         UncheckedFrom,
     };
 
@@ -83,23 +83,7 @@ pub mod p256 {
         }
     }
 
-    impl TraitPublic for Public {
-        fn to_public_crypto_pair(&self) -> CryptoTypePublicPair {
-            CryptoTypePublicPair(CRYPTO_ID, self.to_raw_vec())
-        }
-    }
-
-    impl From<Public> for CryptoTypePublicPair {
-        fn from(key: Public) -> Self {
-            (&key).into()
-        }
-    }
-
-    impl From<&Public> for CryptoTypePublicPair {
-        fn from(key: &Public) -> Self {
-            CryptoTypePublicPair(CRYPTO_ID, key.to_raw_vec())
-        }
-    }
+    impl TraitPublic for Public {}
 
     impl ByteArray for Public {
         const LEN: usize = 33;
@@ -340,13 +324,6 @@ pub mod p256 {
         type Pair = Pair;
     }
 
-    /// An error when deriving a key.
-    #[cfg(feature = "std")]
-    pub enum DeriveError {
-        /// A soft key was found in the path (and is unsupported).
-        SoftKeyInPath,
-    }
-
     /// Derive a single hard junction.
     #[cfg(feature = "std")]
     fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; SEED_LENGTH]) -> Seed {
@@ -370,7 +347,6 @@ pub mod p256 {
         type Public = Public;
         type Seed = Seed;
         type Signature = Signature;
-        type DeriveError = DeriveError;
 
         // Using default fn generate()
 
@@ -453,24 +429,6 @@ pub mod p256 {
             pubkey: &Self::Public,
         ) -> bool {
             sig.verify(message.as_ref(), pubkey)
-        }
-
-        /// Verify a signature on a message. Returns true if the signature is good.
-        ///
-        /// This doesn't use the type system to ensure that `sig` and `pubkey` are the correct
-        /// size. Use it only if you're coming from byte buffers and need the speed.
-        fn verify_weak<P: AsRef<[u8]>, M: AsRef<[u8]>>(sig: &[u8], message: M, pubkey: P) -> bool {
-            // TODO: weak version, for now use normal verify
-            let signature = match Self::Signature::try_from(sig) {
-                Err(_) => return false,
-                Ok(sign) => sign,
-            };
-            let public = match Self::Public::try_from(pubkey.as_ref()) {
-                Err(_) => return false,
-                Ok(pk) => pk,
-            };
-
-            Self::verify(&signature, message, &public)
         }
 
         /// Return a vec filled with raw data.

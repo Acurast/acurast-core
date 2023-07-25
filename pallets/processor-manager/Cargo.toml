@@ -16,28 +16,28 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 acurast-common = { path = "../acurast/common", default-features = false }
 
 # Benchmarks
-frame-benchmarking = { git = "https://github.com/paritytech/substrate", optional = true, default-features = false, branch = "polkadot-v0.9.41" }
-sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-pallet-uniques = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.41" }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate", optional = true, default-features = false, branch = "polkadot-v0.9.43" }
+sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
+pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
+pallet-uniques = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3", optional = true }
 
 # Substrate
-frame-support = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
-frame-system = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+frame-support = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
+frame-system = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 scale-info = { version = "2.2.0", default-features = false, features = [ "derive" ] }
-sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.41" }
+sp-std = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 
 [dev-dependencies]
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
-pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
-pallet-uniques = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.41" }
+sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-assets = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-uniques = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3" }
 
 [features]

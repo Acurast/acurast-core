@@ -10,17 +10,12 @@ pub mod p256 {
 
     mod app {
         use sp_application_crypto::app_crypto;
-        use sp_runtime::BoundToRuntimeAppPublic;
 
         use crate::core::p256;
 
         use super::P256;
 
         app_crypto!(p256, P256);
-
-        impl BoundToRuntimeAppPublic for Public {
-            type Public = Self;
-        }
     }
 
     pub use app::{Public as AppPublic, Signature as AppSignature};
