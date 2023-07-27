@@ -383,6 +383,9 @@ pub mod acurast_runtime {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }
@@ -591,6 +594,9 @@ pub mod proxy_runtime {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }
@@ -839,6 +845,9 @@ pub mod relay_chain {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }
