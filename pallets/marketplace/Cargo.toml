@@ -78,6 +78,7 @@ runtime-benchmarks = [
 	"pallet-acurast/runtime-benchmarks",
 	"pallet-acurast-assets-manager/runtime-benchmarks",
 	"pallet-acurast-processor-manager/runtime-benchmarks",
+	"xcm-builder/runtime-benchmarks",
 ]
 
 std = [

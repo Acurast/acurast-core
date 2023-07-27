@@ -13,12 +13,11 @@ pub mod p256 {
     use sp_runtime::traits::{IdentifyAccount, Lazy, Verify};
     use sp_runtime_interface::pass_by::PassByInner;
 
-    #[cfg(feature = "std")]
-    use sp_core::crypto::{Ss58Codec, DeriveError};
     use sp_core::crypto::{
-        ByteArray, CryptoType, CryptoTypeId, Derive, Public as TraitPublic,
-        UncheckedFrom,
+        ByteArray, CryptoType, CryptoTypeId, Derive, Public as TraitPublic, UncheckedFrom,
     };
+    #[cfg(feature = "std")]
+    use sp_core::crypto::{DeriveError, Ss58Codec};
 
     #[cfg(feature = "std")]
     use sp_core::{

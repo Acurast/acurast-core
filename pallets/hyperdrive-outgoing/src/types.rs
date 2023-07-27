@@ -234,7 +234,7 @@ pub struct TargetChainProofLeaf {
 
 /// Merkle Mountain Range operation error.
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq)]
+#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq, TypeInfo)]
 pub enum MMRError {
     /// Error while pushing new node.
     #[cfg_attr(feature = "std", error("Error pushing new node"))]
