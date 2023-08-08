@@ -51,7 +51,7 @@ pub enum StateTransmitterUpdate<AccountId, BlockNumber> {
 /// leaf hash.
 pub type StateProof<Hash> = BoundedVec<StateProofNode<Hash>, ConstU32<256>>;
 
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 pub enum StateProofNode<Hash> {
     Left(Hash),
     Right(Hash),

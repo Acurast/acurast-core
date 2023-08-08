@@ -15,7 +15,9 @@ mod tests;
 mod benchmarking;
 mod traits;
 
-pub mod tezos;
+pub mod instances;
+pub mod chain;
+
 mod types;
 pub mod weights;
 
@@ -38,6 +40,7 @@ pub mod pallet {
     use sp_runtime::traits::Hash;
     use sp_std::prelude::*;
     use sp_std::vec;
+    use sp_core::H256;
 
     use pallet_acurast_marketplace::types::RegistrationExtra;
 
@@ -69,6 +72,7 @@ pub mod pallet {
             + sp_std::hash::Hash
             + AsRef<[u8]>
             + AsMut<[u8]>
+            + FromBytes
             + MaxEncodedLen;
         /// The block number type used by the target runtime.
         type TargetChainBlockNumber: Parameter
@@ -97,6 +101,13 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
+        type Proof: Parameter + Member + TypeInfo + Proof<
+            Self::Balance,
+            Self::AccountId,
+            Self::MaxAllowedSources,
+            Self::MaxSlots,
+            Self::RegistrationExtra,
+        >;
         type RegistrationExtra: From<
             RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
         >;
@@ -111,18 +122,13 @@ pub mod pallet {
         type MaxTransmittersPerSnapshot: Get<u32> + ParameterBound;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
-        type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
+        type TargetChainHashing: Hash<Output = H256> + TypeInfo;
         /// Transmission rate in blocks; `block % transmission_rate == 0` must hold.
         type TransmissionRate: Get<Self::TargetChainBlockNumber>;
         /// The quorum size of transmitters that need to agree on a state merkle root before accepting in proofs.
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<
-            Self::AccountId,
-            Self::MaxAllowedSources,
-            Self::RegistrationExtra,
-        >;
 
         type ActionExecutor: ActionExecutor<
             Self::AccountId,
@@ -222,6 +228,9 @@ pub mod pallet {
         CalculationOverflow,
         UnexpectedSnapshot,
         ProofInvalid,
+        CouldNotDecodeMessageId,
+        InvalidMessageId,
+        FailedToGetMessage
     }
 
     #[pallet::call]
@@ -358,28 +367,32 @@ pub mod pallet {
         pub fn submit_message(
             origin: OriginFor<T>,
             // The block number at which the state proof was generated.
-            block: T::TargetChainBlockNumber,
+            snapshot: T::TargetChainBlockNumber,
             // The state proof.
-            proof: StateProof<T::TargetChainHash>,
-            key: StateKey,
-            value: StateValue,
+            proof: T::Proof,
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
-            let key_bytes = &key.to_vec();
-            let message_bytes = &value.to_vec();
-            let leaf_hash = Self::leaf_hash(<CurrentTargetChainOwner<T, I>>::get(), key, value);
-            let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
+            let derived_root = proof.calculate_root::<T,I>();
 
-            if !Self::validate_state_merkle_root(block, derived_root) {
+            if !Self::validate_state_merkle_root(snapshot, T::TargetChainHash::from_bytes(&derived_root.as_slice())) {
                 return Err(Error::<T, I>::ProofInvalid)?;
             }
 
+            let _message_id = Self::process_message_id(&proof)?;
+
             // don't fail extrinsic from here onwards
-            if let Err(e) = Self::process_message(key_bytes, message_bytes) {
-                Self::deposit_event(Event::MessageProcessed(e));
-            } else {
-                Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ActionSuccess));
+            match proof.message() {
+                Ok(action) => {
+                    if let Err(e) = Self::process_action(action) {
+                        Self::deposit_event(Event::MessageProcessed(e));
+                    } else {
+                        Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ActionSuccess));
+                    }
+                },
+                Err(_) => {
+                    Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ParsingValueFailed))
+                }
             }
 
             Ok(().into())
@@ -400,19 +413,6 @@ pub mod pallet {
     }
 
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
-        /// Hashes `(owner, key, value)` to derive the leaf hash for the merkle proof.
-        pub fn leaf_hash(
-            owner: StateOwner,
-            key: StateKey,
-            value: StateValue,
-        ) -> T::TargetChainHash {
-            let mut combined = vec![0_u8; owner.len() + key.len() + value.len()];
-            combined[..owner.len()].copy_from_slice(&owner.as_ref());
-            combined[owner.len()..owner.len() + key.len()].copy_from_slice(&key.as_ref());
-            combined[owner.len() + key.len()..].copy_from_slice(&value.as_ref());
-            T::TargetChainHashing::hash(&combined)
-        }
-
         /// Validates a state merkle root with respect to roots submitted by a quorum of transmitters.
         pub fn validate_state_merkle_root(
             block: T::TargetChainBlockNumber,
@@ -433,29 +433,23 @@ pub mod pallet {
         ///
         /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
         /// See [`Self::process_action()`].
-        fn process_message(
-            key_bytes: &Vec<u8>,
-            payload_bytes: &Vec<u8>,
-        ) -> Result<(), ProcessMessageResult> {
-            let message_id = T::MessageParser::parse_key(key_bytes)
-                .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
+        fn process_message_id(proof: &T::Proof) -> Result<MessageIdentifier, Error::<T, I>> {
+            let message_id = proof.message_id().map_err(|_| Error::<T, I>::InvalidMessageId)?;
 
             ensure!(
                 Self::message_seq_id() + 1 == message_id.into(),
-                ProcessMessageResult::InvalidSequenceId
+                Error::<T, I>::CouldNotDecodeMessageId
             );
             <MessageSequenceId<T, I>>::set(message_id);
 
-            Self::process_action(payload_bytes)
+            Ok(message_id)
         }
 
         #[transactional]
-        fn process_action(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
-            let action = T::MessageParser::parse_value(message_bytes)
-                .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
+        fn process_action(action: ParsedAction<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>) -> Result<(), ProcessMessageResult> {
             let raw_action: RawAction = (&action).into();
             T::ActionExecutor::execute(action)
-                .map_err(|_| ProcessMessageResult::ActionFailed(raw_action.clone()))?;
+                .map_err(|_| ProcessMessageResult::ActionFailed(raw_action))?;
 
             Ok(())
         }

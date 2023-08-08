@@ -23,14 +23,15 @@ use sp_std::prelude::*;
 
 use pallet_acurast_marketplace::RegistrationExtra;
 
-use crate::tezos::TezosParser;
+use crate::chain::tezos::TezosParser;
 use crate::types::RawAction;
-use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
+use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode, FromBytes};
+use crate::instances::TezosInstance;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
-#[derive(Display, Debug, From, Into)]
+#[derive(Display, Debug, From, Into, Clone, Eq, PartialEq)]
 pub struct AcurastAccountId(AccountId32);
 impl TryFrom<Vec<u8>> for AcurastAccountId {
     type Error = ();
@@ -55,7 +56,7 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system,
-        TezosHyperdrive: crate,
+        TezosHyperdrive: crate::<Instance1>,
     }
 );
 
@@ -88,7 +89,13 @@ impl system::Config for Test {
 
 pub type MaxAllowedSources = CU32<4>;
 
-impl crate::Config for Test {
+impl FromBytes for H256 {
+    fn from_bytes(bytes: &[u8]) -> Self {
+        H256::from_slice(bytes)
+    }
+}
+
+impl crate::Config<TezosInstance> for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AcurastAccountId;
     type TargetChainOwner = TargetChainStateOwner;
@@ -103,14 +110,8 @@ impl crate::Config for Test {
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
-    type MessageParser = TezosParser<
-        Self::Balance,
-        AcurastAccountId,
-        <Self as frame_system::Config>::AccountId,
-        Self::MaxSlots,
-        Self::RegistrationExtra,
-    >;
     type ActionExecutor = ();
+    type Proof = crate::chain::tezos::TezosProof<AcurastAccountId, <Self as frame_system::Config>::AccountId>;
     type WeightInfo = weights::WeightInfo<Test>;
 }
 
