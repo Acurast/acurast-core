@@ -1,6 +1,7 @@
-use rlp::{decode_list, RlpStream};
-use sp_runtime::traits::Keccak256;
+use crate::MessageIdentifier;
+use rlp::{decode_list, encode, RlpStream};
 use sp_core::Hasher;
+use sp_runtime::traits::Keccak256;
 use sp_std::vec::Vec;
 
 // Reference implementation taken from: https://github.com/a16z/helios/blob/cb50725acc8c6c28e55cb91cec9bb415d2c97ea5/execution/src/proof.rs
@@ -152,10 +153,40 @@ fn get_nibble(path: &[u8], offset: usize) -> u8 {
     }
 }
 
+/// Obtain the storage path for the proof
+pub fn storage_path(storage_index: &u8, message_id: &MessageIdentifier) -> [u8; 32] {
+    let mut key_bytes: [u8; 32] = [0u8; 32];
+    let message_id_encoded = encode(message_id);
+    key_bytes[32 - message_id_encoded.as_ref().len()..]
+        .copy_from_slice(message_id_encoded.as_ref());
+
+    let mut storage_index_bytes: [u8; 32] = [0u8; 32];
+    storage_index_bytes[31] = encode(storage_index)[0];
+
+    let combined = [key_bytes, storage_index_bytes].concat();
+
+    Keccak256::hash(&Keccak256::hash(combined.as_slice()).0).0
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{shared_prefix_length, verify_proof};
+    use super::{shared_prefix_length, storage_path, verify_proof};
     use hex_literal::hex;
+
+    #[test]
+    fn test_calculate_proof_path() {
+        let path = storage_path(&6, &1);
+        assert_eq!(
+            path.as_slice(),
+            hex!("80497882cf9008f7f796a89e5514a7b55bd96eab88ecb66aee4fb0a6fd34811c").as_slice()
+        );
+
+        let path = storage_path(&4, &1);
+        assert_eq!(
+            path.as_slice(),
+            hex!("210afe6ebef982fa193bb4e17f9f236cdf09af7788627b5d54d9e3e4b100021b").as_slice()
+        );
+    }
 
     #[test]
     fn test_shared_prefix_length() {
@@ -188,22 +219,42 @@ mod tests {
             &hex!("f87180a09561a997c264962c9a8b4aee2582b8ef36a189e3e726d35c2cb826fe8d0fd87d80808080a00010dfaea0e22d6ff3ef10c217e1c415911b21a17c987a26f23c3a01e89b3d0a808080808080a0be6964353ef31b78edaaad0e8bd87b64d62632aef85fdd3ae963955a98628ec2808080"),
             &hex!("f8679e20389db67e3b84adf9d34deca5638f3aaf86a8eaaa6147889bca489e7a7cb846f8440180a0c043666e3ecc8c280ba165497aa3ed83dddba54c00e6e73486c68427925e0778a0e751f0a9365eab5149f29145082d5b033520eb9cb2432527d65e19d6efcbdd0b"),
         ];
-        let path = hex!("14c9bd389db67e3b84adf9d34deca5638f3aaf86a8eaaa6147889bca489e7a7c").to_vec();
+        let path =
+            hex!("14c9bd389db67e3b84adf9d34deca5638f3aaf86a8eaaa6147889bca489e7a7c").to_vec();
         let value = hex!("f8440180a0c043666e3ecc8c280ba165497aa3ed83dddba54c00e6e73486c68427925e0778a0e751f0a9365eab5149f29145082d5b033520eb9cb2432527d65e19d6efcbdd0b").to_vec();
         let root = hex!("297677d612641f8a53454bc8126f4b225b95ddb6ab395d12a2ed740b8ca81cd4");
         assert!(verify_proof(&proof, &root, &path, &value));
     }
 
     #[test]
-    fn test_verify_account_storage_proof() {
+    fn test_verify_storage_proof() {
         let proof: Vec<&[u8]> = vec![
             &hex!("f90111a04c77a8959da29908fa97ea8718d3dd2fc298c353a9da9e09c6131a6a1cc3de8880a0308611a8afda5c8a10b09de3fed011ae43c480313fd2c85d65a92d35359de7fb808080a0f088bca3be2219e02d2ce722d00fdf516680747991013835a1c30d5296b47fec80a0017e20495a1d135325ad9f1f72d720a0b20b85eca8319f10f8c6f461a62e27bf8080a0482e10e64fe37936565267fcb8e0dd9cf74303ab0ce750dd5437bfdd99249528a0b794f22030a6452bd30975ba1b9dee4b798f3b560807323473a401da7f87124980a01f0b30aa51df7ff59d462dcefc151653f1af532a650eb9a5c59672dcf751a5f7a02f948e17d693c90a394a6dff75aa79461702f6361a43daee7f3eaa143825489d80"),
             &hex!("f87180a0367682f42ce7bfb86a31cc6924f7038a750e822f31c0e905b51f5ddf9b8dfb2380808080808080a04d0c15612e60ae90c040ff5eef0f99778a6f3dfdbdfacf954295252cef782a108080808080a02e5c6b3fb31df33a8f3f8e62ddfb6ef3078682b4aa8e1748b4fde838aaac742e80"),
             &hex!("f843a0200afe6ebef982fa193bb4e17f9f236cdf09af7788627b5d54d9e3e4b100021ba1a05f786a9fcb8250a3f27ed9192c66594dec76f3d53a4bf9d27ffc086b5196280d")
         ];
-        let path = hex!("210afe6ebef982fa193bb4e17f9f236cdf09af7788627b5d54d9e3e4b100021b").to_vec();
-        let value = hex!("a05f786a9fcb8250a3f27ed9192c66594dec76f3d53a4bf9d27ffc086b5196280d").to_vec();
+
+        let path =
+            hex!("210afe6ebef982fa193bb4e17f9f236cdf09af7788627b5d54d9e3e4b100021b").to_vec();
+        let value =
+            hex!("a05f786a9fcb8250a3f27ed9192c66594dec76f3d53a4bf9d27ffc086b5196280d").to_vec();
         let root = hex!("c043666e3ecc8c280ba165497aa3ed83dddba54c00e6e73486c68427925e0778");
+        assert!(verify_proof(&proof, &root, &path, &value));
+    }
+
+    #[test]
+    fn test_verify_storage_proof2() {
+        let proof: Vec<&[u8]> = vec![
+            &hex!("f90131a0fe1cec69138a035b27919cba7d03d2f3b5867e183fc5928af3bc0b0f85b562a880a0e759fad30e475a8a7de20efb084aeaad48864ef0c5eb678f0133226a4489d5f8a0da9cbdd2154724e704491b792e162e096df39e9f51363b9b950933a61186820280a0de572a50aef9d550512795e67eaf06acda25ada12d45e5944fba2cb429641f5480a05abb50d3ee32dffe73e3a7f9f354bffe92e4971bf45b527d046208a6818120f980a0ca5985306e251400a05df43a16a3391bca6cf1e5a39acfde6f619c8ea03e3fbc8080a03783bc2fd4d98095264ccacf2098c92a04e317f93a82d87a713d645e0743ef8a80a0bb7fbc81f9cb125fa6229c00a3b6442d31316510f0a9054827bd2317fc95ac9ba0b60d522b76ccaef75c1d5d2faf67a3904ea0aadfe459950661a60e2111e94ca680"),
+            &hex!("f8518080808080808080a0ff1d82682091977c3bd249fd5840706e2c8f487add0b1ae09d430e80d9aeb8f9808080808080a066ba505307e91ddbb884cf21cfffd24941ca533e0b9384a68144039ab7fc57a280"),
+            &hex!("f843a0202ead72d53401d823f4de3290714b95c588de2c574133f57728a2d3d3763d3aa1a0f03ee4236f341d60bc114bdc519db37d120d1d98b8d3f12b9b6a65c2aa99b01d")
+        ];
+
+        let path =
+            hex!("ff2ead72d53401d823f4de3290714b95c588de2c574133f57728a2d3d3763d3a").to_vec();
+        let value =
+            hex!("a0f03ee4236f341d60bc114bdc519db37d120d1d98b8d3f12b9b6a65c2aa99b01d").to_vec();
+        let root = hex!("c53cbaddd072fc5094f0e0986a1baff9ed3d6dbe4133eb4e7764dd9e93f9ec9d");
         assert!(verify_proof(&proof, &root, &path, &value));
     }
 }

@@ -1,74 +1,302 @@
-use core::marker::PhantomData;
-use derive_more::{Display, Error, From};
-use frame_support::{BoundedVec, RuntimeDebug};
-use frame_support::pallet_prelude::{ConstU32};
-use codec::{Decode, Encode};
-use scale_info::TypeInfo;
-use sp_std::vec::Vec;
-use pallet_acurast::ParameterBound;
-use pallet_acurast_marketplace::RegistrationExtra;
-use crate::{MessageParser, MessageIdentifier, ParsedAction, traits};
-use crate::chain::tezos::TezosValidationError;
 use super::util::evm;
+use crate::{traits, MessageIdentifier, ParsedAction, RawAction};
+use alloy_sol_types::{sol, SolType};
+use codec::{Decode, Encode};
+use derive_more::{Display, From};
+use frame_support::pallet_prelude::ConstU32;
+use frame_support::{BoundedVec, RuntimeDebug};
+use pallet_acurast::{
+    AllowedSources, EthereumAddressBytes, JobModule, JobModules, JobRegistration, MultiOrigin,
+    ParameterBound, Schedule, Script,
+};
+use pallet_acurast_marketplace::{
+    JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+};
+use rlp::decode_list;
+use scale_info::TypeInfo;
+use sp_core::Hasher;
+use sp_runtime::traits::Keccak256;
+use sp_std::vec::Vec;
+use std::marker::PhantomData;
 
-/// Errors returned by this crate.
-#[derive(RuntimeDebug, Display, From)]
-#[cfg_attr(feature = "std", derive(Error))]
-pub enum EthereumValidationError {
+const STORAGE_INDEX: u8 = 4u8;
+
+// Declare a solidity type in standard solidity
+sol! {
+    struct Message {
+        uint16 action;
+        address origin;
+        bytes payload;
+    }
+
+    type JobId is uint128;
+
+    struct EthJobMatch {
+        bytes32 source;
+        uint64 startDelay;
+    }
+
+    struct EthJobRequirements {
+        uint8 slots;
+        uint128 reward;
+        uint128 minReputation;
+        EthJobMatch[] instantMatch;
+    }
+
+    struct EthJobSchedule {
+        uint64 duration;
+        uint64 startTime;
+        uint64 endTime;
+        uint64 interval;
+        uint64 maxStartDelay;
+    }
+
+    struct AcurastJobRegistration {
+        uint128 jobId;
+        bytes32[] allowedSources;
+        bool allowOnlyVerifiedSources;
+        EthJobRequirements requirements;
+        uint16[] requiredModules;
+        bytes script;
+        EthJobSchedule schedule;
+        uint32 memoryCapacity;
+        uint32 networkRequests;
+        uint32 storageCapacity;
+    }
 }
+
+/// Errors specific to the Ethereum instance
+#[derive(RuntimeDebug, Display, From)]
+pub enum EthereumValidationError {
+    InvalidProof,
+    UnknownAction(u16),
+    IllFormattedMessage,
+    IllFormattedJobRegistration,
+    InvalidOriginAddress,
+    InvalidJobModule,
+    CouldNotParseAcurastAddress,
+    CouldNotDecodeRegisterJobPayload,
+    CouldNotDecodeDeregisterJobPayload,
+    CouldNotDecodeFinalizeJobPayload,
+    TooManyPlannedExecutions,
+    TooManyAllowedSources,
+    TooManyJobModules,
+}
+
+pub type EthereumProofItem = BoundedVec<u8, ConstU32<1024>>;
+pub type EthereumProofItems = BoundedVec<EthereumProofItem, ConstU32<32>>;
+pub type EthereumProofValue = BoundedVec<u8, ConstU32<1024>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct EthereumProof {
-    items: BoundedVec<BoundedVec<u8, ConstU32<1024>>, ConstU32<32>>,
-    path: BoundedVec<u8, ConstU32<256>>,
-    value: BoundedVec<u8, ConstU32<1024>>
+#[scale_info(skip_type_params(AccountConverter))]
+pub struct EthereumProof<AccountConverter, AccountId> {
+    pub account_proof: EthereumProofItems,
+    pub storage_proof: EthereumProofItems,
+    pub message_id: MessageIdentifier,
+    pub value: EthereumProofValue,
+    #[cfg(any(test, feature = "runtime-benchmarks"))]
+    pub marker: PhantomData<(AccountConverter, AccountId)>,
+    #[cfg(not(any(test, feature = "runtime-benchmarks")))]
+    marker: PhantomData<(AccountConverter, AccountId)>,
 }
 
-impl<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra> traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra> for EthereumProof where
-    Balance: From<u128>,
-    MaxAllowedSources: ParameterBound,
-    MaxSlots: ParameterBound,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>
-{
-    type Error = TezosValidationError;
-
-	fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(self: &Self) -> Vec<u8> {
-        let proof_items = self.items.iter().map(|node| node.as_slice()).collect();
-        let _ = evm::verify_proof(&proof_items, &[0u8; 32], &self.path, &self.value);
-        [0u8; 32].to_vec()
-	}
-
-    fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error> {
-        todo!()
-    }
-
-    fn message(self: &Self) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
-        todo!()
-    }
-}
-
-
-pub struct EthereumParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>(
-    PhantomData<(Balance, ParsableAccountId, AccountId, MaxSlots, Extra)>,
-);
-impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    MessageParser<AccountId, MaxAllowedSources, Extra>
-    for EthereumParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>
+impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
+    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
+    for EthereumProof<AccountConverter, AccountId>
 where
-    ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
     MaxSlots: ParameterBound,
+    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
+    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
 {
     type Error = EthereumValidationError;
 
-    /// Parses an encoded key from Tezos representing a message identifier.
-    fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error> {
-        Ok(0u128)
+    fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
+        self: &Self,
+    ) -> Result<[u8; 32], Self::Error> {
+        let account_proof: Vec<&[u8]> = self
+            .account_proof
+            .iter()
+            .map(|node| node.as_slice())
+            .collect();
+
+        // Validate account proof
+        let eth_address = crate::pallet::Pallet::<T, I>::current_target_chain_owner();
+        let root_hash = Keccak256::hash(account_proof[0]);
+        let leaf_node: &Vec<u8> = &decode_list(account_proof[account_proof.len() - 1])[1];
+        let account_state_hash: &Vec<u8> = &decode_list(leaf_node)[2];
+        let account_state_path = Keccak256::hash(eth_address.as_ref());
+        let valid = evm::verify_proof(
+            &account_proof,
+            &root_hash.0,
+            &account_state_path.0.to_vec(),
+            leaf_node,
+        );
+
+        if !valid {
+            return Err(EthereumValidationError::InvalidProof);
+        }
+
+        // Validate storage proof
+        let storage_proof: Vec<&[u8]> = self
+            .storage_proof
+            .iter()
+            .map(|node| node.as_slice())
+            .collect();
+        let proof_path = evm::storage_path(&STORAGE_INDEX, &self.message_id).to_vec();
+        let proof_value = Keccak256::hash(&self.value);
+        let proof_value = [[0xa0].to_vec(), proof_value.0.to_vec()].concat();
+        let valid = evm::verify_proof(
+            &storage_proof,
+            &account_state_hash,
+            &proof_path,
+            &proof_value,
+        );
+
+        if !valid {
+            return Err(EthereumValidationError::InvalidProof);
+        }
+
+        Ok(root_hash.0)
     }
 
-    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
-        todo!()
+    fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error> {
+        Ok(self.message_id)
+    }
+
+    fn message(
+        self: &Self,
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+        // EVM storage is divided in slots of 32 bytes. If the data is longer than 32 bytes,
+        // the first slot will contain the length of the data.
+        let value = if self.value.len() > 32 {
+            &self.value[32..]
+        } else {
+            &self.value
+        };
+        let decoded: Message = Message::decode(value, false)
+            .map_err(|_| EthereumValidationError::IllFormattedMessage)?;
+
+        // Convert action index to its RawAction variant
+        let action = RawAction::try_from(decoded.action)
+            .map_err(|_| EthereumValidationError::UnknownAction(decoded.action))?;
+
+        // Convert origin address to a multi origin
+        let origin_address = EthereumAddressBytes::try_from(decoded.origin.to_vec())
+            .map_err(|_| EthereumValidationError::InvalidOriginAddress)?;
+        let origin = MultiOrigin::Ethereum(origin_address.clone());
+
+        match action {
+            RawAction::RegisterJob => {
+                fn convert_account_id<
+                    Account,
+                    AccountConverter: TryFrom<Vec<u8>> + Into<Account>,
+                >(
+                    bytes: Vec<u8>,
+                ) -> Result<Account, EthereumValidationError> {
+                    let parsed: AccountConverter = bytes
+                        .try_into()
+                        .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
+                    Ok(parsed.into())
+                }
+
+                let job_registration: AcurastJobRegistration =
+                    AcurastJobRegistration::decode(value, false)
+                        .map_err(|_| EthereumValidationError::IllFormattedJobRegistration)?;
+
+                let job_id = (origin, job_registration.jobId.clone());
+
+                fn convert_job_match<
+                    AccountId,
+                    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
+                >(
+                    m: EthJobMatch,
+                ) -> Result<PlannedExecution<AccountId>, EthereumValidationError> {
+                    Ok(PlannedExecution::<AccountId> {
+                        source: convert_account_id::<AccountId, AccountConverter>(
+                            m.source.to_vec(),
+                        )?,
+                        start_delay: m.startDelay,
+                    })
+                }
+                let executions: PlannedExecutions<AccountId, MaxSlots> =
+                    PlannedExecutions::try_from(
+                        job_registration
+                            .requirements
+                            .instantMatch
+                            .into_iter()
+                            .map(convert_job_match::<AccountId, AccountConverter>)
+                            .collect::<Result<Vec<_>, Self::Error>>()?,
+                    )
+                    .map_err(|_| EthereumValidationError::TooManyPlannedExecutions)?;
+
+                let extra: Extra = RegistrationExtra {
+                    requirements: JobRequirements {
+                        slots: job_registration.requirements.slots.into(),
+                        reward: Balance::from(job_registration.requirements.reward),
+                        min_reputation: Some(job_registration.requirements.minReputation),
+                        instant_match: Some(executions),
+                    },
+                }
+                .into();
+                let allowed_sources: AllowedSources<AccountId, MaxAllowedSources> =
+                    AllowedSources::try_from(
+                        job_registration
+                            .allowedSources
+                            .into_iter()
+                            .map(|item| {
+                                convert_account_id::<AccountId, AccountConverter>(item.to_vec())
+                            })
+                            .collect::<Result<Vec<_>, Self::Error>>()?,
+                    )
+                    .map_err(|_| EthereumValidationError::TooManyAllowedSources)?;
+                let required_modules: JobModules = JobModules::try_from(
+                    job_registration
+                        .requiredModules
+                        .iter()
+                        .map(|item| {
+                            Ok(JobModule::try_from(*item as u32)
+                                .map_err(|_| EthereumValidationError::InvalidJobModule)?)
+                        })
+                        .collect::<Result<Vec<_>, Self::Error>>()?,
+                )
+                .map_err(|_| EthereumValidationError::TooManyJobModules)?;
+                let registration = JobRegistration {
+                    script: Script::truncate_from(job_registration.script),
+                    allowed_sources: Some(allowed_sources),
+                    allow_only_verified_sources: job_registration.allowOnlyVerifiedSources,
+                    schedule: Schedule {
+                        duration: job_registration.schedule.duration,
+                        start_time: job_registration.schedule.startTime,
+                        end_time: job_registration.schedule.endTime,
+                        interval: job_registration.schedule.interval,
+                        max_start_delay: job_registration.schedule.maxStartDelay,
+                    },
+                    memory: job_registration.memoryCapacity,
+                    network_requests: job_registration.networkRequests,
+                    storage: job_registration.storageCapacity,
+                    required_modules,
+                    extra,
+                };
+
+                Ok(ParsedAction::RegisterJob(job_id, registration))
+            }
+            RawAction::DeregisterJob => {
+                let job_id = JobId::decode_single(&decoded.payload, true)
+                    .map_err(|_| EthereumValidationError::CouldNotDecodeDeregisterJobPayload)?;
+
+                Ok(ParsedAction::DeregisterJob((origin, job_id)))
+            }
+            RawAction::FinalizeJob => {
+                let jobs = <sol!(uint128[])>::decode_single(&decoded.payload, true)
+                    .map_err(|_| EthereumValidationError::CouldNotDecodeFinalizeJobPayload)?
+                    .iter()
+                    .map(|id| (MultiOrigin::Ethereum(origin_address.clone()), *id))
+                    .collect();
+
+                Ok(ParsedAction::FinalizeJob(jobs))
+            }
+        }
     }
 }

@@ -24,9 +24,9 @@ use sp_std::prelude::*;
 use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::chain::tezos::TezosParser;
+use crate::instances::{EthereumInstance, TezosInstance};
 use crate::types::RawAction;
-use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode, FromBytes};
-use crate::instances::TezosInstance;
+use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -57,6 +57,7 @@ frame_support::construct_runtime!(
     {
         System: frame_system,
         TezosHyperdrive: crate::<Instance1>,
+        EthereumHyperdrive: crate::<Instance2>
     }
 );
 
@@ -89,12 +90,6 @@ impl system::Config for Test {
 
 pub type MaxAllowedSources = CU32<4>;
 
-impl FromBytes for H256 {
-    fn from_bytes(bytes: &[u8]) -> Self {
-        H256::from_slice(bytes)
-    }
-}
-
 impl crate::Config<TezosInstance> for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AcurastAccountId;
@@ -111,7 +106,33 @@ impl crate::Config<TezosInstance> for Test {
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
     type ActionExecutor = ();
-    type Proof = crate::chain::tezos::TezosProof<AcurastAccountId, <Self as frame_system::Config>::AccountId>;
+    type Proof = crate::chain::tezos::TezosProof<
+        AcurastAccountId,
+        <Self as frame_system::Config>::AccountId,
+    >;
+    type WeightInfo = weights::WeightInfo<Test>;
+}
+
+impl crate::Config<EthereumInstance> for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type ParsableAccountId = AcurastAccountId;
+    type TargetChainOwner = TargetChainStateOwner;
+    type TargetChainHash = H256;
+    type TargetChainBlockNumber = u64;
+    type Balance = Balance;
+    type RegistrationExtra =
+        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
+    type MaxAllowedSources = MaxAllowedSources;
+    type MaxSlots = CU32<64>;
+    type MaxTransmittersPerSnapshot = CU32<64>;
+    type TargetChainHashing = Keccak256;
+    type TransmissionRate = TransmissionRate;
+    type TransmissionQuorum = TransmissionQuorum;
+    type ActionExecutor = ();
+    type Proof = crate::chain::ethereum::EthereumProof<
+        AcurastAccountId,
+        <Self as frame_system::Config>::AccountId,
+    >;
     type WeightInfo = weights::WeightInfo<Test>;
 }
 

@@ -1,13 +1,15 @@
 #![cfg(test)]
 
-use std::marker::PhantomData;
 use frame_support::{assert_err, assert_ok, error::BadOrigin};
 use hex_literal::hex;
 use sp_core::H256;
 use sp_runtime::bounded_vec;
 use sp_runtime::traits::Keccak256;
 use sp_runtime::AccountId32;
+use std::marker::PhantomData;
 
+use crate::chain::tezos::TezosProof;
+use crate::instances::TezosInstance;
 use crate::stub::*;
 use crate::types::*;
 use crate::{
@@ -15,8 +17,6 @@ use crate::{
     types::{ActivityWindow, StateTransmitterUpdate},
     Error,
 };
-use crate::chain::tezos::TezosProof;
-use crate::instances::TezosInstance;
 
 #[test]
 fn update_single_state_transmitters() {
