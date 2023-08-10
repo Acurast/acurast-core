@@ -37,9 +37,11 @@ pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 pub enum MultiOrigin<AcurastAccountId> {
     Acurast(AcurastAccountId),
     Tezos(TezosAddressBytes),
+    Ethereum(EthereumAddressBytes),
 }
 
 pub type TezosAddressBytes = BoundedVec<u8, CU32<36>>;
+pub type EthereumAddressBytes = BoundedVec<u8, CU32<20>>;
 
 /// The type of a job identifier sequence.
 pub type JobIdSequence = u128;

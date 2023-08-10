@@ -108,7 +108,7 @@ where
                     Preservation::Preserve,
                 )?;
             }
-            MultiOrigin::Tezos(_who) => {
+            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
                 // The availability of these funds was ensured on Tezos side, so we just mint the amount here
                 Currency::mint_into(
                     &pallet_account,

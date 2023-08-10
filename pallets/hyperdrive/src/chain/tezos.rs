@@ -1,17 +1,17 @@
 use core::marker::PhantomData;
 
+use codec::{Decode, Encode};
 #[cfg(feature = "std")]
 use derive_more::Error as DError;
 use derive_more::{Display, From};
-use codec::{Decode, Encode};
-use scale_info::TypeInfo;
 use once_cell::race::OnceBox;
+use scale_info::TypeInfo;
 use sp_core::bounded::BoundedVec;
-use sp_core::{H256, RuntimeDebug};
+use sp_core::{RuntimeDebug, H256};
+use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
 use sp_std::str::FromStr;
 use sp_std::vec;
-use sp_runtime::traits::Hash;
 use tezos_core::types::encoded::Address as TezosAddress;
 use tezos_core::Error as TezosCoreError;
 use tezos_michelson::micheline::primitive_application::PrimitiveApplication;
@@ -35,8 +35,10 @@ use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
 
-use crate::types::{MessageParser, RawAction, StateKey, StateOwner, StateValue, StateProof, derive_proof};
-use crate::{MessageIdentifier, ParsedAction, CurrentTargetChainOwner, traits};
+use crate::types::{
+    derive_proof, MessageParser, RawAction, StateKey, StateOwner, StateProof, StateValue,
+};
+use crate::{traits, CurrentTargetChainOwner, MessageIdentifier, ParsedAction};
 
 pub struct TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>(
     PhantomData<(Balance, ParsableAccountId, AccountId, MaxSlots, Extra)>,
@@ -61,7 +63,9 @@ where
             .map_err(|e| TezosValidationError::TezosMicheline(e))?;
 
         let value: Nat = micheline.try_into()?;
-        value.to_integer().map_err(|_| TezosValidationError::ParsingFailure)
+        value
+            .to_integer()
+            .map_err(|_| TezosValidationError::ParsingFailure)
     }
 
     fn parse_value(
@@ -329,13 +333,15 @@ where
         TezosValidationError::MissingField(FieldError::AllowOnlyVerifiedSources),
     )?)?;
     let allowed_sources = try_option(
-        iter.next()
-            .ok_or(TezosValidationError::MissingField(FieldError::AllowedSources))?,
+        iter.next().ok_or(TezosValidationError::MissingField(
+            FieldError::AllowedSources,
+        ))?,
         |value| {
             let seq = try_sequence(value, |source| {
                 let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(source)?).into();
-                let parsed: ParsableAccountId =
-                    s.try_into().map_err(|_| TezosValidationError::AddressParsing)?;
+                let parsed: ParsableAccountId = s
+                    .try_into()
+                    .map_err(|_| TezosValidationError::AddressParsing)?;
                 Ok(parsed.into())
             })?;
             Ok(AllowedSources::try_from(seq).map_err(|_| {
@@ -361,8 +367,9 @@ where
                             .ok_or(TezosValidationError::MissingField(FieldError::Source))?,
                     )?)
                         .into();
-                    let parsed: ParsableAccountId =
-                        s.try_into().map_err(|_| TezosValidationError::AddressParsing)?;
+                    let parsed: ParsableAccountId = s
+                        .try_into()
+                        .map_err(|_| TezosValidationError::AddressParsing)?;
                     Ok::<AccountId, TezosValidationError>(parsed.into())
                 }?;
 
@@ -385,8 +392,9 @@ where
         },
     )?;
     let min_reputation = try_option(
-        iter.next()
-            .ok_or(TezosValidationError::MissingField(FieldError::MinReputation))?,
+        iter.next().ok_or(TezosValidationError::MissingField(
+            FieldError::MinReputation,
+        ))?,
         |value| {
             let v: Int = try_int(value)?;
             Ok(v.to_integer()?)
@@ -422,16 +430,15 @@ where
         v.to_integer()?
     };
     let network_requests = {
-        let v: Int = try_int(
-            iter.next()
-                .ok_or(TezosValidationError::MissingField(FieldError::NetworkRequests))?,
-        )?;
+        let v: Int = try_int(iter.next().ok_or(TezosValidationError::MissingField(
+            FieldError::NetworkRequests,
+        ))?)?;
         v.to_integer()?
     };
 
-    let required_modules_unparsed = iter
-        .next()
-        .ok_or(TezosValidationError::MissingField(FieldError::RequiredModules))?;
+    let required_modules_unparsed = iter.next().ok_or(TezosValidationError::MissingField(
+        FieldError::RequiredModules,
+    ))?;
     let required_modules = try_sequence::<JobModule, _>(required_modules_unparsed, |module| {
         let value: Int = module.try_into()?;
         value
@@ -464,10 +471,9 @@ where
         v.to_integer()?
     };
     let max_start_delay = {
-        let v: Int = try_int(
-            iter.next()
-                .ok_or(TezosValidationError::MissingField(FieldError::MaxStartDelay))?,
-        )?;
+        let v: Int = try_int(iter.next().ok_or(TezosValidationError::MissingField(
+            FieldError::MaxStartDelay,
+        ))?)?;
         v.to_integer()?
     };
     let start_time = {
@@ -532,7 +538,8 @@ fn parse_deregister_job_payload(encoded: &[u8]) -> Result<JobIdSequence, TezosVa
     let unpacked: Micheline = Micheline::unpack(encoded, Some(deregister_job_schema()))
         .map_err(|e| TezosValidationError::TezosMicheline(e))?;
 
-    let v: Int = try_nat(unpacked).map_err(|_| TezosValidationError::MissingField(FieldError::JobId))?;
+    let v: Int =
+        try_nat(unpacked).map_err(|_| TezosValidationError::MissingField(FieldError::JobId))?;
     Ok(v.to_integer()?)
 }
 
@@ -555,7 +562,9 @@ fn parse_finalize_job_payload(encoded: &[u8]) -> Result<Vec<JobIdSequence>, Tezo
     Ok(ids)
 }
 
-fn bounded_address(address: &TezosAddress) -> Result<BoundedVec<u8, CU32<36>>, TezosValidationError> {
+fn bounded_address(
+    address: &TezosAddress,
+) -> Result<BoundedVec<u8, CU32<36>>, TezosValidationError> {
     let v: Vec<u8> = match &address {
         TezosAddress::Implicit(a) => a.try_into()?,
         TezosAddress::Originated(a) => a.try_into()?,
@@ -669,7 +678,6 @@ pub fn leaf_hash<T: crate::pallet::Config<I>, I: 'static>(
     T::TargetChainHashing::hash(&combined)
 }
 
-
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 #[scale_info(skip_type_params(AccountConverter))]
 pub struct TezosProof<AccountConverter, AccountId> {
@@ -679,22 +687,31 @@ pub struct TezosProof<AccountConverter, AccountId> {
     #[cfg(any(test, feature = "runtime-benchmarks"))]
     pub marker: PhantomData<(AccountConverter, AccountId)>,
     #[cfg(not(any(test, feature = "runtime-benchmarks")))]
-    marker: PhantomData<(AccountConverter, AccountId)>
+    marker: PhantomData<(AccountConverter, AccountId)>,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra> traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra> for TezosProof<AccountConverter, AccountId> where
-Balance: From<u128>,
-MaxAllowedSources: ParameterBound,
-MaxSlots: ParameterBound,
-AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>
+impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
+    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
+    for TezosProof<AccountConverter, AccountId>
+where
+    Balance: From<u128>,
+    MaxAllowedSources: ParameterBound,
+    MaxSlots: ParameterBound,
+    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
+    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
 {
     type Error = TezosValidationError;
 
-	fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(self: &Self) -> Vec<u8> {
-        let leaf_hash = leaf_hash::<T, I>(<CurrentTargetChainOwner<T, I>>::get(), self.path.clone(), self.value.clone());
-		derive_proof::<T::TargetChainHashing, _>(self.items.clone(), leaf_hash).as_ref().into()
-	}
+    fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
+        self: &Self,
+    ) -> Result<[u8; 32], Self::Error> {
+        let leaf_hash = leaf_hash::<T, I>(
+            <CurrentTargetChainOwner<T, I>>::get(),
+            self.path.clone(),
+            self.value.clone(),
+        );
+        Ok(derive_proof::<T::TargetChainHashing, _>(self.items.clone(), leaf_hash).into())
+    }
 
     fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error> {
         let schema = primitive_application(ComparableTypePrimitive::Nat).into();
@@ -702,10 +719,14 @@ Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>
             .map_err(|e| TezosValidationError::TezosMicheline(e))?;
 
         let value: Nat = micheline.try_into()?;
-        value.to_integer().map_err(|_| TezosValidationError::ParsingFailure)
+        value
+            .to_integer()
+            .map_err(|_| TezosValidationError::ParsingFailure)
     }
 
-    fn message(self: &Self) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+    fn message(
+        self: &Self,
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
         let (action, origin, payload) = parse_message(&self.value)?;
 
         Ok(match action {
@@ -761,9 +782,9 @@ mod tests {
 
     use pallet_acurast::{JobRegistration, Script};
 
+    use crate::instances::TezosInstance;
     use crate::mock::*;
     use crate::Config;
-    use crate::instances::TezosInstance;
 
     use super::*;
 

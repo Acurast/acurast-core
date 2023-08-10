@@ -129,6 +129,20 @@ pub enum RawAction {
     FinalizeJob,
 }
 
+/// Convert an index to a RawAction
+impl TryFrom<u16> for RawAction {
+    type Error = Vec<u8>;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RawAction::RegisterJob),
+            1 => Ok(RawAction::DeregisterJob),
+            2 => Ok(RawAction::FinalizeJob),
+            _ => Err(b"Unknown action index".to_vec()),
+        }
+    }
+}
+
 impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
     From<&ParsedAction<AccountId, MaxAllowedSources, Extra>> for RawAction
 {

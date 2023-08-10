@@ -9097,7 +9097,6 @@ fn test_inflation() {
                     ideal: Perbill::from_percent(5)
                 }
             ));
-            dbg!(InflationConfig::<Test>::get());
             let total_issuance = |staked_pct: Perbill| {
                 let supply = <Test as crate::Config>::Currency::total_issuance();
 

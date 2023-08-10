@@ -34,6 +34,7 @@ once_cell = { version = "1.17.1", default-features = false }
 
 # EVM
 rlp = { version = "0.5.2", default-features = false }
+alloy-sol-types = { version = "0.3.1", default-features = false }
 
 # Benchmarks
 hex-literal = { version = "0.3", optional = true }
@@ -61,6 +62,7 @@ log = "0.4.17"
 [features]
 default = ["std"]
 std = [
+	"alloy-sol-types/std",
 	"codec/std",
 	"hex/std",
 	"rlp/std",

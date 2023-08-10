@@ -1,9 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate core;
+
 pub use pallet::*;
 pub use traits::*;
 pub use types::*;
 
+#[cfg(test)]
+mod ethereum_tests;
 #[cfg(test)]
 mod mock;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
@@ -15,8 +19,8 @@ mod tests;
 mod benchmarking;
 mod traits;
 
-pub mod instances;
 pub mod chain;
+pub mod instances;
 
 mod types;
 pub mod weights;
@@ -37,10 +41,10 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use pallet_acurast::ParameterBound;
     use sp_arithmetic::traits::{CheckedRem, Zero};
+    use sp_core::H256;
     use sp_runtime::traits::Hash;
     use sp_std::prelude::*;
     use sp_std::vec;
-    use sp_core::H256;
 
     use pallet_acurast_marketplace::types::RegistrationExtra;
 
@@ -72,7 +76,7 @@ pub mod pallet {
             + sp_std::hash::Hash
             + AsRef<[u8]>
             + AsMut<[u8]>
-            + FromBytes
+            + From<[u8; 32]>
             + MaxEncodedLen;
         /// The block number type used by the target runtime.
         type TargetChainBlockNumber: Parameter
@@ -101,13 +105,16 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type Proof: Parameter + Member + TypeInfo + Proof<
-            Self::Balance,
-            Self::AccountId,
-            Self::MaxAllowedSources,
-            Self::MaxSlots,
-            Self::RegistrationExtra,
-        >;
+        type Proof: Parameter
+            + Member
+            + TypeInfo
+            + Proof<
+                Self::Balance,
+                Self::AccountId,
+                Self::MaxAllowedSources,
+                Self::MaxSlots,
+                Self::RegistrationExtra,
+            >;
         type RegistrationExtra: From<
             RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
         >;
@@ -228,9 +235,9 @@ pub mod pallet {
         CalculationOverflow,
         UnexpectedSnapshot,
         ProofInvalid,
+        ProofDoesNotMatch,
         CouldNotDecodeMessageId,
         InvalidMessageId,
-        FailedToGetMessage
     }
 
     #[pallet::call]
@@ -373,26 +380,23 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
-            let derived_root = proof.calculate_root::<T,I>();
+            let derived_root = proof.calculate_root::<T, I>().map_err(|err| {
+                log::debug!("Failed to validate proof: {:?}", &err);
 
-            if !Self::validate_state_merkle_root(snapshot, T::TargetChainHash::from_bytes(&derived_root.as_slice())) {
-                return Err(Error::<T, I>::ProofInvalid)?;
+                Error::<T, I>::ProofInvalid
+            })?;
+
+            if !Self::validate_state_merkle_root(snapshot, T::TargetChainHash::from(derived_root)) {
+                return Err(Error::<T, I>::ProofDoesNotMatch)?;
             }
 
             let _message_id = Self::process_message_id(&proof)?;
 
             // don't fail extrinsic from here onwards
-            match proof.message() {
-                Ok(action) => {
-                    if let Err(e) = Self::process_action(action) {
-                        Self::deposit_event(Event::MessageProcessed(e));
-                    } else {
-                        Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ActionSuccess));
-                    }
-                },
-                Err(_) => {
-                    Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ParsingValueFailed))
-                }
+            if let Err(e) = Self::process_action(&proof) {
+                Self::deposit_event(Event::MessageProcessed(e));
+            } else {
+                Self::deposit_event(Event::MessageProcessed(ProcessMessageResult::ActionSuccess));
             }
 
             Ok(().into())
@@ -433,8 +437,10 @@ pub mod pallet {
         ///
         /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
         /// See [`Self::process_action()`].
-        fn process_message_id(proof: &T::Proof) -> Result<MessageIdentifier, Error::<T, I>> {
-            let message_id = proof.message_id().map_err(|_| Error::<T, I>::InvalidMessageId)?;
+        fn process_message_id(proof: &T::Proof) -> Result<MessageIdentifier, Error<T, I>> {
+            let message_id = proof
+                .message_id()
+                .map_err(|_| Error::<T, I>::InvalidMessageId)?;
 
             ensure!(
                 Self::message_seq_id() + 1 == message_id.into(),
@@ -446,7 +452,11 @@ pub mod pallet {
         }
 
         #[transactional]
-        fn process_action(action: ParsedAction<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>) -> Result<(), ProcessMessageResult> {
+        fn process_action(proof: &T::Proof) -> Result<(), ProcessMessageResult> {
+            let action = proof
+                .message()
+                .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
+
             let raw_action: RawAction = (&action).into();
             T::ActionExecutor::execute(action)
                 .map_err(|_| ProcessMessageResult::ActionFailed(raw_action))?;
