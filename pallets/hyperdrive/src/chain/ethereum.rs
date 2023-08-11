@@ -2,6 +2,7 @@ use super::util::evm;
 use crate::{traits, MessageIdentifier, ParsedAction, RawAction};
 use alloy_sol_types::{sol, SolType};
 use codec::{Decode, Encode};
+use core::marker::PhantomData;
 use derive_more::{Display, From};
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::{BoundedVec, RuntimeDebug};
@@ -17,9 +18,8 @@ use scale_info::TypeInfo;
 use sp_core::Hasher;
 use sp_runtime::traits::Keccak256;
 use sp_std::vec::Vec;
-use std::marker::PhantomData;
 
-const STORAGE_INDEX: u8 = 4u8;
+const STORAGE_INDEX: u8 = 5u8;
 
 // Declare a solidity type in standard solidity
 sol! {
@@ -202,7 +202,7 @@ where
                 }
 
                 let job_registration: AcurastJobRegistration =
-                    AcurastJobRegistration::decode(value, false)
+                    AcurastJobRegistration::decode_single(&decoded.payload, true)
                         .map_err(|_| EthereumValidationError::IllFormattedJobRegistration)?;
 
                 let job_id = (origin, job_registration.jobId.clone());
