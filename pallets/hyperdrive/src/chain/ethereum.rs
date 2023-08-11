@@ -68,7 +68,8 @@ sol! {
 /// Errors specific to the Ethereum instance
 #[derive(RuntimeDebug, Display, From)]
 pub enum EthereumValidationError {
-    InvalidProof,
+    InvalidAccountProof,
+    InvalidStorageProof,
     UnknownAction(u16),
     IllFormattedMessage,
     IllFormattedJobRegistration,
@@ -135,7 +136,7 @@ where
         );
 
         if !valid {
-            return Err(EthereumValidationError::InvalidProof);
+            return Err(EthereumValidationError::InvalidAccountProof);
         }
 
         // Validate storage proof
@@ -155,7 +156,7 @@ where
         );
 
         if !valid {
-            return Err(EthereumValidationError::InvalidProof);
+            return Err(EthereumValidationError::InvalidStorageProof);
         }
 
         Ok(root_hash.0)
