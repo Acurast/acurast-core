@@ -236,7 +236,7 @@ pub mod pallet {
         UnexpectedSnapshot,
         ProofInvalid,
         ProofDoesNotMatch,
-        CouldNotDecodeMessageId,
+        MessageIdDoesNotMatch,
         InvalidMessageId,
     }
 
@@ -444,7 +444,7 @@ pub mod pallet {
 
             ensure!(
                 Self::message_seq_id() + 1 == message_id.into(),
-                Error::<T, I>::CouldNotDecodeMessageId
+                Error::<T, I>::MessageIdDoesNotMatch
             );
             <MessageSequenceId<T, I>>::set(message_id);
 
