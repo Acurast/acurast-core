@@ -26,6 +26,7 @@ use std::{collections::VecDeque, sync::Arc};
 
 use codec::Codec;
 use log::{debug, error, info, warn};
+use pallet_acurast_hyperdrive::instances::HyperdriveInstanceName;
 use sc_client_api::{AuxStore, Backend, FinalityNotification};
 use sc_offchain::OffchainDb;
 use sp_api::ProvideRuntimeApi;
@@ -37,8 +38,7 @@ use sp_runtime::{
 };
 
 use crate::mmr_gadget::{aux_schema, LOG_TARGET};
-use crate::{utils::NodesUtils, NodeIndex};
-use crate::{HyperdriveApi, LeafIndex};
+use crate::{utils::NodesUtils, HyperdriveApi, LeafIndex, NodeIndex};
 
 pub(crate) fn load_or_init_best_canonicalized<B, BE>(
     backend: &BE,
@@ -86,6 +86,7 @@ where
     B: Block,
     MmrHash: Codec + Clone,
     C::Api: HyperdriveApi<B, MmrHash>,
+    I: HyperdriveInstanceName,
 {
     /// Create new [`OffchainMmr`] with the given arguments.
     pub fn new(
@@ -150,10 +151,10 @@ where
         block_hash: B::Hash,
         action: &str,
     ) -> Result<Option<(LeafIndex, Vec<NodeIndex>)>, String> {
-        let last_message_excl = self
-            .client
-            .runtime_api()
-            .last_message_excl_by_block(block_hash, block_num);
+        let last_message_excl =
+            self.client
+                .runtime_api()
+                .last_message_excl_by_block(block_hash, I::NAME, block_num);
         match last_message_excl {
             Ok(Some(0)) => {
                 // nothing to do until first message got sent
@@ -241,7 +242,11 @@ where
                 }
             };
 
-        let root_hash = match self.client.runtime_api().leaf_meta(block_hash, leaf_index) {
+        let root_hash = match self
+            .client
+            .runtime_api()
+            .leaf_meta(block_hash, I::NAME, leaf_index)
+        {
             Ok(Some((_block_hash, root_hash))) => root_hash,
             Ok(None) => {
                 error!(target: LOG_TARGET, "Got no leaf_meta from runtime API");

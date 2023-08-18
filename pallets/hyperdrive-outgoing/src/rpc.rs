@@ -24,6 +24,7 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     types::error::{CallError, ErrorObject},
 };
+use pallet_acurast_hyperdrive::instances::HyperdriveInstanceName;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
@@ -430,8 +431,8 @@ impl<I, C, B> Mmr<I, C, B> {
 }
 
 #[async_trait]
-impl<I: RpcInstance + 'static, Client, Block, MmrHash> MmrApiServer<I, HashFor<Block>, MmrHash>
-    for Mmr<I, Client, (Block, MmrHash)>
+impl<I: RpcInstance + HyperdriveInstanceName + 'static, Client, Block, MmrHash>
+    MmrApiServer<I, HashFor<Block>, MmrHash> for Mmr<I, Client, (Block, MmrHash)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
@@ -444,7 +445,11 @@ where
     ) -> RpcResult<Vec<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let roots = api
-            .snapshot_roots(self.client.info().best_hash, next_expected_snapshot_number)
+            .snapshot_roots(
+                self.client.info().best_hash,
+                I::NAME,
+                next_expected_snapshot_number,
+            )
             .map_err(runtime_error_into_rpc_error)?
             .map_err(mmr_error_into_rpc_error)?;
         Ok(roots)
@@ -456,7 +461,11 @@ where
     ) -> RpcResult<Option<(SnapshotNumber, MmrHash)>> {
         let api = self.client.runtime_api();
         let root = api
-            .snapshot_root(self.client.info().best_hash, next_expected_snapshot_number)
+            .snapshot_root(
+                self.client.info().best_hash,
+                I::NAME,
+                next_expected_snapshot_number,
+            )
             .map_err(runtime_error_into_rpc_error)?
             .map_err(mmr_error_into_rpc_error)?;
         Ok(root)
@@ -473,6 +482,7 @@ where
         let proof = api
             .generate_target_chain_proof(
                 self.client.info().best_hash,
+                I::NAME,
                 next_message_number,
                 maximum_messages,
                 latest_known_snapshot_number,

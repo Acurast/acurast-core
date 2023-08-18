@@ -25,22 +25,12 @@ use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::chain::tezos::TezosParser;
 use crate::instances::{EthereumInstance, TezosInstance};
+use crate::stub::AcurastAccountId;
 use crate::types::RawAction;
 use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
-
-#[derive(Display, Debug, From, Into, Clone, Eq, PartialEq)]
-pub struct AcurastAccountId(AccountId32);
-impl TryFrom<Vec<u8>> for AcurastAccountId {
-    type Error = ();
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let a: [u8; 32] = value.try_into().map_err(|_| ())?;
-        Ok(AcurastAccountId(AccountId32::new(a)))
-    }
-}
 
 parameter_types! {
     pub TargetChainStateOwner: StateOwner = StateOwner::try_from(hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec()).unwrap();
@@ -107,7 +97,7 @@ impl crate::Config<TezosInstance> for Test {
     type TransmissionQuorum = TransmissionQuorum;
     type ActionExecutor = ();
     type Proof = crate::chain::tezos::TezosProof<
-        AcurastAccountId,
+        Self::ParsableAccountId,
         <Self as frame_system::Config>::AccountId,
     >;
     type WeightInfo = weights::WeightInfo<Test>;

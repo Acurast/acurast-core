@@ -37,6 +37,7 @@ pub use types::{
 pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
+use crate::instances::HyperdriveInstance;
 use crate::mmr::Merger;
 use crate::traits::MMRInstance;
 use crate::types::{Node, TargetChainProofLeaf};
@@ -53,14 +54,14 @@ mod benchmarking;
 
 mod default_weights;
 pub use pallet_acurast_hyperdrive::instances;
+pub mod chain;
 mod mmr;
 #[cfg(feature = "std")]
 pub mod mmr_gadget;
 #[cfg(feature = "std")]
 pub mod rpc;
-pub mod chain;
-mod types;
 pub mod traits;
+mod types;
 pub mod utils;
 
 /// A MMR specific to this pallet instance.
@@ -530,23 +531,24 @@ sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
     pub trait HyperdriveApi<MmrHash: codec::Codec> {
         /// Return the number of MMR leaves/messages on-chain.
-        fn number_of_leaves() -> LeafIndex;
+        fn number_of_leaves(instance: HyperdriveInstance) -> LeafIndex;
 
-        fn first_mmr_block_number() -> Option<NumberFor<Block>>;
+        fn first_mmr_block_number(instance: HyperdriveInstance) -> Option<NumberFor<Block>>;
 
-        fn leaf_meta(leaf_index: LeafIndex) -> Option<(<Block as BlockT>::Hash, MmrHash)>;
+        fn leaf_meta(instance: HyperdriveInstance, leaf_index: LeafIndex) -> Option<(<Block as BlockT>::Hash, MmrHash)>;
 
-        fn last_message_excl_by_block(block_number: NumberFor<Block>) -> Option<LeafIndex>;
+        fn last_message_excl_by_block(instance: HyperdriveInstance, block_number: NumberFor<Block>) -> Option<LeafIndex>;
 
-        fn snapshot_roots(next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, MmrHash)>, MMRError>;
+        fn snapshot_roots(instance: HyperdriveInstance, next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, MmrHash)>, MMRError>;
 
-        fn snapshot_root(next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, MmrHash)>, MMRError>;
+        fn snapshot_root(instance: HyperdriveInstance, next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, MmrHash)>, MMRError>;
 
         /// Generates a self-contained MMR proof for the messages in the range `[next_message_number..last_message_excl]`.
         /// Leaves with their leaf index and position are part of the proof structure and contain the message encoded for the target chain.
         ///
         /// This function forwards to [`Pallet::generate_target_chain_proof`].
         fn generate_target_chain_proof(
+            instance: HyperdriveInstance,
             next_message_number: LeafIndex,
             maximum_messages: Option<u64>,
             latest_known_snapshot_number: SnapshotNumber,
