@@ -19,6 +19,7 @@
 use std::collections::HashMap;
 use std::{future::Future, sync::Arc, time::Duration};
 
+use pallet_acurast_hyperdrive::instances::{HyperdriveInstance, TezosInstance};
 use parking_lot::Mutex;
 use sc_block_builder::BlockBuilderProvider;
 use sc_client_api::{
@@ -339,31 +340,32 @@ impl ProvideRuntimeApi<Block> for MockClient {
 
 sp_api::mock_impl_runtime_apis! {
     impl HyperdriveApi<Block, MmrHash> for MockRuntimeApi {
-        fn number_of_leaves(&self) -> LeafIndex {
+        fn number_of_leaves(&self, _instance: HyperdriveInstance) -> LeafIndex {
             self.data.lock().num_leaves
         }
 
-        fn first_mmr_block_number() -> Option<NumberFor<Block>> {
+        fn first_mmr_block_number(_instance: HyperdriveInstance) -> Option<NumberFor<Block>> {
             Some(0u64)
         }
 
-        fn leaf_meta(leaf_index: LeafIndex) -> Option<(<Block as BlockT>::Hash, MmrHash)> {
+        fn leaf_meta(_instance: HyperdriveInstance, leaf_index: LeafIndex) -> Option<(<Block as BlockT>::Hash, MmrHash)> {
             self.data.lock().leaf_meta.get(&leaf_index).copied()
         }
 
-        fn last_message_excl_by_block(block_number: NumberFor<Block>) -> Option<LeafIndex> {
+        fn last_message_excl_by_block(_instance: HyperdriveInstance, block_number: NumberFor<Block>) -> Option<LeafIndex> {
             self.data.lock().last_message_excl_by_block.get(&block_number).copied()
         }
 
-        fn snapshot_roots(_next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, <Block as BlockT>::Hash)>, MMRError> {
+        fn snapshot_roots(_instance: HyperdriveInstance, _next_expected_snapshot_number: SnapshotNumber) -> Result<Vec<(SnapshotNumber, <Block as BlockT>::Hash)>, MMRError> {
             Err(MMRError::GenerateProof)
         }
 
-        fn snapshot_root(_next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, <Block as BlockT>::Hash)>, MMRError> {
+        fn snapshot_root(_instance: HyperdriveInstance, _next_expected_snapshot_number: SnapshotNumber) -> Result<Option<(SnapshotNumber, <Block as BlockT>::Hash)>, MMRError> {
             Err(MMRError::GenerateProof)
         }
 
         fn generate_target_chain_proof(
+            _instance: HyperdriveInstance,
             _next_message_number: LeafIndex,
             _maximum_messages: Option<u64>,
             _latest_known_snapshot_number: SnapshotNumber,
@@ -409,7 +411,7 @@ pub(crate) fn run_test_with_mmr_gadget_pre_post_using_client<F, G, RetF, RetG>(
     let client_clone = client.clone();
     runtime.spawn(async move {
         let backend = client_clone.backend.clone();
-        MmrGadget::start(
+        MmrGadget::<TezosInstance, _, _, _, _>::start(
             client_clone,
             backend,
             MockRuntimeApi::INDEXING_PREFIX.to_vec(),

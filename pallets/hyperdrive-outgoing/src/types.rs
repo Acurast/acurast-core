@@ -60,7 +60,6 @@ impl<Hash> OnNewRoot<Hash> for () {
 }
 
 /// The encodable version of an [`Action`].
-// #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 #[derive(
     RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
 )]

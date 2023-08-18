@@ -2,13 +2,14 @@ use frame_support::{
     dispatch::Weight, parameter_types, traits::ConstU32,
     weights::constants::RocksDbWeight as DbWeight,
 };
+use pallet_acurast_hyperdrive::instances::TezosInstance;
 use sp_core::H256;
 use sp_runtime::traits::AccountIdLookup;
 use sp_runtime::{generic, traits::BlakeTwo256};
 
 use stub::*;
 
-use crate::tezos::DefaultTezosConfig;
+use crate::chain::tezos::DefaultTezosConfig;
 use crate::*;
 
 frame_support::construct_runtime!(
@@ -51,8 +52,7 @@ impl frame_system::Config for Test {
 
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
-    const TEMP_INDEXING_PREFIX: &'static [u8] = b"mmr-tez-temp-";
+    type MMRInfo = TezosInstance;
     type TargetChainConfig = DefaultTezosConfig;
     type OnNewRoot = ();
     type WeightInfo = ();

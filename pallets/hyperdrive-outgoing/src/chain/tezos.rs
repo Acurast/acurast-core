@@ -1,12 +1,13 @@
+use crate::traits::MMRInstance;
 use alloc::string::String;
 use codec::alloc;
+use derive_more::Error as DError;
+use derive_more::{Display, From};
 use once_cell::race::OnceBox;
+use sp_core::{RuntimeDebug, H256};
 use sp_runtime::traits::Keccak256;
 use sp_std::prelude::*;
 use sp_std::vec;
-use derive_more::Error as DError;
-use derive_more::{Display, From};
-use sp_core::{RuntimeDebug, H256};
 use tezos_core::types::encoded::{Encoded, P256PublicKey, PublicKey};
 use tezos_core::types::number::Nat;
 use tezos_core::Error as TezosCoreError;
@@ -15,15 +16,14 @@ use tezos_michelson::michelson::data;
 use tezos_michelson::michelson::data::String as TezosString;
 use tezos_michelson::michelson::types::{address, bytes, nat, pair, string};
 use tezos_michelson::Error as TezosMichelineError;
-use crate::traits::MMRInstance;
 
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
 
+use crate::instances::TezosInstance;
 use crate::types::TargetChainConfig;
 use crate::Action;
 use crate::Leaf;
 use crate::{LeafEncoder, RawAction};
-use crate::instances::TezosInstance;
 
 #[derive(RuntimeDebug, Display, From)]
 #[cfg_attr(feature = "std", derive(DError))]
@@ -63,7 +63,7 @@ impl LeafEncoder for TezosEncoder {
                 Action::AssignJob(job_id, processor_public_key) => {
                     let address = match processor_public_key {
                         PubKey::SECP256r1(pk) => p256_pub_key_to_address(pk)?,
-                        _ => Err(TezosValidationError::UnexpectedPublicKey)?
+                        _ => Err(TezosValidationError::UnexpectedPublicKey)?,
                     };
                     let data = data::pair(vec![
                         data::nat(Nat::from_integer(*job_id)),
@@ -166,7 +166,7 @@ pub mod rpc {
 mod tests {
     use hex_literal::hex;
 
-    use crate::stub::tezos_account_id;
+    use crate::stub::p256_public_key;
     use crate::{chain::tezos, Message};
 
     use super::*;
@@ -175,10 +175,10 @@ mod tests {
     fn test_pack_assign_job() -> Result<(), <TezosEncoder as LeafEncoder>::Error> {
         let encoded = tezos::TezosEncoder::encode(&Message {
             id: 5,
-            action: Action::AssignJob(4, tezos_account_id()),
+            action: Action::AssignJob(4, p256_public_key()),
         })?;
 
-        let expected = &hex!("05070700050707010000001441535349474e5f4a4f425f50524f434553534f520a0000002005070700040a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f80467");
+        let expected = &hex!("05070700050707010000001441535349474e5f4a4f425f50524f434553534f520a0000002005070700040a00000016000292251ea7a095ef710f65258ecd6b7246e209436e");
         assert_eq!(expected, &*encoded);
         Ok(())
     }

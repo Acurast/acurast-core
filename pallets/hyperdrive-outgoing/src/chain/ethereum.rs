@@ -1,9 +1,9 @@
+use crate::chain::util::evm::EvmEncoder;
+use crate::instances::EthereumInstance;
+use crate::traits::MMRInstance;
+use crate::TargetChainConfig;
 use sp_core::H256;
 use sp_runtime::traits::Keccak256;
-use crate::instances::EthereumInstance;
-use crate::{TargetChainConfig};
-use crate::chain::util::evm::EvmEncoder;
-use crate::traits::MMRInstance;
 
 pub struct EthereumConfig;
 

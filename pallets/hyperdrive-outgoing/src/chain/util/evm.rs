@@ -1,6 +1,6 @@
+use crate::{Action, Leaf, LeafEncoder, RawAction};
 use frame_support::inherent::Vec;
 use sp_runtime::traits::{Hash, Keccak256};
-use crate::{Action, Leaf, LeafEncoder, RawAction};
 
 use alloy_sol_types::{sol, SolStruct};
 use frame_support::RuntimeDebug;
@@ -58,16 +58,23 @@ impl LeafEncoder for EvmEncoder {
             Action::AssignJob(job_id, processor_public_key) => {
                 let address_bytes = match processor_public_key {
                     PubKey::SECP256k1(pk) => public_key_to_address(pk),
-                    _ => Err(EvmValidationError::UnexpectedPublicKey)?
+                    _ => Err(EvmValidationError::UnexpectedPublicKey)?,
                 };
 
-                let processor_address = alloy_primitives::Address::from_slice(address_bytes.as_slice());
+                let processor_address =
+                    alloy_primitives::Address::from_slice(address_bytes.as_slice());
 
-                let payload = EvmAssignJob { job_id: *job_id, processor: processor_address };
+                let payload = EvmAssignJob {
+                    job_id: *job_id,
+                    processor: processor_address,
+                };
                 payload.eip712_encode_data()
-            },
+            }
             Action::FinalizeJob(job_id, refund_amount) => {
-                let payload = EvmFinalizeJob { job_id: *job_id, refund_amount: *refund_amount };
+                let payload = EvmFinalizeJob {
+                    job_id: *job_id,
+                    refund_amount: *refund_amount,
+                };
 
                 payload.eip712_encode_data()
             }
@@ -76,7 +83,7 @@ impl LeafEncoder for EvmEncoder {
         let message = EvmMessage {
             action: raw_action.into(),
             messageId: message.id as u128,
-            payload
+            payload,
         };
 
         Ok(message.eip712_encode_data())
