@@ -33,6 +33,7 @@ use sp_std::prelude::*;
 use strum_macros::{EnumString, IntoStaticStr};
 
 use pallet_acurast::JobIdSequence;
+use pallet_acurast_marketplace::PubKey;
 
 /// A type to describe node position in the MMR (node index).
 pub type NodeIndex = u64;
@@ -82,19 +83,30 @@ impl From<&Action> for RawAction {
     }
 }
 
+/// Convert [RawAction] to an index
+impl Into<u16> for RawAction {
+    fn into(self: Self) -> u16 {
+        match self {
+            RawAction::AssignJob => 0,
+            RawAction::FinalizeJob => 1,
+            RawAction::Noop => 255,
+        }
+    }
+}
+
 /// The action is triggered over Hyperdrive as part of a [`Message`].
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 pub enum Action {
     /// Assigns a job on target chain.
     ///
-    /// Consists of `(Job ID on Tezos, processor address)`,
-    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
-    AssignJob(JobIdSequence, String), // (nat, address)
+    /// Consists of `(Job ID, processor address)`,
+    /// where `Job ID` is the subset of [`pallet_acurast::JobId`] for jobs created externally.
+    AssignJob(JobIdSequence, PubKey), // (u128, address)
     /// Finalizes a job on target chain.
     ///
-    /// Consists of `(Job ID on Tezos, refund amount)`,
-    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
-    FinalizeJob(JobIdSequence, u128), // (nat, nat)
+    /// Consists of `(Job ID, refund amount)`,
+    /// where `Job ID` is the subset of [`pallet_acurast::JobId`] for jobs created externally.
+    FinalizeJob(JobIdSequence, u128), // (u128, u128)
     /// A noop action that solely suits the purpose of testing that messages get sent.
     Noop,
 }
@@ -125,7 +137,7 @@ impl<H: traits::Hash> From<Leaf> for Node<H> {
 
 /// A bundled config of encoder/hasher for the target chain.
 ///
-/// Extends traits [`traits::Hash`] and adds hashing with previsously encoded value, using an encoding supported on target chain.
+/// Extends traits [`traits::Hash`] and adds hashing with previously encoded value, using an encoding supported on target chain.
 pub trait TargetChainConfig {
     type TargetChainEncoder: LeafEncoder;
 

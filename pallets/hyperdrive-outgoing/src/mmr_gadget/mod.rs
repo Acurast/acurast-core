@@ -76,7 +76,7 @@ where
     BE: Backend<B>,
     C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash, I>,
+    C::Api: HyperdriveApi<B, MmrHash>,
 {
     async fn try_build(
         self,
@@ -168,7 +168,7 @@ where
     BE: Backend<B>,
     C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash, I>,
+    C::Api: HyperdriveApi<B, MmrHash>,
 {
     async fn run(mut self, builder: OffchainMmrBuilder<I, B, BE, C, MmrHash>) {
         let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {

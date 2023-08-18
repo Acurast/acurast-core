@@ -191,11 +191,9 @@ pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
 /// Tracks the progress during `submit_message`, intended to be included in events.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ProcessMessageResult {
-    ParsingKeyFailed,
     ParsingValueFailed,
     ActionFailed(RawAction),
     ActionSuccess,
-    InvalidSequenceId,
     ProcessingFailed(DispatchError),
 }
 

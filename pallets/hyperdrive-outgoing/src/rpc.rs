@@ -435,7 +435,7 @@ impl<I: RpcInstance + 'static, Client, Block, MmrHash> MmrApiServer<I, HashFor<B
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: HyperdriveApi<Block, MmrHash, I>,
+    Client::Api: HyperdriveApi<Block, MmrHash>,
     MmrHash: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
 {
     fn snapshot_roots(

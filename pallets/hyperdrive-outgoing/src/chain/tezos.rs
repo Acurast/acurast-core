@@ -1,10 +1,12 @@
 use alloc::string::String;
 use codec::alloc;
 use once_cell::race::OnceBox;
-use sp_core::H256;
 use sp_runtime::traits::Keccak256;
 use sp_std::prelude::*;
 use sp_std::vec;
+use derive_more::Error as DError;
+use derive_more::{Display, From};
+use sp_core::{RuntimeDebug, H256};
 use tezos_core::types::encoded::{Encoded, P256PublicKey, PublicKey};
 use tezos_core::types::number::Nat;
 use tezos_core::Error as TezosCoreError;
@@ -13,19 +15,29 @@ use tezos_michelson::michelson::data;
 use tezos_michelson::michelson::data::String as TezosString;
 use tezos_michelson::michelson::types::{address, bytes, nat, pair, string};
 use tezos_michelson::Error as TezosMichelineError;
+use crate::traits::MMRInstance;
 
-use pallet_acurast_marketplace::PubKeyBytes;
+use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
 
 use crate::types::TargetChainConfig;
 use crate::Action;
 use crate::Leaf;
 use crate::{LeafEncoder, RawAction};
+use crate::instances::TezosInstance;
+
+#[derive(RuntimeDebug, Display, From)]
+#[cfg_attr(feature = "std", derive(DError))]
+pub enum TezosValidationError {
+    TezosMichelineError(TezosMichelineError),
+    TezosCoreError(TezosCoreError),
+    UnexpectedPublicKey,
+}
 
 /// The [`LeafEncoder`] for Tezos using Micheline/Michelson encoding/packing.
 pub struct TezosEncoder();
 
 impl LeafEncoder for TezosEncoder {
-    type Error = TezosMichelineError;
+    type Error = TezosValidationError;
 
     /// Encodes the given message for Tezos.
     ///
@@ -48,10 +60,14 @@ impl LeafEncoder for TezosEncoder {
             data::int(message.id as i64),
             data::try_string(action_str)?,
             data::bytes(match &message.action {
-                Action::AssignJob(job_id, processor_address) => {
+                Action::AssignJob(job_id, processor_public_key) => {
+                    let address = match processor_public_key {
+                        PubKey::SECP256r1(pk) => p256_pub_key_to_address(pk)?,
+                        _ => Err(TezosValidationError::UnexpectedPublicKey)?
+                    };
                     let data = data::pair(vec![
                         data::nat(Nat::from_integer(*job_id)),
-                        data::string(TezosString::from_string(processor_address.to_owned())?),
+                        data::string(TezosString::from_string(address.to_owned())?),
                     ]);
                     Micheline::pack(data, Some(assign_payload_schema()))
                 }
@@ -66,7 +82,7 @@ impl LeafEncoder for TezosEncoder {
             }?),
         ]);
 
-        Micheline::pack(data, Some(message_schema()))
+        Ok(Micheline::pack(data, Some(message_schema()))?)
     }
 }
 
@@ -129,12 +145,29 @@ pub fn p256_pub_key_to_address(pub_key: &PubKeyBytes) -> Result<String, TezosCor
     key.bs58_address()
 }
 
+impl MMRInstance for TezosInstance {
+    const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
+    const TEMP_INDEXING_PREFIX: &'static [u8] = b"mmr-tez-temp-";
+}
+
+#[cfg(feature = "std")]
+pub mod rpc {
+    use crate::instances::TezosInstance;
+    use crate::rpc::RpcInstance;
+
+    impl RpcInstance for TezosInstance {
+        const SNAPSHOT_ROOTS: &'static str = "hyperdrive_outgoing_tezos_snapshotRoots";
+        const SNAPSHOT_ROOT: &'static str = "hyperdrive_outgoing_tezos_snapshotRoot";
+        const GENERATE_PROOF: &'static str = "hyperdrive_outgoing_tezos_generateProof";
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
 
     use crate::stub::tezos_account_id;
-    use crate::{tezos, Message};
+    use crate::{chain::tezos, Message};
 
     use super::*;
 

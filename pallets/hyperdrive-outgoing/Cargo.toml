@@ -24,7 +24,13 @@ sp-blockchain = { git = "https://github.com/paritytech/substrate", default-featu
 pallet-acurast = { path = "../acurast", default-features = false }
 pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 acurast-common = { path = "../acurast/common", default-features = false }
+pallet-acurast-hyperdrive = {path = "../hyperdrive", default-features = false }
 mmr-lib = { package = "acurast-merkle-mountain-range",  git = "https://github.com/Acurast/merkle-mountain-range", default-features = false }
+
+# EVM
+rlp = { version = "0.5.2", default-features = false }
+alloy-sol-types = { version = "0.3.1", default-features = false }
+alloy-primitives = { version = "0.3.1", default-features = false }
 
 # SDKs
 tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
