@@ -38,6 +38,7 @@ pub use utils::NodesUtils;
 
 pub use crate::default_weights::WeightInfo;
 use crate::mmr::Merger;
+use crate::traits::MMRInstance;
 use crate::types::{Node, TargetChainProofLeaf};
 
 #[cfg(test)]
@@ -51,14 +52,15 @@ mod tests;
 mod benchmarking;
 
 mod default_weights;
-pub mod instances;
+pub use pallet_acurast_hyperdrive::instances;
 mod mmr;
 #[cfg(feature = "std")]
 pub mod mmr_gadget;
 #[cfg(feature = "std")]
 pub mod rpc;
-pub mod tezos;
+pub mod chain;
 mod types;
+pub mod traits;
 pub mod utils;
 
 /// A MMR specific to this pallet instance.
@@ -83,6 +85,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     use crate::default_weights::WeightInfo;
+    use crate::traits::MMRInstance;
 
     use super::*;
 
@@ -95,21 +98,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// Prefix for elements stored in the Off-chain DB via Indexing API.
-        ///
-        /// Each node of the MMR is inserted both on-chain and off-chain via Indexing API.
-        /// The former does not store full leaf content, just its compact version (hash),
-        /// and some of the inner mmr nodes might be pruned from on-chain storage.
-        /// The latter will contain all the entries in their full form.
-        ///
-        /// Each node is stored in the Off-chain DB under key derived from the
-        /// [`Self::INDEXING_PREFIX`] and its in-tree index (MMR position).
-        const INDEXING_PREFIX: &'static [u8];
-        /// Prefix for elements temporarily stored in the Off-chain DB via Indexing API.
-        ///
-        /// For fork resistency, nodes are first stored with their [`Self::TEMP_INDEXING_PREFIX`]
-        /// before they get conanicalized and stored under a key with [`Self::INDEXING_PREFIX`].
-        const TEMP_INDEXING_PREFIX: &'static [u8];
+        type MMRInfo: MMRInstance;
 
         /// The bundled config of encoder/hasher using an encoding/hash function supported on target chain.
         type TargetChainConfig: TargetChainConfig;
@@ -242,7 +231,7 @@ pub mod pallet {
                 MessageNumbers::<T, I>::put((next_message_number, next_message_number));
             }
 
-            // alsways update the block-leaf-index (also when not taking a snapshot)
+            // always update the block-leaf-index (also when not taking a snapshot)
             BlockLeafIndex::<T, I>::insert(current_block, next_message_number);
 
             if Self::first_mmr_block_number() == None {
@@ -342,7 +331,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         unique: HashOf<T, I>,
     ) -> Vec<u8> {
         NodesUtils::node_temp_offchain_key::<<T as frame_system::Config>::Header, _>(
-            &T::TEMP_INDEXING_PREFIX,
+            &T::MMRInfo::TEMP_INDEXING_PREFIX,
             pos,
             parent_hash,
             unique,
@@ -355,7 +344,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// Never read keys using `node_canon_offchain_key` unless you sure that
     /// there's no `node_offchain_key` key in the storage.
     fn node_canon_offchain_key(pos: NodeIndex) -> Vec<u8> {
-        NodesUtils::node_canon_offchain_key(&T::INDEXING_PREFIX, pos)
+        NodesUtils::node_canon_offchain_key(&T::MMRInfo::INDEXING_PREFIX, pos)
     }
 
     /// Check if we should create new snapshot at the end of `current_block`,
@@ -379,7 +368,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// If `next_message_number` is not yet sent, an error is returned.
     /// `last_message_excl` is the exclusive upper bound of messages to transmit and is bounded by latest message's index.
     /// If `maximum_messages` is provided, `next_message_number + maximum_messages` it the potentially lower bound used to
-    /// limit the number of messages transfered at once.
+    /// limit the number of messages transferred at once.
     ///
     /// The proof is generated for the root at the end of the block that also produced the snapshot with `latest_known_snapshot_number`.
     ///
@@ -539,7 +528,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with MMR pallet.
-    pub trait HyperdriveApi<MmrHash: codec::Codec, I = ()> {
+    pub trait HyperdriveApi<MmrHash: codec::Codec> {
         /// Return the number of MMR leaves/messages on-chain.
         fn number_of_leaves() -> LeafIndex;
 

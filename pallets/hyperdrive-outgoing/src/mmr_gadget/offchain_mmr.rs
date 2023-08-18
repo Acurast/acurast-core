@@ -85,7 +85,7 @@ where
     BE: Backend<B>,
     B: Block,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash, I>,
+    C::Api: HyperdriveApi<B, MmrHash>,
 {
     /// Create new [`OffchainMmr`] with the given arguments.
     pub fn new(
