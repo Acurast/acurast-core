@@ -2,7 +2,6 @@
 // Copyright 2023 Papers AG
 
 //! Helper methods for computing issuance based on inflation
-use crate::pallet::{BalanceOf, Config, Pallet};
 use frame_support::traits::Currency;
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -12,6 +11,8 @@ use sp_runtime::PerThing;
 use sp_runtime::{Perbill, RuntimeDebug};
 use substrate_fixed::transcendental::pow as floatpow;
 use substrate_fixed::types::I64F64;
+
+use crate::pallet::{BalanceOf, Config, Pallet};
 
 const SECONDS_PER_YEAR: u32 = 31557600;
 const SECONDS_PER_BLOCK: u32 = 12; // TODO: Important (This should be in pallet config)
@@ -143,6 +144,7 @@ impl InflationInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn mock_annual_to_round(annual: Range<Perbill>, rounds_per_year: u32) -> Range<Perbill> {
         perbill_annual_to_perbill_round(annual, rounds_per_year)
     }

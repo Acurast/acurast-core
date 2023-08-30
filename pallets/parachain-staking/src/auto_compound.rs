@@ -3,20 +3,22 @@
 
 //! Auto-compounding functionality for staking rewards
 
-use crate::pallet::{
-    AutoCompoundingDelegations as AutoCompoundingDelegationsStorage, BalanceOf, CandidateInfo,
-    Config, DelegatorState, Error, Event, Pallet, Total,
-};
-use crate::types::{Bond, BondAdjust, Delegator};
 use frame_support::ensure;
 use frame_support::traits::Get;
 use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
+use num_traits::Saturating;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
-use sp_runtime::traits::Saturating;
 use sp_runtime::Percent;
 use sp_std::prelude::*;
 use sp_std::vec::Vec;
+
+use crate::pallet::{
+    AutoCompoundingDelegations as AutoCompoundingDelegationsStorage, CandidateInfo, Config,
+    DelegatorState, Error, Event, Pallet, Total,
+};
+use crate::types::{Bond, BondAdjust, Delegator};
+use crate::StakeOf;
 
 /// Represents the auto-compounding amount for a delegation.
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, PartialOrd, Ord)]
@@ -116,7 +118,7 @@ where
     pub(crate) fn delegate_with_auto_compound(
         candidate: T::AccountId,
         delegator: T::AccountId,
-        amount: BalanceOf<T>,
+        stake: StakeOf<T>,
         auto_compound: Percent,
         candidate_delegation_count_hint: u32,
         candidate_auto_compounding_delegation_count_hint: u32,
@@ -124,14 +126,14 @@ where
     ) -> DispatchResultWithPostInfo {
         // check that caller can lock the amount before any changes to storage
         ensure!(
-            <Pallet<T>>::get_delegator_stakable_free_balance(&delegator) >= amount,
+            <Pallet<T>>::get_delegator_stakable_free_balance(&delegator)? >= stake,
             Error::<T>::InsufficientBalance
         );
 
         let mut delegator_state = if let Some(mut state) = <DelegatorState<T>>::get(&delegator) {
             // delegation after first
             ensure!(
-                amount >= T::MinDelegation::get(),
+                stake.amount >= T::MinDelegation::get(),
                 Error::<T>::DelegationBelowMin
             );
             ensure!(
@@ -145,7 +147,7 @@ where
             ensure!(
                 state.add_delegation(Bond {
                     owner: candidate.clone(),
-                    amount
+                    stake: stake
                 }),
                 Error::<T>::AlreadyDelegatedCandidate
             );
@@ -153,14 +155,14 @@ where
         } else {
             // first delegation
             ensure!(
-                amount >= T::MinDelegatorStk::get(),
+                stake.amount >= T::MinDelegatorStk::get(),
                 Error::<T>::DelegatorBondBelowMin
             );
             ensure!(
                 !<Pallet<T>>::is_candidate(&delegator),
                 Error::<T>::CandidateExists
             );
-            Delegator::new(delegator.clone(), candidate.clone(), amount)
+            Delegator::new(delegator.clone(), candidate.clone(), stake)
         };
         let mut candidate_state =
             <CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
@@ -185,19 +187,19 @@ where
             &candidate,
             Bond {
                 owner: delegator.clone(),
-                amount,
+                stake,
             },
         )?;
 
-        // lock delegator amount
-        delegator_state.adjust_bond_lock::<T>(BondAdjust::Increase(amount))?;
+        // lock delegator stake
+        delegator_state.adjust_bond_lock::<T>(BondAdjust::Increase(stake))?;
 
         // adjust total locked,
         // only is_some if kicked the lowest bottom as a consequence of this new delegation
         let net_total_increase = if let Some(less) = less_total_staked {
-            amount.saturating_sub(less)
+            stake.saturating_sub(less)
         } else {
-            amount
+            stake
         };
         let new_total_locked = <Total<T>>::get().saturating_add(net_total_increase);
 
@@ -212,7 +214,7 @@ where
         <DelegatorState<T>>::insert(&delegator, delegator_state);
         <Pallet<T>>::deposit_event(Event::Delegation {
             delegator: delegator,
-            locked_amount: amount,
+            locked_amount: stake,
             candidate: candidate,
             delegator_position: delegator_position,
             auto_compound,
@@ -287,8 +289,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::mock::Test;
+
+    use super::*;
 
     #[test]
     fn test_set_for_delegator_inserts_config_and_returns_true_if_entry_missing() {

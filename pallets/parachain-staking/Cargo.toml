@@ -7,6 +7,7 @@ version = "3.0.0"
 [dependencies]
 log = { version = "0.4", default-features = false }
 serde = { version = "1.0", default-features = false, optional = true }
+derive_more = { version = "0.99.17" }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/substrate.git", default-features = false, optional = true,  branch = "polkadot-v0.9.43" }
@@ -18,6 +19,8 @@ sp-runtime = { git = "https://github.com/paritytech/substrate.git", default-feat
 sp-std = { git = "https://github.com/paritytech/substrate.git", default-features = false, branch = "polkadot-v0.9.43" }
 pallet-staking-reward-fn = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
+sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
+num-traits = { version = "0.2.8", default-features = false }
 
 # Nimbus
 nimbus-primitives = { git = "https://github.com/acurast/nimbus", default-features = false, branch = "polkadot-v0.9.43" }
@@ -40,6 +43,7 @@ std = [
 	"serde",
 	"sp-runtime/std",
 	"sp-std/std",
+	"num-traits/std",
 ]
 runtime-benchmarks = [ "frame-benchmarking" ]
 try-runtime = [ "frame-support/try-runtime" ]

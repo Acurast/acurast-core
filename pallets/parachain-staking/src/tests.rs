@@ -18,7 +18,7 @@ use crate::mock::{
 use crate::{
     assert_events_emitted, assert_events_emitted_match, assert_events_eq, assert_no_events,
     AtStake, Bond, CollatorStatus, DelegationScheduledRequests, DelegatorAdded, DelegatorState,
-    DelegatorStatus, Error, Event, InflationConfig, Range, DELEGATOR_LOCK_ID,
+    DelegatorStatus, Error, Event, InflationConfig, Range, Stake, DELEGATOR_LOCK_ID,
 };
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::{traits::Zero, DispatchError, ModuleError, Perbill, Percent};
@@ -311,7 +311,10 @@ fn round_immediately_jumps_if_current_duration_exceeds_new_blocks_per_round() {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 20
+                total_balance: Stake {
+                    power: 20,
+                    amount: 20
+                }
             },);
             roll_to(17);
             assert_ok!(ParachainStaking::set_blocks_per_round(
@@ -323,7 +326,10 @@ fn round_immediately_jumps_if_current_duration_exceeds_new_blocks_per_round() {
                 starting_block: 18,
                 round: 3,
                 selected_collators_number: 1,
-                total_balance: 20
+                total_balance: Stake {
+                    power: 20,
+                    amount: 20
+                }
             });
         });
 }
@@ -618,8 +624,14 @@ fn join_candidates_event_emits_correctly() {
             ));
             assert_events_eq!(Event::JoinedCollatorCandidates {
                 account: 1,
-                amount_locked: 10u128,
-                new_total_amt_locked: 10u128,
+                amount_locked: Stake {
+                    power: 10,
+                    amount: 10
+                },
+                new_total: Stake {
+                    power: 10,
+                    amount: 10
+                },
             });
         });
 }
@@ -630,13 +642,19 @@ fn join_candidates_reserves_balance() {
         .with_balances(vec![(1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 10);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(10)
+            );
             assert_ok!(ParachainStaking::join_candidates(
                 RuntimeOrigin::signed(1),
                 10u128,
                 0u32
             ));
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 0);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(0)
+            );
         });
 }
 
@@ -646,13 +664,25 @@ fn join_candidates_increases_total_staked() {
         .with_balances(vec![(1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 0);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
+            );
             assert_ok!(ParachainStaking::join_candidates(
                 RuntimeOrigin::signed(1),
                 10u128,
                 0u32
             ));
-            assert_eq!(ParachainStaking::total(), 10);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -670,7 +700,13 @@ fn join_candidates_creates_candidate_state() {
             ));
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("just joined => exists");
-            assert_eq!(candidate_state.bond, 10u128);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -688,7 +724,13 @@ fn join_candidates_adds_to_candidate_pool() {
             ));
             let candidate_pool = ParachainStaking::candidate_pool();
             assert_eq!(candidate_pool.0[0].owner, 1);
-            assert_eq!(candidate_pool.0[0].amount, 10);
+            assert_eq!(
+                candidate_pool.0[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -916,8 +958,14 @@ fn execute_leave_candidates_emits_event() {
             ));
             assert_events_emitted!(Event::CandidateLeft {
                 ex_candidate: 1,
-                unlocked_amount: 10,
-                new_total_amt_locked: 0
+                unlocked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
+                new_total: Stake {
+                    power: 0,
+                    amount: 0
+                }
             });
         });
 }
@@ -976,7 +1024,10 @@ fn execute_leave_candidates_unreserves_balance() {
         .with_candidates(vec![(1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 0);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(0)
+            );
             assert_ok!(ParachainStaking::schedule_leave_candidates(
                 RuntimeOrigin::signed(1),
                 1u32
@@ -987,7 +1038,10 @@ fn execute_leave_candidates_unreserves_balance() {
                 1,
                 0
             ));
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 10);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(10)
+            );
         });
 }
 
@@ -998,7 +1052,13 @@ fn execute_leave_candidates_decreases_total_staked() {
         .with_candidates(vec![(1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 10);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             assert_ok!(ParachainStaking::schedule_leave_candidates(
                 RuntimeOrigin::signed(1),
                 1u32
@@ -1009,7 +1069,13 @@ fn execute_leave_candidates_decreases_total_staked() {
                 1,
                 0
             ));
-            assert_eq!(ParachainStaking::total(), 0);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
+            );
         });
 }
 
@@ -1027,7 +1093,13 @@ fn execute_leave_candidates_removes_candidate_state() {
             // candidate state is not immediately removed
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("just left => still exists");
-            assert_eq!(candidate_state.bond, 10u128);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             roll_to(10);
             assert_ok!(ParachainStaking::execute_leave_candidates(
                 RuntimeOrigin::signed(1),
@@ -1057,7 +1129,10 @@ fn execute_leave_candidates_removes_pending_delegation_requests() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5
+                    }),
                 }],
             );
             assert_ok!(ParachainStaking::schedule_leave_candidates(
@@ -1067,7 +1142,13 @@ fn execute_leave_candidates_removes_pending_delegation_requests() {
             // candidate state is not immediately removed
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("just left => still exists");
-            assert_eq!(candidate_state.bond, 10u128);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             roll_to(10);
             assert_ok!(ParachainStaking::execute_leave_candidates(
                 RuntimeOrigin::signed(1),
@@ -1175,7 +1256,13 @@ fn cancel_leave_candidates_adds_to_candidate_pool() {
                 1
             ));
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 10);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -1274,7 +1361,13 @@ fn go_online_adds_to_candidate_pool() {
             assert!(ParachainStaking::candidate_pool().0.is_empty());
             assert_ok!(ParachainStaking::go_online(RuntimeOrigin::signed(1)));
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 20);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 20,
+                    amount: 20
+                }
+            );
         });
 }
 
@@ -1352,8 +1445,14 @@ fn candidate_bond_more_emits_correct_event() {
             ));
             assert_events_eq!(Event::CandidateBondedMore {
                 candidate: 1,
-                amount: 30,
-                new_total_bond: 50
+                bond: Stake {
+                    power: 30,
+                    amount: 30
+                },
+                new_total_bond: Stake {
+                    power: 50,
+                    amount: 50
+                }
             });
         });
 }
@@ -1365,12 +1464,18 @@ fn candidate_bond_more_reserves_balance() {
         .with_candidates(vec![(1, 20)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 30);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(30)
+            );
             assert_ok!(ParachainStaking::candidate_bond_more(
                 RuntimeOrigin::signed(1),
                 30
             ));
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 0);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(0)
+            );
         });
 }
 
@@ -1386,7 +1491,10 @@ fn candidate_bond_more_increases_total() {
                 RuntimeOrigin::signed(1),
                 30
             ));
-            total += 30;
+            total += Stake {
+                power: 30,
+                amount: 30,
+            };
             assert_eq!(ParachainStaking::total(), total);
         });
 }
@@ -1399,13 +1507,25 @@ fn candidate_bond_more_updates_candidate_state() {
         .build()
         .execute_with(|| {
             let candidate_state = ParachainStaking::candidate_info(1).expect("updated => exists");
-            assert_eq!(candidate_state.bond, 20);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 20,
+                    amount: 20
+                }
+            );
             assert_ok!(ParachainStaking::candidate_bond_more(
                 RuntimeOrigin::signed(1),
                 30
             ));
             let candidate_state = ParachainStaking::candidate_info(1).expect("updated => exists");
-            assert_eq!(candidate_state.bond, 50);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 50,
+                    amount: 50
+                }
+            );
         });
 }
 
@@ -1417,13 +1537,25 @@ fn candidate_bond_more_updates_candidate_pool() {
         .build()
         .execute_with(|| {
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 20);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 20,
+                    amount: 20
+                }
+            );
             assert_ok!(ParachainStaking::candidate_bond_more(
                 RuntimeOrigin::signed(1),
                 30
             ));
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 50);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 50,
+                    amount: 50
+                }
+            );
         });
 }
 
@@ -1553,8 +1685,14 @@ fn execute_candidate_bond_less_emits_correct_event() {
             ));
             assert_events_eq!(Event::CandidateBondedLess {
                 candidate: 1,
-                amount: 30,
-                new_bond: 20
+                bond: Stake {
+                    power: 30,
+                    amount: 30
+                },
+                new_bond: Stake {
+                    power: 20,
+                    amount: 20
+                }
             });
         });
 }
@@ -1566,7 +1704,10 @@ fn execute_candidate_bond_less_unreserves_balance() {
         .with_candidates(vec![(1, 30)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 0);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(0)
+            );
             assert_ok!(ParachainStaking::schedule_candidate_bond_less(
                 RuntimeOrigin::signed(1),
                 10
@@ -1576,7 +1717,10 @@ fn execute_candidate_bond_less_unreserves_balance() {
                 RuntimeOrigin::signed(1),
                 1
             ));
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&1), 10);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&1),
+                Ok(10)
+            );
         });
 }
 
@@ -1597,7 +1741,10 @@ fn execute_candidate_bond_less_decreases_total() {
                 RuntimeOrigin::signed(1),
                 1
             ));
-            total -= 10;
+            total -= Stake {
+                power: 10,
+                amount: 10,
+            };
             assert_eq!(ParachainStaking::total(), total);
         });
 }
@@ -1610,7 +1757,13 @@ fn execute_candidate_bond_less_updates_candidate_state() {
         .build()
         .execute_with(|| {
             let candidate_state = ParachainStaking::candidate_info(1).expect("updated => exists");
-            assert_eq!(candidate_state.bond, 30);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
             assert_ok!(ParachainStaking::schedule_candidate_bond_less(
                 RuntimeOrigin::signed(1),
                 10
@@ -1621,7 +1774,13 @@ fn execute_candidate_bond_less_updates_candidate_state() {
                 1
             ));
             let candidate_state = ParachainStaking::candidate_info(1).expect("updated => exists");
-            assert_eq!(candidate_state.bond, 20);
+            assert_eq!(
+                candidate_state.stake,
+                Stake {
+                    power: 20,
+                    amount: 20
+                }
+            );
         });
 }
 
@@ -1633,7 +1792,13 @@ fn execute_candidate_bond_less_updates_candidate_pool() {
         .build()
         .execute_with(|| {
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 30);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
             assert_ok!(ParachainStaking::schedule_candidate_bond_less(
                 RuntimeOrigin::signed(1),
                 10
@@ -1644,7 +1809,13 @@ fn execute_candidate_bond_less_updates_candidate_pool() {
                 1
             ));
             assert_eq!(ParachainStaking::candidate_pool().0[0].owner, 1);
-            assert_eq!(ParachainStaking::candidate_pool().0[0].amount, 20);
+            assert_eq!(
+                ParachainStaking::candidate_pool().0[0].stake,
+                Stake {
+                    power: 20,
+                    amount: 20
+                }
+            );
         });
 }
 
@@ -1666,7 +1837,7 @@ fn cancel_candidate_bond_less_emits_event() {
             ));
             assert_events_emitted!(Event::CancelledCandidateBondLess {
                 candidate: 1,
-                amount: 10,
+                bond: 10,
                 execute_round: 3,
             });
         });
@@ -1729,9 +1900,17 @@ fn delegate_event_emits_correctly() {
             ));
             assert_events_eq!(Event::Delegation {
                 delegator: 2,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 40 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 40,
+                        amount: 40
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
         });
@@ -1746,7 +1925,10 @@ fn delegate_reserves_balance() {
         .execute_with(|| {
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
             assert_ok!(ParachainStaking::delegate(
                 RuntimeOrigin::signed(2),
@@ -1755,7 +1937,13 @@ fn delegate_reserves_balance() {
                 0,
                 0
             ));
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 0);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
+            );
         });
 }
 
@@ -1776,9 +1964,21 @@ fn delegate_updates_delegator_state() {
             ));
             let delegator_state =
                 ParachainStaking::delegator_state(2).expect("just delegated => exists");
-            assert_eq!(delegator_state.total(), 10);
+            assert_eq!(
+                delegator_state.total(),
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             assert_eq!(delegator_state.delegations.0[0].owner, 1);
-            assert_eq!(delegator_state.delegations.0[0].amount, 10);
+            assert_eq!(
+                delegator_state.delegations.0[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -1791,7 +1991,13 @@ fn delegate_updates_collator_state() {
         .execute_with(|| {
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("registered in genesis");
-            assert_eq!(candidate_state.total_counted, 30);
+            assert_eq!(
+                candidate_state.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
             let top_delegations =
                 ParachainStaking::top_delegations(1).expect("registered in genesis");
             assert!(top_delegations.delegations.is_empty());
@@ -1805,12 +2011,30 @@ fn delegate_updates_collator_state() {
             ));
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("just delegated => exists");
-            assert_eq!(candidate_state.total_counted, 40);
+            assert_eq!(
+                candidate_state.total_stake_counted,
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             let top_delegations =
                 ParachainStaking::top_delegations(1).expect("just delegated => exists");
             assert_eq!(top_delegations.delegations[0].owner, 2);
-            assert_eq!(top_delegations.delegations[0].amount, 10);
-            assert_eq!(top_delegations.total, 10);
+            assert_eq!(
+                top_delegations.delegations[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
+            assert_eq!(
+                top_delegations.total,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -1932,11 +2156,17 @@ fn can_delegate_if_full_and_new_delegation_greater_than_lowest_bottom() {
             assert_events_emitted!(Event::DelegationKicked {
                 delegator: 10,
                 candidate: 1,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 10,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
         });
 }
@@ -2173,7 +2403,10 @@ fn execute_leave_delegators_event_emits_correctly() {
             ));
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 2,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
         });
 }
@@ -2188,7 +2421,10 @@ fn execute_leave_delegators_unreserves_balance() {
         .execute_with(|| {
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                00
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
             );
             assert_ok!(ParachainStaking::schedule_leave_delegators(
                 RuntimeOrigin::signed(2)
@@ -2201,7 +2437,10 @@ fn execute_leave_delegators_unreserves_balance() {
             ));
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
             assert_eq!(crate::mock::query_lock_amount(2, DELEGATOR_LOCK_ID), None);
         });
@@ -2215,7 +2454,13 @@ fn execute_leave_delegators_decreases_total_staked() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::schedule_leave_delegators(
                 RuntimeOrigin::signed(2)
             ));
@@ -2225,7 +2470,13 @@ fn execute_leave_delegators_decreases_total_staked() {
                 2,
                 1
             ));
-            assert_eq!(ParachainStaking::total(), 30);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
         });
 }
 
@@ -2270,7 +2521,10 @@ fn execute_leave_delegators_removes_pending_delegation_requests() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5
+                    }),
                 }],
             );
             assert_ok!(ParachainStaking::schedule_leave_delegators(
@@ -2303,12 +2557,30 @@ fn execute_leave_delegators_removes_delegations_from_collator_state() {
             for i in 2..6 {
                 let candidate_state =
                     ParachainStaking::candidate_info(i).expect("initialized in ext builder");
-                assert_eq!(candidate_state.total_counted, 30);
+                assert_eq!(
+                    candidate_state.total_stake_counted,
+                    Stake {
+                        power: 30,
+                        amount: 30
+                    }
+                );
                 let top_delegations =
                     ParachainStaking::top_delegations(i).expect("initialized in ext builder");
                 assert_eq!(top_delegations.delegations[0].owner, 1);
-                assert_eq!(top_delegations.delegations[0].amount, 10);
-                assert_eq!(top_delegations.total, 10);
+                assert_eq!(
+                    top_delegations.delegations[0].stake,
+                    Stake {
+                        power: 10,
+                        amount: 10
+                    }
+                );
+                assert_eq!(
+                    top_delegations.total,
+                    Stake {
+                        power: 10,
+                        amount: 10
+                    }
+                );
             }
             assert_eq!(
                 ParachainStaking::delegator_state(1)
@@ -2330,7 +2602,13 @@ fn execute_leave_delegators_removes_delegations_from_collator_state() {
             for i in 2..6 {
                 let candidate_state =
                     ParachainStaking::candidate_info(i).expect("initialized in ext builder");
-                assert_eq!(candidate_state.total_counted, 20);
+                assert_eq!(
+                    candidate_state.total_stake_counted,
+                    Stake {
+                        power: 20,
+                        amount: 20
+                    }
+                );
                 let top_delegations =
                     ParachainStaking::top_delegations(i).expect("initialized in ext builder");
                 assert!(top_delegations.delegations.is_empty());
@@ -2548,13 +2826,22 @@ fn revoke_delegation_event_emits_correctly() {
                 Event::DelegatorLeftCandidate {
                     delegator: 2,
                     candidate: 1,
-                    unstaked_amount: 10,
-                    total_candidate_staked: 30
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
+                    total_candidate_power: Stake {
+                        power: 30,
+                        amount: 30
+                    }
                 },
                 Event::DelegationRevoked {
                     delegator: 2,
                     candidate: 1,
-                    unstaked_amount: 10,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
             );
         });
@@ -2650,13 +2937,25 @@ fn delegator_bond_more_reserves_balance() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 5);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 5,
+                    amount: 5
+                })
+            );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
                 1,
                 5
             ));
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 0);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
+            );
         });
 }
 
@@ -2668,13 +2967,25 @@ fn delegator_bond_more_increases_total_staked() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
                 1,
                 5
             ));
-            assert_eq!(ParachainStaking::total(), 45);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 45,
+                    amount: 45
+                }
+            );
         });
 }
 
@@ -2690,7 +3001,10 @@ fn delegator_bond_more_updates_delegator_state() {
                 ParachainStaking::delegator_state(2)
                     .expect("exists")
                     .total(),
-                10
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
@@ -2701,7 +3015,10 @@ fn delegator_bond_more_updates_delegator_state() {
                 ParachainStaking::delegator_state(2)
                     .expect("exists")
                     .total(),
-                15
+                Stake {
+                    power: 15,
+                    amount: 15
+                }
             );
         });
 }
@@ -2719,10 +3036,19 @@ fn delegator_bond_more_updates_candidate_state_top_delegations() {
                 2
             );
             assert_eq!(
-                ParachainStaking::top_delegations(1).unwrap().delegations[0].amount,
-                10
+                ParachainStaking::top_delegations(1).unwrap().delegations[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
-            assert_eq!(ParachainStaking::top_delegations(1).unwrap().total, 10);
+            assert_eq!(
+                ParachainStaking::top_delegations(1).unwrap().total,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
                 1,
@@ -2733,10 +3059,19 @@ fn delegator_bond_more_updates_candidate_state_top_delegations() {
                 2
             );
             assert_eq!(
-                ParachainStaking::top_delegations(1).unwrap().delegations[0].amount,
-                15
+                ParachainStaking::top_delegations(1).unwrap().delegations[0].stake,
+                Stake {
+                    power: 15,
+                    amount: 15
+                }
             );
-            assert_eq!(ParachainStaking::top_delegations(1).unwrap().total, 15);
+            assert_eq!(
+                ParachainStaking::top_delegations(1).unwrap().total,
+                Stake {
+                    power: 15,
+                    amount: 15
+                }
+            );
         });
 }
 
@@ -2765,10 +3100,19 @@ fn delegator_bond_more_updates_candidate_state_bottom_delegations() {
                 ParachainStaking::bottom_delegations(1)
                     .expect("exists")
                     .delegations[0]
-                    .amount,
-                10
+                    .stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
-            assert_eq!(ParachainStaking::bottom_delegations(1).unwrap().total, 10);
+            assert_eq!(
+                ParachainStaking::bottom_delegations(1).unwrap().total,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
                 1,
@@ -2777,7 +3121,10 @@ fn delegator_bond_more_updates_candidate_state_bottom_delegations() {
             assert_events_eq!(Event::DelegationIncreased {
                 delegator: 2,
                 candidate: 1,
-                amount: 5,
+                more: Stake {
+                    power: 5,
+                    amount: 5
+                },
                 in_top: false
             });
             assert_eq!(
@@ -2791,10 +3138,19 @@ fn delegator_bond_more_updates_candidate_state_bottom_delegations() {
                 ParachainStaking::bottom_delegations(1)
                     .expect("exists")
                     .delegations[0]
-                    .amount,
-                15
+                    .stake,
+                Stake {
+                    power: 15,
+                    amount: 15
+                }
             );
-            assert_eq!(ParachainStaking::bottom_delegations(1).unwrap().total, 15);
+            assert_eq!(
+                ParachainStaking::bottom_delegations(1).unwrap().total,
+                Stake {
+                    power: 15,
+                    amount: 15
+                }
+            );
         });
 }
 
@@ -2806,13 +3162,25 @@ fn delegator_bond_more_increases_total() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(2),
                 1,
                 5
             ));
-            assert_eq!(ParachainStaking::total(), 45);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 45,
+                    amount: 45
+                }
+            );
         });
 }
 
@@ -2894,7 +3262,10 @@ fn delegator_bond_less_event_emits_correctly() {
             assert_events_eq!(Event::DelegationDecreaseScheduled {
                 delegator: 2,
                 candidate: 1,
-                amount_to_decrease: 5,
+                amount_to_decrease: Stake {
+                    power: 5,
+                    amount: 5
+                },
                 execute_round: 3,
             });
         });
@@ -2919,7 +3290,10 @@ fn delegator_bond_less_updates_delegator_state() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5
+                    }),
                 }],
             );
         });
@@ -3011,7 +3385,7 @@ fn cannot_delegator_bond_less_below_min_collator_stk() {
         .build()
         .execute_with(|| {
             assert_noop!(
-                ParachainStaking::schedule_delegator_bond_less(RuntimeOrigin::signed(2), 1, 6),
+                ParachainStaking::schedule_delegator_bond_less(RuntimeOrigin::signed(2), 1, 36),
                 Error::<Test>::DelegatorBondBelowMin
             );
         });
@@ -3073,12 +3447,21 @@ fn execute_revoke_delegation_emits_exit_event_if_exit_happens() {
             assert_events_emitted!(Event::DelegatorLeftCandidate {
                 delegator: 2,
                 candidate: 1,
-                unstaked_amount: 10,
-                total_candidate_staked: 30
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
+                total_candidate_power: Stake {
+                    power: 30,
+                    amount: 30
+                }
             });
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 2,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
         });
 }
@@ -3139,12 +3522,21 @@ fn revoke_delegation_executes_exit_if_last_delegation() {
             assert_events_emitted!(Event::DelegatorLeftCandidate {
                 delegator: 2,
                 candidate: 1,
-                unstaked_amount: 10,
-                total_candidate_staked: 30
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
+                total_candidate_power: Stake {
+                    power: 30,
+                    amount: 30
+                }
             });
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 2,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
         });
 }
@@ -3170,8 +3562,14 @@ fn execute_revoke_delegation_emits_correct_event() {
             assert_events_emitted!(Event::DelegatorLeftCandidate {
                 delegator: 2,
                 candidate: 1,
-                unstaked_amount: 10,
-                total_candidate_staked: 30
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
+                total_candidate_power: Stake {
+                    power: 30,
+                    amount: 30
+                }
             });
         });
 }
@@ -3184,7 +3582,13 @@ fn execute_revoke_delegation_unreserves_balance() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 0);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
+            );
             assert_ok!(ParachainStaking::schedule_revoke_delegation(
                 RuntimeOrigin::signed(2),
                 1
@@ -3197,7 +3601,10 @@ fn execute_revoke_delegation_unreserves_balance() {
             ));
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
         });
 }
@@ -3282,7 +3689,13 @@ fn execute_revoke_delegation_decreases_total_staked() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::schedule_revoke_delegation(
                 RuntimeOrigin::signed(2),
                 1
@@ -3293,7 +3706,13 @@ fn execute_revoke_delegation_decreases_total_staked() {
                 2,
                 1
             ));
-            assert_eq!(ParachainStaking::total(), 30);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
         });
 }
 
@@ -3434,7 +3853,10 @@ fn delegator_bond_more_after_revoke_delegation_does_not_effect_exit() {
             assert!(ParachainStaking::is_delegator(&2));
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
         });
 }
@@ -3482,25 +3904,40 @@ fn delegator_bond_less_after_revoke_delegation_does_not_effect_exit() {
                 Event::DelegatorLeftCandidate {
                     delegator: 2,
                     candidate: 1,
-                    unstaked_amount: 10,
-                    total_candidate_staked: 30,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
+                    total_candidate_power: Stake {
+                        power: 30,
+                        amount: 30
+                    },
                 },
                 Event::DelegationRevoked {
                     delegator: 2,
                     candidate: 1,
-                    unstaked_amount: 10,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::DelegationDecreased {
                     delegator: 2,
                     candidate: 3,
-                    amount: 2,
+                    less: Stake {
+                        power: 2,
+                        amount: 2
+                    },
                     in_top: true
                 },
             );
             assert!(ParachainStaking::is_delegator(&2));
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                22
+                Ok(Stake {
+                    power: 22,
+                    amount: 22
+                })
             );
         });
 }
@@ -3515,7 +3952,13 @@ fn execute_delegator_bond_less_unreserves_balance() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 0);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
+            );
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(2),
                 1,
@@ -3527,7 +3970,13 @@ fn execute_delegator_bond_less_unreserves_balance() {
                 2,
                 1
             ));
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 5);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 5,
+                    amount: 5
+                })
+            );
         });
 }
 
@@ -3539,7 +3988,13 @@ fn execute_delegator_bond_less_decreases_total_staked() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(2),
                 1,
@@ -3551,7 +4006,13 @@ fn execute_delegator_bond_less_decreases_total_staked() {
                 2,
                 1
             ));
-            assert_eq!(ParachainStaking::total(), 35);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 35,
+                    amount: 35
+                }
+            );
         });
 }
 
@@ -3567,7 +4028,10 @@ fn execute_delegator_bond_less_updates_delegator_state() {
                 ParachainStaking::delegator_state(2)
                     .expect("exists")
                     .total(),
-                10
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(2),
@@ -3584,7 +4048,10 @@ fn execute_delegator_bond_less_updates_delegator_state() {
                 ParachainStaking::delegator_state(2)
                     .expect("exists")
                     .total(),
-                5
+                Stake {
+                    power: 5,
+                    amount: 5
+                }
             );
         });
 }
@@ -3602,8 +4069,11 @@ fn execute_delegator_bond_less_updates_candidate_state() {
                 2
             );
             assert_eq!(
-                ParachainStaking::top_delegations(1).unwrap().delegations[0].amount,
-                10
+                ParachainStaking::top_delegations(1).unwrap().delegations[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(2),
@@ -3621,8 +4091,11 @@ fn execute_delegator_bond_less_updates_candidate_state() {
                 2
             );
             assert_eq!(
-                ParachainStaking::top_delegations(1).unwrap().delegations[0].amount,
-                5
+                ParachainStaking::top_delegations(1).unwrap().delegations[0].stake,
+                Stake {
+                    power: 5,
+                    amount: 5
+                }
             );
         });
 }
@@ -3635,7 +4108,13 @@ fn execute_delegator_bond_less_decreases_total() {
         .with_delegations(vec![(2, 1, 10)])
         .build()
         .execute_with(|| {
-            assert_eq!(ParachainStaking::total(), 40);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(2),
                 1,
@@ -3647,7 +4126,13 @@ fn execute_delegator_bond_less_decreases_total() {
                 2,
                 1
             ));
-            assert_eq!(ParachainStaking::total(), 35);
+            assert_eq!(
+                ParachainStaking::total(),
+                Stake {
+                    power: 35,
+                    amount: 35
+                }
+            );
         });
 }
 
@@ -3689,10 +4174,14 @@ fn execute_delegator_bond_less_updates_just_bottom_delegations() {
             let post_call_bottom_delegations =
                 ParachainStaking::bottom_delegations(&1).expect("delegated by all so exists");
             let mut not_equal = false;
-            for Bond { owner, amount } in pre_call_bottom_delegations.delegations {
+            for Bond {
+                owner,
+                stake: amount,
+            } in pre_call_bottom_delegations.delegations
+            {
                 for Bond {
                     owner: post_owner,
-                    amount: post_amount,
+                    stake: post_amount,
                 } in &post_call_bottom_delegations.delegations
                 {
                     if &owner == post_owner {
@@ -3705,10 +4194,14 @@ fn execute_delegator_bond_less_updates_just_bottom_delegations() {
             }
             assert!(not_equal);
             let mut equal = true;
-            for Bond { owner, amount } in pre_call_top_delegations.delegations {
+            for Bond {
+                owner,
+                stake: amount,
+            } in pre_call_top_delegations.delegations
+            {
                 for Bond {
                     owner: post_owner,
-                    amount: post_amount,
+                    stake: post_amount,
                 } in &post_call_top_delegations.delegations
                 {
                     if &owner == post_owner {
@@ -3721,8 +4214,8 @@ fn execute_delegator_bond_less_updates_just_bottom_delegations() {
             }
             assert!(equal);
             assert_eq!(
-                pre_call_candidate_info.total_counted,
-                post_call_candidate_info.total_counted
+                pre_call_candidate_info.total_stake_counted,
+                post_call_candidate_info.total_stake_counted
             );
         });
 }
@@ -3765,10 +4258,14 @@ fn execute_delegator_bond_less_does_not_delete_bottom_delegations() {
             let post_call_bottom_delegations =
                 ParachainStaking::bottom_delegations(&1).expect("delegated by all so exists");
             let mut equal = true;
-            for Bond { owner, amount } in pre_call_bottom_delegations.delegations {
+            for Bond {
+                owner,
+                stake: amount,
+            } in pre_call_bottom_delegations.delegations
+            {
                 for Bond {
                     owner: post_owner,
-                    amount: post_amount,
+                    stake: post_amount,
                 } in &post_call_bottom_delegations.delegations
                 {
                     if &owner == post_owner {
@@ -3781,10 +4278,14 @@ fn execute_delegator_bond_less_does_not_delete_bottom_delegations() {
             }
             assert!(equal);
             let mut not_equal = false;
-            for Bond { owner, amount } in pre_call_top_delegations.delegations {
+            for Bond {
+                owner,
+                stake: amount,
+            } in pre_call_top_delegations.delegations
+            {
                 for Bond {
                     owner: post_owner,
-                    amount: post_amount,
+                    stake: post_amount,
                 } in &post_call_top_delegations.delegations
                 {
                     if &owner == post_owner {
@@ -3797,8 +4298,12 @@ fn execute_delegator_bond_less_does_not_delete_bottom_delegations() {
             }
             assert!(not_equal);
             assert_eq!(
-                pre_call_candidate_info.total_counted - 4,
-                post_call_candidate_info.total_counted
+                pre_call_candidate_info.total_stake_counted
+                    - Stake {
+                        power: 4,
+                        amount: 4
+                    },
+                post_call_candidate_info.total_stake_counted
             );
         });
 }
@@ -3854,7 +4359,10 @@ fn cancel_revoke_delegation_emits_correct_event() {
                 collator: 1,
                 cancelled_request: CancelledScheduledRequest {
                     when_executable: 3,
-                    action: DelegationAction::Revoke(10),
+                    action: DelegationAction::Revoke(Stake {
+                        power: 10,
+                        amount: 10
+                    }),
                 },
             });
         });
@@ -3878,14 +4386,20 @@ fn cancel_revoke_delegation_updates_delegator_state() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Revoke(10),
+                    action: DelegationAction::Revoke(Stake {
+                        power: 10,
+                        amount: 10
+                    }),
                 }],
             );
             assert_eq!(
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                10
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
             assert_ok!(ParachainStaking::cancel_delegation_request(
                 RuntimeOrigin::signed(2),
@@ -3898,7 +4412,10 @@ fn cancel_revoke_delegation_updates_delegator_state() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                0
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
             );
         });
 }
@@ -3927,7 +4444,10 @@ fn cancel_delegator_bond_less_correct_event() {
                 collator: 1,
                 cancelled_request: CancelledScheduledRequest {
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5
+                    }),
                 },
             });
         });
@@ -3952,14 +4472,20 @@ fn cancel_delegator_bond_less_updates_delegator_state() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5
+                    }),
                 }],
             );
             assert_eq!(
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                5
+                Stake {
+                    power: 5,
+                    amount: 5
+                }
             );
             assert_ok!(ParachainStaking::cancel_delegation_request(
                 RuntimeOrigin::signed(2),
@@ -3972,7 +4498,10 @@ fn cancel_delegator_bond_less_updates_delegator_state() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                0
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
             );
         });
 }
@@ -3995,7 +4524,10 @@ fn delegator_schedule_revocation_total() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                10
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
             );
             roll_to(10);
             assert_ok!(ParachainStaking::execute_delegation_request(
@@ -4007,7 +4539,10 @@ fn delegator_schedule_revocation_total() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                0
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
             );
             assert_ok!(ParachainStaking::delegate(
                 RuntimeOrigin::signed(2),
@@ -4028,7 +4563,10 @@ fn delegator_schedule_revocation_total() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                20,
+                Stake {
+                    power: 20,
+                    amount: 20
+                },
             );
             roll_to(20);
             assert_ok!(ParachainStaking::execute_delegation_request(
@@ -4040,7 +4578,10 @@ fn delegator_schedule_revocation_total() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                10,
+                Stake {
+                    power: 10,
+                    amount: 10
+                },
             );
             assert_ok!(ParachainStaking::execute_delegation_request(
                 RuntimeOrigin::signed(2),
@@ -4051,7 +4592,10 @@ fn delegator_schedule_revocation_total() {
                 ParachainStaking::delegator_state(&2)
                     .map(|x| x.less_total)
                     .expect("delegator state must exist"),
-                0
+                Stake {
+                    power: 0,
+                    amount: 0
+                }
             );
         });
 }
@@ -4104,33 +4648,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             assert_eq!(Balances::free_balance(&11), 1);
@@ -4159,33 +4721,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
                 Event::DelegatorExitScheduled {
                     round: 4,
@@ -4222,33 +4802,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 20,
                     round: 5,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             roll_blocks(3);
@@ -4284,43 +4882,70 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 25,
                     round: 6,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
                 Event::DelegatorLeftCandidate {
                     delegator: 6,
                     candidate: 1,
-                    unstaked_amount: 10,
-                    total_candidate_staked: 40,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
+                    total_candidate_power: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::DelegatorLeft {
                     delegator: 6,
-                    unstaked_amount: 10,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
             );
             roll_blocks(3);
@@ -4351,33 +4976,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 30,
                     round: 7,
                     selected_collators_number: 5,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -4417,33 +5060,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 35,
                     round: 8,
                     selected_collators_number: 5,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -4473,33 +5134,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 40,
                     round: 9,
                     selected_collators_number: 5,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -4529,9 +5208,17 @@ fn parachain_bond_inflation_reserve_matches_config() {
             ));
             assert_events_eq!(Event::Delegation {
                 delegator: 8,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 50 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 50,
+                        amount: 50
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
             roll_to_round_begin(10);
@@ -4544,33 +5231,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 45,
                     round: 10,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             roll_blocks(3);
@@ -4601,33 +5306,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 50,
                     round: 11,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             roll_blocks(3);
@@ -4656,33 +5379,51 @@ fn parachain_bond_inflation_reserve_matches_config() {
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 55,
                     round: 12,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             roll_blocks(3);
@@ -4740,18 +5481,30 @@ fn paid_collator_commission_matches_config() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 1,
-                    total_balance: 40,
+                    total_balance: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::JoinedCollatorCandidates {
                     account: 4,
-                    amount_locked: 20,
-                    new_total_amt_locked: 60,
+                    amount_locked: Stake {
+                        power: 20,
+                        amount: 20
+                    },
+                    new_total: Stake {
+                        power: 60,
+                        amount: 60
+                    },
                 },
             );
 
@@ -4773,16 +5526,32 @@ fn paid_collator_commission_matches_config() {
             assert_events_eq!(
                 Event::Delegation {
                     delegator: 5,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 4,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 30 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 30,
+                            amount: 30
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
                 Event::Delegation {
                     delegator: 6,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 4,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 40 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 40,
+                            amount: 40
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
             );
@@ -4792,18 +5561,27 @@ fn paid_collator_commission_matches_config() {
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 4,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::NewRound {
                     starting_block: 10,
                     round: 3,
                     selected_collators_number: 2,
-                    total_balance: 80,
+                    total_balance: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
             );
             // only reward author with id 4
@@ -4815,18 +5593,27 @@ fn paid_collator_commission_matches_config() {
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 4,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::NewRound {
                     starting_block: 20,
                     round: 5,
                     selected_collators_number: 2,
-                    total_balance: 80,
+                    total_balance: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
             );
 
@@ -4889,8 +5676,14 @@ fn collator_exit_executes_after_delay() {
             // (within the last T::SlashingWindow blocks)
             assert_events_eq!(Event::CandidateLeft {
                 ex_candidate: 2,
-                unlocked_amount: 400,
-                new_total_amt_locked: 700,
+                unlocked_amount: Stake {
+                    power: 400,
+                    amount: 400
+                },
+                new_total: Stake {
+                    power: 700,
+                    amount: 700
+                },
             },);
         });
 }
@@ -4922,33 +5715,51 @@ fn collator_selection_chooses_top_candidates() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 5,
-                    total_exposed_amount: 60,
+                    total_exposed_amount: Stake {
+                        power: 60,
+                        amount: 60
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 5,
-                    total_balance: 400,
+                    total_balance: Stake {
+                        power: 400,
+                        amount: 400
+                    },
                 },
                 Event::CandidateScheduledExit {
                     exit_allowed_round: 2,
@@ -4971,13 +5782,25 @@ fn collator_selection_chooses_top_candidates() {
             assert_events_eq!(
                 Event::CandidateLeft {
                     ex_candidate: 6,
-                    unlocked_amount: 50,
-                    new_total_amt_locked: 400,
+                    unlocked_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
+                    new_total: Stake {
+                        power: 400,
+                        amount: 400
+                    },
                 },
                 Event::JoinedCollatorCandidates {
                     account: 6,
-                    amount_locked: 69u128,
-                    new_total_amt_locked: 469u128,
+                    amount_locked: Stake {
+                        power: 69,
+                        amount: 69
+                    },
+                    new_total: Stake {
+                        power: 469,
+                        amount: 469
+                    },
                 },
             );
             roll_to_round_begin(6);
@@ -4986,33 +5809,51 @@ fn collator_selection_chooses_top_candidates() {
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 6,
-                    total_exposed_amount: 69,
+                    total_exposed_amount: Stake {
+                        power: 69,
+                        amount: 69
+                    },
                 },
                 Event::NewRound {
                     starting_block: 25,
                     round: 6,
                     selected_collators_number: 5,
-                    total_balance: 409,
+                    total_balance: Stake {
+                        power: 409,
+                        amount: 409
+                    },
                 },
             );
         });
@@ -5046,28 +5887,43 @@ fn payout_distribution_to_solo_collators() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 4,
-                    total_balance: 340,
+                    total_balance: Stake {
+                        power: 340,
+                        amount: 340
+                    },
                 },
             );
             // ~ set block author as 1 for all blocks this round
@@ -5077,28 +5933,43 @@ fn payout_distribution_to_solo_collators() {
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 4,
-                    total_balance: 340,
+                    total_balance: Stake {
+                        power: 340,
+                        amount: 340
+                    },
                 },
             );
             // pay total issuance to 1 at 2nd block
@@ -5117,28 +5988,43 @@ fn payout_distribution_to_solo_collators() {
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::NewRound {
                     starting_block: 25,
                     round: 6,
                     selected_collators_number: 4,
-                    total_balance: 340,
+                    total_balance: Stake {
+                        power: 340,
+                        amount: 340
+                    },
                 },
             );
             roll_blocks(3);
@@ -5162,28 +6048,43 @@ fn payout_distribution_to_solo_collators() {
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 1,
-                    total_exposed_amount: 100,
+                    total_exposed_amount: Stake {
+                        power: 100,
+                        amount: 100
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 2,
-                    total_exposed_amount: 90,
+                    total_exposed_amount: Stake {
+                        power: 90,
+                        amount: 90
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 3,
-                    total_exposed_amount: 80,
+                    total_exposed_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 4,
-                    total_exposed_amount: 70,
+                    total_exposed_amount: Stake {
+                        power: 70,
+                        amount: 70
+                    },
                 },
                 Event::NewRound {
                     starting_block: 35,
                     round: 8,
                     selected_collators_number: 4,
-                    total_balance: 340,
+                    total_balance: Stake {
+                        power: 340,
+                        amount: 340
+                    },
                 },
             );
             roll_blocks(1);
@@ -5248,33 +6149,51 @@ fn multiple_delegations() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 5,
-                    total_balance: 140,
+                    total_balance: Stake {
+                        power: 140,
+                        amount: 140
+                    },
                 },
             );
             roll_blocks(1);
@@ -5302,23 +6221,47 @@ fn multiple_delegations() {
             assert_events_eq!(
                 Event::Delegation {
                     delegator: 6,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 2,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 50 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 50,
+                            amount: 50
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
                 Event::Delegation {
                     delegator: 6,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 3,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 30 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 30,
+                            amount: 30
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
                 Event::Delegation {
                     delegator: 6,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 4,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 30 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 30,
+                            amount: 30
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
             );
@@ -5345,14 +6288,25 @@ fn multiple_delegations() {
             assert_events_eq!(
                 Event::Delegation {
                     delegator: 7,
-                    locked_amount: 80,
+                    locked_amount: Stake {
+                        power: 80,
+                        amount: 80
+                    },
                     candidate: 2,
-                    delegator_position: DelegatorAdded::AddedToTop { new_total: 130 },
+                    delegator_position: DelegatorAdded::AddedToTop {
+                        new_total: Stake {
+                            power: 130,
+                            amount: 130
+                        }
+                    },
                     auto_compound: Percent::zero(),
                 },
                 Event::Delegation {
                     delegator: 10,
-                    locked_amount: 10,
+                    locked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                     candidate: 2,
                     delegator_position: DelegatorAdded::AddedToBottom,
                     auto_compound: Percent::zero(),
@@ -5368,32 +6322,53 @@ fn multiple_delegations() {
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 3,
-                    total_exposed_amount: 30,
+                    total_exposed_amount: Stake {
+                        power: 30,
+                        amount: 30
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 4,
-                    total_exposed_amount: 30,
+                    total_exposed_amount: Stake {
+                        power: 30,
+                        amount: 30
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 5,
-                    total_exposed_amount: 10,
+                    total_exposed_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
                 Event::NewRound {
                     starting_block: 30,
                     round: 7,
                     selected_collators_number: 4,
-                    total_balance: 120,
+                    total_balance: Stake {
+                        power: 120,
+                        amount: 120
+                    },
                 },
             );
             // verify that delegations are removed after collator leaves, not before
-            assert_eq!(ParachainStaking::delegator_state(7).unwrap().total(), 90);
+            assert_eq!(
+                ParachainStaking::delegator_state(7).unwrap().total(),
+                Stake {
+                    power: 90,
+                    amount: 90
+                }
+            );
             assert_eq!(
                 ParachainStaking::delegator_state(7)
                     .unwrap()
@@ -5402,7 +6377,13 @@ fn multiple_delegations() {
                     .len(),
                 2usize
             );
-            assert_eq!(ParachainStaking::delegator_state(6).unwrap().total(), 40);
+            assert_eq!(
+                ParachainStaking::delegator_state(6).unwrap().total(),
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             assert_eq!(
                 ParachainStaking::delegator_state(6)
                     .unwrap()
@@ -5415,11 +6396,17 @@ fn multiple_delegations() {
             assert_eq!(Balances::locks(&7)[0].amount, 90);
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&6),
-                60
+                Ok(Stake {
+                    power: 60,
+                    amount: 60
+                })
             );
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&7),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
             roll_to_round_begin(8);
             roll_blocks(1);
@@ -5430,11 +6417,29 @@ fn multiple_delegations() {
             ));
             assert_events_eq!(Event::CandidateLeft {
                 ex_candidate: 2,
-                unlocked_amount: 140,
-                new_total_amt_locked: 120,
+                unlocked_amount: Stake {
+                    power: 140,
+                    amount: 140
+                },
+                new_total: Stake {
+                    power: 120,
+                    amount: 120
+                },
             });
-            assert_eq!(ParachainStaking::delegator_state(7).unwrap().total(), 10);
-            assert_eq!(ParachainStaking::delegator_state(6).unwrap().total(), 30);
+            assert_eq!(
+                ParachainStaking::delegator_state(7).unwrap().total(),
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
+            assert_eq!(
+                ParachainStaking::delegator_state(6).unwrap().total(),
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
             assert_eq!(
                 ParachainStaking::delegator_state(7)
                     .unwrap()
@@ -5453,11 +6458,17 @@ fn multiple_delegations() {
             );
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&6),
-                70
+                Ok(Stake {
+                    power: 70,
+                    amount: 70
+                })
             );
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&7),
-                90
+                Ok(Stake {
+                    power: 90,
+                    amount: 90
+                })
             );
         });
 }
@@ -5540,28 +6551,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             // ~ set block author as 1 for all blocks this round
@@ -5572,28 +6598,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -5641,28 +6682,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 5,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 20,
                     round: 5,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -5695,38 +6751,62 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 6,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 25,
                     round: 6,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
                 Event::DelegatorLeftCandidate {
                     delegator: 6,
                     candidate: 1,
-                    unstaked_amount: 10,
-                    total_candidate_staked: 40,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
+                    total_candidate_power: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::DelegatorLeft {
                     delegator: 6,
-                    unstaked_amount: 10,
+                    unstaked_amount: Stake {
+                        power: 10,
+                        amount: 10
+                    },
                 },
             );
             roll_blocks(3);
@@ -5756,28 +6836,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 7,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 30,
                     round: 7,
                     selected_collators_number: 4,
-                    total_balance: 120,
+                    total_balance: Stake {
+                        power: 120,
+                        amount: 120
+                    },
                 },
             );
             roll_blocks(3);
@@ -5800,28 +6895,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 8,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 35,
                     round: 8,
                     selected_collators_number: 4,
-                    total_balance: 120,
+                    total_balance: Stake {
+                        power: 120,
+                        amount: 120
+                    },
                 },
             );
             roll_blocks(3);
@@ -5846,28 +6956,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 1,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 9,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 40,
                     round: 9,
                     selected_collators_number: 4,
-                    total_balance: 120,
+                    total_balance: Stake {
+                        power: 120,
+                        amount: 120
+                    },
                 },
             );
             roll_blocks(3);
@@ -5896,9 +7021,17 @@ fn payouts_follow_delegation_changes() {
             ));
             assert_events_eq!(Event::Delegation {
                 delegator: 8,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 50 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 50,
+                        amount: 50
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
 
@@ -5908,28 +7041,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 10,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 45,
                     round: 10,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -5954,28 +7102,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 11,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 50,
                     round: 11,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -6000,28 +7163,43 @@ fn payouts_follow_delegation_changes() {
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 1,
-                    total_exposed_amount: 50,
+                    total_exposed_amount: Stake {
+                        power: 50,
+                        amount: 50
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 2,
-                    total_exposed_amount: 40,
+                    total_exposed_amount: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 12,
                     collator_account: 4,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 55,
                     round: 12,
                     selected_collators_number: 4,
-                    total_balance: 130,
+                    total_balance: Stake {
+                        power: 130,
+                        amount: 130
+                    },
                 },
             );
             roll_blocks(3);
@@ -6141,9 +7319,14 @@ fn candidate_pool_updates_when_total_counted_changes() {
                 for candidate in pool.0 {
                     if candidate.owner == account {
                         assert_eq!(
-                            candidate.amount, bond,
+                            candidate.stake,
+                            Stake {
+                                power: bond,
+                                amount: bond
+                            },
                             "Candidate Bond {:?} is Not Equal to Expected: {:?}",
-                            candidate.amount, bond
+                            candidate.stake,
+                            bond
                         );
                     }
                 }
@@ -6229,7 +7412,13 @@ fn only_top_collators_are_counted() {
             }
             let collator_state = ParachainStaking::candidate_info(1).unwrap();
             // 15 + 16 + 17 + 18 + 20 = 86 (top 4 + self bond)
-            assert_eq!(collator_state.total_counted, 86);
+            assert_eq!(
+                collator_state.total_stake_counted,
+                Stake {
+                    power: 86,
+                    amount: 86
+                }
+            );
             // bump bottom to the top
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(3),
@@ -6239,12 +7428,21 @@ fn only_top_collators_are_counted() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 3,
                 candidate: 1,
-                amount: 8,
+                more: Stake {
+                    power: 8,
+                    amount: 8
+                },
                 in_top: true,
             });
             let collator_state = ParachainStaking::candidate_info(1).unwrap();
             // 16 + 17 + 18 + 19 + 20 = 90 (top 4 + self bond)
-            assert_eq!(collator_state.total_counted, 90);
+            assert_eq!(
+                collator_state.total_stake_counted,
+                Stake {
+                    power: 90,
+                    amount: 90
+                }
+            );
             // bump bottom to the top
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(4),
@@ -6254,12 +7452,21 @@ fn only_top_collators_are_counted() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 4,
                 candidate: 1,
-                amount: 8,
+                more: Stake {
+                    power: 8,
+                    amount: 8
+                },
                 in_top: true,
             });
             let collator_state = ParachainStaking::candidate_info(1).unwrap();
             // 17 + 18 + 19 + 20 + 20 = 94 (top 4 + self bond)
-            assert_eq!(collator_state.total_counted, 94);
+            assert_eq!(
+                collator_state.total_stake_counted,
+                Stake {
+                    power: 94,
+                    amount: 94
+                }
+            );
             // bump bottom to the top
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(5),
@@ -6269,12 +7476,21 @@ fn only_top_collators_are_counted() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 5,
                 candidate: 1,
-                amount: 8,
+                more: Stake {
+                    power: 8,
+                    amount: 8
+                },
                 in_top: true,
             });
             let collator_state = ParachainStaking::candidate_info(1).unwrap();
             // 18 + 19 + 20 + 21 + 20 = 98 (top 4 + self bond)
-            assert_eq!(collator_state.total_counted, 98);
+            assert_eq!(
+                collator_state.total_stake_counted,
+                Stake {
+                    power: 98,
+                    amount: 98
+                }
+            );
             // bump bottom to the top
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(6),
@@ -6284,12 +7500,21 @@ fn only_top_collators_are_counted() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 6,
                 candidate: 1,
-                amount: 8,
+                more: Stake {
+                    power: 8,
+                    amount: 8
+                },
                 in_top: true,
             });
             let collator_state = ParachainStaking::candidate_info(1).unwrap();
             // 19 + 20 + 21 + 22 + 20 = 102 (top 4 + self bond)
-            assert_eq!(collator_state.total_counted, 102);
+            assert_eq!(
+                collator_state.total_stake_counted,
+                Stake {
+                    power: 102,
+                    amount: 102
+                }
+            );
         });
 }
 
@@ -6314,7 +7539,13 @@ fn delegation_events_convey_correct_position() {
         .execute_with(|| {
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 11 + 12 + 13 + 14 + 20 = 70 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 70);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 70,
+                    amount: 70
+                }
+            );
             // Top delegations are full, new highest delegation is made
             assert_ok!(ParachainStaking::delegate(
                 RuntimeOrigin::signed(7),
@@ -6325,14 +7556,28 @@ fn delegation_events_convey_correct_position() {
             ));
             assert_events_emitted!(Event::Delegation {
                 delegator: 7,
-                locked_amount: 15,
+                locked_amount: Stake {
+                    power: 15,
+                    amount: 15
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 74 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 74,
+                        amount: 74
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 12 + 13 + 14 + 15 + 20 = 70 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 74);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 74,
+                    amount: 74
+                }
+            );
             // New delegation is added to the bottom
             assert_ok!(ParachainStaking::delegate(
                 RuntimeOrigin::signed(8),
@@ -6343,14 +7588,23 @@ fn delegation_events_convey_correct_position() {
             ));
             assert_events_emitted!(Event::Delegation {
                 delegator: 8,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
                 delegator_position: DelegatorAdded::AddedToBottom,
                 auto_compound: Percent::zero(),
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 12 + 13 + 14 + 15 + 20 = 70 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 74);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 74,
+                    amount: 74
+                }
+            );
             // 8 increases delegation to the top
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(8),
@@ -6360,12 +7614,21 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 8,
                 candidate: 1,
-                amount: 3,
+                more: Stake {
+                    power: 3,
+                    amount: 3
+                },
                 in_top: true,
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 13 + 13 + 14 + 15 + 20 = 75 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 75);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 75,
+                    amount: 75
+                }
+            );
             // 3 increases delegation but stays in bottom
             assert_ok!(ParachainStaking::delegator_bond_more(
                 RuntimeOrigin::signed(3),
@@ -6375,12 +7638,21 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationIncreased {
                 delegator: 3,
                 candidate: 1,
-                amount: 1,
+                more: Stake {
+                    power: 1,
+                    amount: 1
+                },
                 in_top: false,
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 13 + 13 + 14 + 15 + 20 = 75 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 75);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 75,
+                    amount: 75
+                }
+            );
             // 6 decreases delegation but stays in top
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(6),
@@ -6390,7 +7662,10 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationDecreaseScheduled {
                 delegator: 6,
                 candidate: 1,
-                amount_to_decrease: 2,
+                amount_to_decrease: Stake {
+                    power: 2,
+                    amount: 2
+                },
                 execute_round: 3,
             });
             roll_to(30);
@@ -6402,12 +7677,21 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationDecreased {
                 delegator: 6,
                 candidate: 1,
-                amount: 2,
+                less: Stake {
+                    power: 2,
+                    amount: 2
+                },
                 in_top: true,
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 12 + 13 + 13 + 15 + 20 = 73 (top 4 + self bond)ƒ
-            assert_eq!(collator1_state.total_counted, 73);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 73,
+                    amount: 73
+                }
+            );
             // 6 decreases delegation and is bumped to bottom
             assert_ok!(ParachainStaking::schedule_delegator_bond_less(
                 RuntimeOrigin::signed(6),
@@ -6417,7 +7701,10 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationDecreaseScheduled {
                 delegator: 6,
                 candidate: 1,
-                amount_to_decrease: 1,
+                amount_to_decrease: Stake {
+                    power: 1,
+                    amount: 1
+                },
                 execute_round: 9,
             });
             roll_to(40);
@@ -6429,12 +7716,21 @@ fn delegation_events_convey_correct_position() {
             assert_events_emitted!(Event::DelegationDecreased {
                 delegator: 6,
                 candidate: 1,
-                amount: 1,
+                less: Stake {
+                    power: 1,
+                    amount: 1
+                },
                 in_top: false,
             });
             let collator1_state = ParachainStaking::candidate_info(1).unwrap();
             // 12 + 13 + 13 + 15 + 20 = 73 (top 4 + self bond)
-            assert_eq!(collator1_state.total_counted, 73);
+            assert_eq!(
+                collator1_state.total_stake_counted,
+                Stake {
+                    power: 73,
+                    amount: 73
+                }
+            );
         });
 }
 
@@ -6463,23 +7759,35 @@ fn no_rewards_paid_until_after_reward_payment_delay() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 3,
-                    total_balance: 60,
+                    total_balance: Stake {
+                        power: 60,
+                        amount: 60
+                    },
                 },
             );
 
@@ -6488,23 +7796,35 @@ fn no_rewards_paid_until_after_reward_payment_delay() {
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 1,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 2,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 3,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 10,
                     round: 3,
                     selected_collators_number: 3,
-                    total_balance: 60,
+                    total_balance: Stake {
+                        power: 60,
+                        amount: 60
+                    },
                 },
             );
 
@@ -6564,18 +7884,27 @@ fn deferred_payment_storage_items_are_cleaned_up() {
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 1,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 2,
                     collator_account: 2,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 5,
                     round: 2,
                     selected_collators_number: 2,
-                    total_balance: 40,
+                    total_balance: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
             );
 
@@ -6614,18 +7943,27 @@ fn deferred_payment_storage_items_are_cleaned_up() {
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 1,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 3,
                     collator_account: 2,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 10,
                     round: 3,
                     selected_collators_number: 2,
-                    total_balance: 40,
+                    total_balance: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
             );
 
@@ -6685,18 +8023,27 @@ fn deferred_payment_storage_items_are_cleaned_up() {
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 2,
-                    total_exposed_amount: 20,
+                    total_exposed_amount: Stake {
+                        power: 20,
+                        amount: 20
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 2,
-                    total_balance: 40,
+                    total_balance: Stake {
+                        power: 40,
+                        amount: 40
+                    },
                 },
             );
 
@@ -6855,28 +8202,43 @@ fn deferred_payment_steady_state_event_flow() {
                     Event::CollatorChosen {
                         round: round as u32,
                         collator_account: 1,
-                        total_exposed_amount: 400,
+                        total_exposed_amount: Stake {
+                            power: 400,
+                            amount: 400
+                        },
                     },
                     Event::CollatorChosen {
                         round: round as u32,
                         collator_account: 2,
-                        total_exposed_amount: 400,
+                        total_exposed_amount: Stake {
+                            power: 400,
+                            amount: 400
+                        },
                     },
                     Event::CollatorChosen {
                         round: round as u32,
                         collator_account: 3,
-                        total_exposed_amount: 400,
+                        total_exposed_amount: Stake {
+                            power: 400,
+                            amount: 400
+                        },
                     },
                     Event::CollatorChosen {
                         round: round as u32,
                         collator_account: 4,
-                        total_exposed_amount: 400,
+                        total_exposed_amount: Stake {
+                            power: 400,
+                            amount: 400
+                        },
                     },
                     Event::NewRound {
                         starting_block: (round - 1) * 5,
                         round: round as u32,
                         selected_collators_number: 4,
-                        total_balance: 1600,
+                        total_balance: Stake {
+                            power: 1600,
+                            amount: 1600
+                        },
                     },
                 );
 
@@ -7014,7 +8376,10 @@ fn delegation_kicked_from_bottom_removes_pending_request() {
             assert_events_emitted!(Event::DelegationKicked {
                 delegator: 2,
                 candidate: 1,
-                unstaked_amount: 19,
+                unstaked_amount: Stake {
+                    power: 19,
+                    amount: 19
+                },
             });
             // ensure request DNE
             assert!(!ParachainStaking::delegation_scheduled_requests(&1)
@@ -7099,11 +8464,15 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_for_previous_rounds_but_not_f
             });
             let collator = ParachainStaking::candidate_info(1).expect("candidate must exist");
             assert_eq!(
-                1, collator.delegation_count,
+                collator.delegation_count, 1,
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7136,7 +8505,11 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_for_previous_rounds_but_not_f
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                20, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 20,
+                    amount: 20
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
         });
@@ -7171,11 +8544,15 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_when_request_cancelled() {
             });
             let collator = ParachainStaking::candidate_info(1).expect("candidate must exist");
             assert_eq!(
-                1, collator.delegation_count,
+                collator.delegation_count, 1,
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7195,12 +8572,16 @@ fn test_delegator_scheduled_for_revoke_is_rewarded_when_request_cancelled() {
             let collator_snapshot =
                 ParachainStaking::at_stake(ParachainStaking::round().current, 1);
             assert_eq!(
-                1,
                 collator_snapshot.delegations.len(),
+                1,
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
 
@@ -7247,7 +8628,10 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_for_previous_rounds_bu
                 execute_round: 3,
                 delegator: 2,
                 candidate: 1,
-                amount_to_decrease: 10,
+                amount_to_decrease: Stake {
+                    power: 10,
+                    amount: 10
+                },
             });
             let collator = ParachainStaking::candidate_info(1).expect("candidate must exist");
             assert_eq!(
@@ -7255,7 +8639,11 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_for_previous_rounds_bu
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                40, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 40,
+                    amount: 40
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7294,7 +8682,11 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_for_previous_rounds_bu
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
         });
@@ -7326,7 +8718,10 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_when_request_cancelled
                 execute_round: 3,
                 delegator: 2,
                 candidate: 1,
-                amount_to_decrease: 10,
+                amount_to_decrease: Stake {
+                    power: 10,
+                    amount: 10
+                },
             });
             let collator = ParachainStaking::candidate_info(1).expect("candidate must exist");
             assert_eq!(
@@ -7334,7 +8729,11 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_when_request_cancelled
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                40, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 40,
+                    amount: 40
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7365,7 +8764,11 @@ fn test_delegator_scheduled_for_bond_decrease_is_rewarded_when_request_cancelled
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                40, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 40,
+                    amount: 40
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
 
@@ -7416,7 +8819,11 @@ fn test_delegator_scheduled_for_leave_is_rewarded_for_previous_rounds_but_not_fo
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7444,12 +8851,16 @@ fn test_delegator_scheduled_for_leave_is_rewarded_for_previous_rounds_but_not_fo
             let collator_snapshot =
                 ParachainStaking::at_stake(ParachainStaking::round().current, 1);
             assert_eq!(
-                1,
                 collator_snapshot.delegations.len(),
+                1,
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                20, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 20,
+                    amount: 20
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
         });
@@ -7482,11 +8893,15 @@ fn test_delegator_scheduled_for_leave_is_rewarded_when_request_cancelled() {
             });
             let collator = ParachainStaking::candidate_info(1).expect("candidate must exist");
             assert_eq!(
-                1, collator.delegation_count,
+                collator.delegation_count, 1,
                 "collator's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator.total_counted,
+                collator.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator's total was reduced unexpectedly"
             );
 
@@ -7505,12 +8920,16 @@ fn test_delegator_scheduled_for_leave_is_rewarded_when_request_cancelled() {
             let collator_snapshot =
                 ParachainStaking::at_stake(ParachainStaking::round().current, 1);
             assert_eq!(
-                1,
                 collator_snapshot.delegations.len(),
+                1,
                 "collator snapshot's delegator count was reduced unexpectedly"
             );
             assert_eq!(
-                30, collator_snapshot.total,
+                collator_snapshot.total,
+                Stake {
+                    power: 30,
+                    amount: 30
+                },
                 "collator snapshot's total was reduced unexpectedly",
             );
 
@@ -7555,7 +8974,10 @@ fn test_delegation_request_exists_returns_true_when_decrease_exists() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5,
+                    }),
                 }],
             );
             assert!(ParachainStaking::delegation_request_exists(&1, &2));
@@ -7575,7 +8997,10 @@ fn test_delegation_request_exists_returns_true_when_revoke_exists() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Revoke(5),
+                    action: DelegationAction::Revoke(Stake {
+                        power: 5,
+                        amount: 5,
+                    }),
                 }],
             );
             assert!(ParachainStaking::delegation_request_exists(&1, &2));
@@ -7607,7 +9032,10 @@ fn test_delegation_request_revoke_exists_returns_false_when_decrease_exists() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Decrease(5),
+                    action: DelegationAction::Decrease(Stake {
+                        power: 5,
+                        amount: 5,
+                    }),
                 }],
             );
             assert!(!ParachainStaking::delegation_request_revoke_exists(&1, &2));
@@ -7627,7 +9055,10 @@ fn test_delegation_request_revoke_exists_returns_true_when_revoke_exists() {
                 vec![ScheduledRequest {
                     delegator: 2,
                     when_executable: 3,
-                    action: DelegationAction::Revoke(5),
+                    action: DelegationAction::Revoke(Stake {
+                        power: 5,
+                        amount: 5,
+                    }),
                 }],
             );
             assert!(ParachainStaking::delegation_request_revoke_exists(&1, &2));
@@ -7707,7 +9138,10 @@ fn test_hotfix_remove_delegation_requests_exited_candidates_errors_when_requests
                 vec![ScheduledRequest {
                     delegator: 10,
                     when_executable: 1,
-                    action: DelegationAction::Revoke(10),
+                    action: DelegationAction::Revoke(Stake {
+                        power: 10,
+                        amount: 10,
+                    }),
                 }],
             );
 
@@ -7902,7 +9336,10 @@ fn test_delegator_with_deprecated_status_leaving_can_execute_leave_delegators_as
             ));
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 2,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
 
             let state = <DelegatorState<Test>>::get(2);
@@ -8377,13 +9814,19 @@ fn test_rewards_do_not_auto_compound_on_payment_if_delegation_scheduled_revoke_e
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 500,
+                    total_exposed_amount: Stake {
+                        power: 500,
+                        amount: 500
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 1,
-                    total_balance: 500,
+                    total_balance: Stake {
+                        power: 500,
+                        amount: 500
+                    },
                 },
             );
 
@@ -8455,13 +9898,19 @@ fn test_rewards_auto_compound_on_payment_as_per_auto_compound_config() {
                 Event::CollatorChosen {
                     round: 4,
                     collator_account: 1,
-                    total_exposed_amount: 900,
+                    total_exposed_amount: Stake {
+                        power: 900,
+                        amount: 900
+                    },
                 },
                 Event::NewRound {
                     starting_block: 15,
                     round: 4,
                     selected_collators_number: 1,
-                    total_balance: 900,
+                    total_balance: Stake {
+                        power: 900,
+                        amount: 900
+                    },
                 },
             );
 
@@ -8604,9 +10053,17 @@ fn test_delegate_with_auto_compound_sets_auto_compound_config() {
             ));
             assert_events_emitted!(Event::Delegation {
                 delegator: 2,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 40 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 40,
+                        amount: 40
+                    }
+                },
                 auto_compound: Percent::from_percent(50),
             });
             assert_eq!(
@@ -8638,9 +10095,17 @@ fn test_delegate_with_auto_compound_skips_storage_but_emits_event_for_zero_auto_
             assert_eq!(0, ParachainStaking::auto_compounding_delegations(&1).len(),);
             assert_events_eq!(Event::Delegation {
                 delegator: 2,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 40 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 40,
+                        amount: 40
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
         });
@@ -8655,7 +10120,10 @@ fn test_delegate_with_auto_compound_reserves_balance() {
         .execute_with(|| {
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&2),
-                10
+                Ok(Stake {
+                    power: 10,
+                    amount: 10
+                })
             );
             assert_ok!(ParachainStaking::delegate_with_auto_compound(
                 RuntimeOrigin::signed(2),
@@ -8666,7 +10134,13 @@ fn test_delegate_with_auto_compound_reserves_balance() {
                 0,
                 0,
             ));
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&2), 0);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&2),
+                Ok(Stake {
+                    power: 0,
+                    amount: 0
+                })
+            );
         });
 }
 
@@ -8689,9 +10163,21 @@ fn test_delegate_with_auto_compound_updates_delegator_state() {
             ));
             let delegator_state =
                 ParachainStaking::delegator_state(2).expect("just delegated => exists");
-            assert_eq!(delegator_state.total(), 10);
+            assert_eq!(
+                delegator_state.total(),
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
             assert_eq!(delegator_state.delegations.0[0].owner, 1);
-            assert_eq!(delegator_state.delegations.0[0].amount, 10);
+            assert_eq!(
+                delegator_state.delegations.0[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -8704,7 +10190,13 @@ fn test_delegate_with_auto_compound_updates_collator_state() {
         .execute_with(|| {
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("registered in genesis");
-            assert_eq!(candidate_state.total_counted, 30);
+            assert_eq!(
+                candidate_state.total_stake_counted,
+                Stake {
+                    power: 30,
+                    amount: 30
+                }
+            );
             let top_delegations =
                 ParachainStaking::top_delegations(1).expect("registered in genesis");
             assert!(top_delegations.delegations.is_empty());
@@ -8720,12 +10212,30 @@ fn test_delegate_with_auto_compound_updates_collator_state() {
             ));
             let candidate_state =
                 ParachainStaking::candidate_info(1).expect("just delegated => exists");
-            assert_eq!(candidate_state.total_counted, 40);
+            assert_eq!(
+                candidate_state.total_stake_counted,
+                Stake {
+                    power: 40,
+                    amount: 40
+                }
+            );
             let top_delegations =
                 ParachainStaking::top_delegations(1).expect("just delegated => exists");
             assert_eq!(top_delegations.delegations[0].owner, 2);
-            assert_eq!(top_delegations.delegations[0].amount, 10);
-            assert_eq!(top_delegations.total, 10);
+            assert_eq!(
+                top_delegations.delegations[0].stake,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
+            assert_eq!(
+                top_delegations.total,
+                Stake {
+                    power: 10,
+                    amount: 10
+                }
+            );
         });
 }
 
@@ -8861,11 +10371,17 @@ fn test_delegate_with_auto_compound_can_delegate_if_greater_than_lowest_bottom()
             assert_events_emitted!(Event::DelegationKicked {
                 delegator: 10,
                 candidate: 1,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
             assert_events_emitted!(Event::DelegatorLeft {
                 delegator: 10,
-                unstaked_amount: 10
+                unstaked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                }
             });
         });
 }
@@ -8981,9 +10497,17 @@ fn test_delegate_skips_auto_compound_storage_but_emits_event_for_zero_auto_compo
             assert_eq!(1, ParachainStaking::auto_compounding_delegations(&1).len(),);
             assert_events_eq!(Event::Delegation {
                 delegator: 2,
-                locked_amount: 10,
+                locked_amount: Stake {
+                    power: 10,
+                    amount: 10
+                },
                 candidate: 1,
-                delegator_position: DelegatorAdded::AddedToTop { new_total: 50 },
+                delegator_position: DelegatorAdded::AddedToTop {
+                    new_total: Stake {
+                        power: 50,
+                        amount: 50
+                    }
+                },
                 auto_compound: Percent::zero(),
             });
         });

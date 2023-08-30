@@ -19,7 +19,7 @@ pub struct Vesting<Balance, BlockNumber> {
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Copy, Clone, PartialEq, Eq)]
 pub struct VesterState<Balance, BlockNumber> {
     pub locking_period: BlockNumber,
-    pub weight: Balance,
+    pub power: Balance,
     pub stake: Balance,
     pub accrued: Balance,
     pub s: Balance,
@@ -28,9 +28,9 @@ pub struct VesterState<Balance, BlockNumber> {
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq, Default)]
 pub struct PoolState<Balance> {
-    pub total_weight: Balance,
+    pub total_power: Balance,
     pub total_stake: Balance,
-    /// Sum `s = sum_k=0^t [reward_t / weight_t]` as a tuple `(upper, lower)` tracking range of possible value of s
+    /// Sum `s = sum_k=0^t [reward_t / power_t]` as a tuple `(upper, lower)` tracking range of possible value of s
     /// that we don't know exactly due to rounding of fixed point numbers.
     pub s: (Balance, Balance),
 }
