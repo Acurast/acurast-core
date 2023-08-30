@@ -5,7 +5,7 @@
 use crate as pallet_parachain_staking;
 use crate::{
     pallet, AwardedPts, Config, Event as ParachainStakingEvent, InflationInfoWithoutRound, Points,
-    Range, COLLATOR_LOCK_ID, DELEGATOR_LOCK_ID,
+    Range, Stake, COLLATOR_LOCK_ID, DELEGATOR_LOCK_ID,
 };
 use frame_support::{
     construct_runtime, parameter_types,
@@ -133,9 +133,8 @@ impl Config for Test {
     type MinDelegation = MinDelegation;
     type DefaultInflationConfig = ();
     type BlockAuthor = BlockAuthor;
-    type OnCollatorPayout = ();
-    type PayoutCollatorReward = ();
     type OnNewRound = ();
+    type StakingHooks = ();
     type WeightInfo = ();
 }
 
@@ -526,20 +525,23 @@ fn geneses() {
             // collators
             assert_eq!(
                 ParachainStaking::get_collator_stakable_free_balance(&1),
-                500
+                Ok(500)
             );
             assert_eq!(query_lock_amount(1, COLLATOR_LOCK_ID), Some(500));
             assert!(ParachainStaking::is_candidate(&1));
             assert_eq!(query_lock_amount(2, COLLATOR_LOCK_ID), Some(200));
             assert_eq!(
                 ParachainStaking::get_collator_stakable_free_balance(&2),
-                100
+                Ok(100)
             );
             assert!(ParachainStaking::is_candidate(&2));
             // delegators
             for x in 3..7 {
                 assert!(ParachainStaking::is_delegator(&x));
-                assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&x), 0);
+                assert_eq!(
+                    ParachainStaking::get_delegator_stakable_free_balance(&x),
+                    Ok(Stake::new(0, 0))
+                );
                 assert_eq!(query_lock_amount(x, DELEGATOR_LOCK_ID), Some(100));
             }
             // uninvolved
@@ -550,19 +552,37 @@ fn geneses() {
             assert_eq!(query_lock_amount(7, DELEGATOR_LOCK_ID), None);
             assert_eq!(
                 ParachainStaking::get_delegator_stakable_free_balance(&7),
-                100
+                Ok(Stake {
+                    power: 100,
+                    amount: 100,
+                })
             );
             assert_eq!(query_lock_amount(8, DELEGATOR_LOCK_ID), None);
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&8), 9);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&8),
+                Ok(Stake {
+                    power: 9,
+                    amount: 9,
+                })
+            );
             assert_eq!(query_lock_amount(9, DELEGATOR_LOCK_ID), None);
-            assert_eq!(ParachainStaking::get_delegator_stakable_free_balance(&9), 4);
+            assert_eq!(
+                ParachainStaking::get_delegator_stakable_free_balance(&9),
+                Ok(Stake::new(4, 4))
+            );
             // no collator staking locks
             assert_eq!(
                 ParachainStaking::get_collator_stakable_free_balance(&7),
-                100
+                Ok(100)
             );
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&8), 9);
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&9), 4);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&8),
+                Ok(9)
+            );
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&9),
+                Ok(4)
+            );
         });
     ExtBuilder::default()
         .with_balances(vec![
@@ -592,18 +612,24 @@ fn geneses() {
             for x in 1..5 {
                 assert!(ParachainStaking::is_candidate(&x));
                 assert_eq!(query_lock_amount(x, COLLATOR_LOCK_ID), Some(20));
-                assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&x), 80);
+                assert_eq!(
+                    ParachainStaking::get_collator_stakable_free_balance(&x),
+                    Ok(80)
+                );
             }
             assert!(ParachainStaking::is_candidate(&5));
             assert_eq!(query_lock_amount(5, COLLATOR_LOCK_ID), Some(10));
-            assert_eq!(ParachainStaking::get_collator_stakable_free_balance(&5), 90);
+            assert_eq!(
+                ParachainStaking::get_collator_stakable_free_balance(&5),
+                Ok(90)
+            );
             // delegators
             for x in 6..11 {
                 assert!(ParachainStaking::is_delegator(&x));
                 assert_eq!(query_lock_amount(x, DELEGATOR_LOCK_ID), Some(10));
                 assert_eq!(
                     ParachainStaking::get_delegator_stakable_free_balance(&x),
-                    90
+                    Ok(Stake::new(90, 90))
                 );
             }
         });
@@ -682,13 +708,13 @@ fn test_assert_events_eq_fails_if_event_missing() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::NewRound {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 10,
+                total_balance: Stake::new(10, 10),
             },
         );
     });
@@ -704,13 +730,13 @@ fn test_assert_events_eq_fails_if_event_extra() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::NewRound {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 10,
+                total_balance: Stake::new(10, 10),
             },
             ParachainStakingEvent::Rewarded {
                 account: 1,
@@ -738,13 +764,13 @@ fn test_assert_events_eq_fails_if_event_wrong_order() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::NewRound {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 10,
+                total_balance: Stake::new(10, 10),
             },
         );
     });
@@ -760,13 +786,13 @@ fn test_assert_events_eq_fails_if_event_wrong_value() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::NewRound {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 10,
+                total_balance: Stake::new(10, 10),
             },
             ParachainStakingEvent::Rewarded {
                 account: 1,
@@ -800,13 +826,13 @@ fn test_assert_events_eq_passes_if_all_events_present_multiple() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::NewRound {
                 starting_block: 10,
                 round: 2,
                 selected_collators_number: 1,
-                total_balance: 10,
+                total_balance: Stake::new(10, 10),
             },
             ParachainStakingEvent::Rewarded {
                 account: 1,
@@ -867,7 +893,7 @@ fn test_assert_events_emitted_passes_if_all_events_present_multiple() {
             ParachainStakingEvent::CollatorChosen {
                 round: 2,
                 collator_account: 1,
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake::new(10, 10),
             },
             ParachainStakingEvent::Rewarded {
                 account: 1,
@@ -1010,7 +1036,10 @@ fn test_assert_events_emitted_match_passes_if_all_events_present_multiple() {
 
         assert_events_emitted_match!(
             ParachainStakingEvent::CollatorChosen {
-                total_exposed_amount: 10,
+                total_exposed_amount: Stake {
+                    amount: 10,
+                    power: 10
+                },
                 ..
             },
             ParachainStakingEvent::Rewarded {
@@ -1026,13 +1055,13 @@ fn inject_test_events() {
         ParachainStakingEvent::CollatorChosen {
             round: 2,
             collator_account: 1,
-            total_exposed_amount: 10,
+            total_exposed_amount: Stake::new(10, 10),
         },
         ParachainStakingEvent::NewRound {
             starting_block: 10,
             round: 2,
             selected_collators_number: 1,
-            total_balance: 10,
+            total_balance: Stake::new(10, 10),
         },
         ParachainStakingEvent::Rewarded {
             account: 1,

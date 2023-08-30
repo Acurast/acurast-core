@@ -4,16 +4,17 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 //! Benchmarking
-use crate::{
-    AwardedPts, BalanceOf, Call, CandidateBondLessRequest, Config, DelegationAction, Pallet,
-    ParachainBondConfig, ParachainBondInfo, Points, Range, RewardPayment, Round, ScheduledRequest,
-    Staked, TopDelegations,
-};
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, vec};
 use frame_support::traits::{Currency, Get, OnFinalize, OnInitialize};
 use frame_system::RawOrigin;
 use sp_runtime::{Perbill, Percent};
 use sp_std::vec::Vec;
+
+use crate::{
+    AwardedPts, BalanceOf, Call, CandidateBondLessRequest, Config, DelegationAction, Pallet,
+    ParachainBondConfig, ParachainBondInfo, Points, Range, RewardPayment, Round, ScheduledRequest,
+    Stake, Staked, TopDelegations,
+};
 
 /// Minimum collator candidate stake
 fn min_candidate_stk<T: Config>() -> BalanceOf<T> {
@@ -369,8 +370,8 @@ benchmarks! {
     verify {
         let expected_bond = more * 2u32.into();
         assert_eq!(
-            Pallet::<T>::candidate_info(&caller).expect("candidate was created, qed").bond,
-            expected_bond,
+            Pallet::<T>::candidate_info(&caller).expect("candidate was created, qed").stake,
+            Stake{ power: expected_bond, amount: expected_bond},
         );
     }
 
@@ -416,8 +417,8 @@ benchmarks! {
         )?;
     } verify {
         assert_eq!(
-            Pallet::<T>::candidate_info(&caller).expect("candidate was created, qed").bond,
-            min_candidate_stk,
+            Pallet::<T>::candidate_info(&caller).expect("candidate was created, qed").stake,
+            Stake{ power: min_candidate_stk, amount: min_candidate_stk},
         );
     }
 
@@ -624,7 +625,7 @@ benchmarks! {
             vec![ScheduledRequest {
                 delegator: caller,
                 when_executable: 3,
-                action: DelegationAction::Revoke(bond),
+                action: DelegationAction::Revoke(Stake{power: bond, amount: bond}),
             }],
         );
     }
@@ -651,7 +652,7 @@ benchmarks! {
         let expected_bond = bond * 2u32.into();
         assert_eq!(
             Pallet::<T>::delegator_state(&caller).expect("candidate was created, qed").total,
-            expected_bond,
+            Stake {power: expected_bond, amount: expected_bond},
         );
     }
 
@@ -681,7 +682,7 @@ benchmarks! {
             vec![ScheduledRequest {
                 delegator: caller,
                 when_executable: 3,
-                action: DelegationAction::Decrease(bond_less),
+                action: DelegationAction::Decrease(Stake{power: bond_less, amount: bond_less}),
             }],
         );
     }
@@ -753,7 +754,7 @@ benchmarks! {
         let expected = total - bond_less;
         assert_eq!(
             Pallet::<T>::delegator_state(&caller).expect("candidate was created, qed").total,
-            expected,
+            Stake{power: expected, amount: expected},
         );
     }
 
@@ -839,7 +840,8 @@ benchmarks! {
         //  <ParachainBondInfo<T>>
         //  ensure parachain bond account exists so that deposit_into_existing succeeds
         <Points<T>>::insert(payout_round, 100);
-        <Staked<T>>::insert(payout_round, min_candidate_stk::<T>());
+        let min_stk = min_candidate_stk::<T>();
+        <Staked<T>>::insert(payout_round, Stake{power: min_stk, amount: min_stk});
 
         // set an account in the bond config so that we will measure the payout to it
         let account = create_funded_user::<T>(
@@ -893,7 +895,7 @@ benchmarks! {
     }: { _results = Some(Pallet::<T>::get_rewardable_delegators(&collator)); }
     verify {
         let counted_delegations = _results.expect("get_rewardable_delegators returned some results");
-        assert!(counted_delegations.uncounted_stake == 0u32.into());
+        assert!(counted_delegations.uncounted_stake == Stake{power: 0u32.into(), amount: 0u32.into()});
         assert!(counted_delegations.rewardable_delegations.len() as u32 == y);
         let top_delegations = <TopDelegations<T>>::get(collator.clone())
             .expect("delegations were set for collator through delegate() calls");
@@ -998,15 +1000,15 @@ benchmarks! {
         for delegator in &delegators {
             delegations.push(BondWithAutoCompound {
                 owner: delegator.clone(),
-                amount: 100u32.into(),
+                stake: Stake{power: 100u32.into(), amount: 100u32.into()},
                 auto_compound: Percent::zero(),
             });
         }
 
         <AtStake<T>>::insert(round_for_payout, &sole_collator, CollatorSnapshot {
-            bond: 1_000u32.into(),
+            stake: Stake{power: 1_000u32.into(), amount: 1_000u32.into()},
             delegations,
-            total: 1_000_000u32.into(),
+            total: Stake{power: 1_000_000u32.into(), amount: 1_000_000u32.into()},
         });
 
         <Points<T>>::insert(round_for_payout, 100);
@@ -1251,7 +1253,7 @@ benchmarks! {
         )?;
         let original_free_balance = T::Currency::free_balance(&collator);
     }: {
-        Pallet::<T>::mint_collator_reward(1u32.into(), collator.clone(), 50u32.into())
+        Pallet::<T>::mint_collator_reward(1u32.into(), &collator, 50u32.into())
     }
     verify {
         assert_eq!(T::Currency::free_balance(&collator), original_free_balance + 50u32.into());
@@ -1260,10 +1262,11 @@ benchmarks! {
 
 #[cfg(test)]
 mod tests {
-    use crate::benchmarks::*;
-    use crate::mock::Test;
     use frame_support::assert_ok;
     use sp_io::TestExternalities;
+
+    use crate::benchmarks::*;
+    use crate::mock::Test;
 
     pub fn new_test_ext() -> TestExternalities {
         let t = frame_system::GenesisConfig::default()

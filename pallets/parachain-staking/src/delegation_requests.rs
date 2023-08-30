@@ -3,29 +3,30 @@
 
 //! Scheduled requests functionality for delegators
 
+use frame_support::ensure;
+use frame_support::traits::Get;
+use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
+use num_traits::Saturating;
+use parity_scale_codec::{Decode, Encode};
+use scale_info::TypeInfo;
+use sp_std::{vec, vec::Vec};
+
 use crate::pallet::{
     BalanceOf, CandidateInfo, Config, DelegationScheduledRequests, DelegatorState, Error, Event,
     Pallet, Round, RoundIndex, Total,
 };
-use crate::{auto_compound::AutoCompoundDelegations, Delegator, DelegatorStatus};
-use frame_support::ensure;
-use frame_support::traits::Get;
-use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
-use parity_scale_codec::{Decode, Encode};
-use scale_info::TypeInfo;
-use sp_runtime::traits::Saturating;
-use sp_std::{vec, vec::Vec};
+use crate::{auto_compound::AutoCompoundDelegations, DelegatorOf, DelegatorStatus, Stake, StakeOf};
 
 /// An action that can be performed upon a delegation
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, PartialOrd, Ord)]
 pub enum DelegationAction<Balance> {
-    Revoke(Balance),
-    Decrease(Balance),
+    Revoke(Stake<Balance>),
+    Decrease(Stake<Balance>),
 }
 
 impl<Balance: Copy> DelegationAction<Balance> {
     /// Returns the wrapped amount value.
-    pub fn amount(&self) -> Balance {
+    pub fn amount(&self) -> Stake<Balance> {
         match self {
             DelegationAction::Revoke(amount) => *amount,
             DelegationAction::Decrease(amount) => *amount,
@@ -101,7 +102,7 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn delegation_schedule_bond_decrease(
         collator: T::AccountId,
         delegator: T::AccountId,
-        decrease_amount: BalanceOf<T>,
+        decrease_amount: StakeOf<T>,
     ) -> DispatchResultWithPostInfo {
         let mut state = <DelegatorState<T>>::get(&delegator).ok_or(<Error<T>>::DelegatorDNE)?;
         let mut scheduled_requests = <DelegationScheduledRequests<T>>::get(&collator);
@@ -120,18 +121,23 @@ impl<T: Config> Pallet<T> {
             bonded_amount > decrease_amount,
             <Error<T>>::DelegatorBondBelowMin
         );
-        let new_amount: BalanceOf<T> = (bonded_amount - decrease_amount).into();
+        let new_amount: StakeOf<T> = bonded_amount - decrease_amount;
         ensure!(
-            new_amount >= T::MinDelegation::get(),
+            new_amount.amount >= T::MinDelegation::get(),
             <Error<T>>::DelegationBelowMin
         );
 
         // Net Total is total after pending orders are executed
-        let net_total = state.total().saturating_sub(state.less_total);
+        let total: StakeOf<T> = state.total().into();
+        let less_total: StakeOf<T> = state.less_total.into();
+        let net_total = total.saturating_sub(less_total);
         // Net Total is always >= MinDelegatorStk
-        let max_subtracted_amount = net_total.saturating_sub(T::MinDelegatorStk::get().into());
+        let max_subtracted_amount = sp_arithmetic::traits::Saturating::saturating_sub(
+            net_total.amount,
+            T::MinDelegatorStk::get().into(),
+        );
         ensure!(
-            decrease_amount <= max_subtracted_amount,
+            decrease_amount.amount <= max_subtracted_amount,
             <Error<T>>::DelegatorBondBelowMin
         );
 
@@ -180,7 +186,7 @@ impl<T: Config> Pallet<T> {
 
     fn cancel_request_with_state(
         delegator: &T::AccountId,
-        state: &mut Delegator<T::AccountId, BalanceOf<T>>,
+        state: &mut DelegatorOf<T>,
         scheduled_requests: &mut Vec<ScheduledRequest<T::AccountId, BalanceOf<T>>>,
     ) -> Option<ScheduledRequest<T::AccountId, BalanceOf<T>>> {
         let request_idx = scheduled_requests
@@ -213,16 +219,16 @@ impl<T: Config> Pallet<T> {
         );
 
         match request.action {
-            DelegationAction::Revoke(amount) => {
+            DelegationAction::Revoke(stake) => {
                 // revoking last delegation => leaving set of delegators
                 let leaving = if state.delegations.0.len() == 1usize {
                     true
                 } else {
                     ensure!(
-                        state
-                            .total()
-                            .saturating_sub(T::MinDelegatorStk::get().into())
-                            >= amount,
+                        sp_arithmetic::traits::Saturating::saturating_sub(
+                            state.total().amount,
+                            T::MinDelegatorStk::get().into()
+                        ) >= stake.amount,
                         <Error<T>>::DelegatorBondBelowMin
                     );
                     false
@@ -260,26 +266,25 @@ impl<T: Config> Pallet<T> {
             }
             DelegationAction::Decrease(_) => {
                 // remove from pending requests
-                let amount = scheduled_requests.remove(request_idx).action.amount();
-                state.less_total = state.less_total.saturating_sub(amount);
+                let less = scheduled_requests.remove(request_idx).action.amount();
+                state.less_total = state.less_total.saturating_sub(less);
 
                 // decrease delegation
                 for bond in &mut state.delegations.0 {
                     if bond.owner == collator {
-                        return if bond.amount > amount {
-                            let amount_before: BalanceOf<T> = bond.amount.into();
-                            bond.amount = bond.amount.saturating_sub(amount);
+                        return if bond.stake > less {
+                            let amount_before: StakeOf<T> = bond.stake.into();
+                            bond.stake = bond.stake.saturating_sub(less);
                             let mut collator_info = <CandidateInfo<T>>::get(&collator)
                                 .ok_or(<Error<T>>::CandidateDNE)?;
 
-                            state.total_sub_if::<T, _>(amount, |total| {
-                                let new_total: BalanceOf<T> = total.into();
+                            state.total_sub_if::<T, _>(less, |total| {
                                 ensure!(
-                                    new_total >= T::MinDelegation::get(),
+                                    total.amount >= T::MinDelegation::get(),
                                     <Error<T>>::DelegationBelowMin
                                 );
                                 ensure!(
-                                    new_total >= T::MinDelegatorStk::get(),
+                                    total.amount >= T::MinDelegatorStk::get(),
                                     <Error<T>>::DelegatorBondBelowMin
                                 );
 
@@ -291,10 +296,10 @@ impl<T: Config> Pallet<T> {
                                 &collator,
                                 delegator.clone(),
                                 amount_before,
-                                amount,
+                                less,
                             )?;
                             <CandidateInfo<T>>::insert(&collator, collator_info);
-                            let new_total_staked = <Total<T>>::get().saturating_sub(amount);
+                            let new_total_staked = <Total<T>>::get().saturating_sub(less);
                             <Total<T>>::put(new_total_staked);
 
                             <DelegationScheduledRequests<T>>::insert(
@@ -305,7 +310,7 @@ impl<T: Config> Pallet<T> {
                             Self::deposit_event(Event::DelegationDecreased {
                                 delegator,
                                 candidate: collator.clone(),
-                                amount,
+                                less,
                                 in_top,
                             });
                             Ok(().into())
@@ -342,7 +347,7 @@ impl<T: Config> Pallet<T> {
         let mut existing_revoke_count = 0;
         for bond in state.delegations.0.clone() {
             let collator = bond.owner;
-            let bonded_amount = bond.amount;
+            let bonded_amount = bond.stake;
             let mut scheduled_requests = <DelegationScheduledRequests<T>>::get(&collator);
 
             // cancel any existing requests
@@ -460,7 +465,7 @@ impl<T: Config> Pallet<T> {
                 if let Err(error) = Self::delegator_leaves_candidate(
                     bond.owner.clone(),
                     delegator.clone(),
-                    bond.amount,
+                    bond.stake,
                 ) {
                     log::warn!(
                         "STORAGE CORRUPTED \nDelegator leaving collator failed with error: {:?}",
@@ -505,7 +510,7 @@ impl<T: Config> Pallet<T> {
             let collator = bond.owner;
 
             if let Err(error) =
-                Self::delegator_leaves_candidate(collator.clone(), delegator.clone(), bond.amount)
+                Self::delegator_leaves_candidate(collator.clone(), delegator.clone(), bond.stake)
             {
                 log::warn!(
                     "STORAGE CORRUPTED \nDelegator {:?} leaving collator failed with error: {:?}",
@@ -546,7 +551,7 @@ impl<T: Config> Pallet<T> {
     pub(crate) fn delegation_remove_request_with_state(
         collator: &T::AccountId,
         delegator: &T::AccountId,
-        state: &mut Delegator<T::AccountId, BalanceOf<T>>,
+        state: &mut DelegatorOf<T>,
     ) {
         let mut scheduled_requests = <DelegationScheduledRequests<T>>::get(collator);
 
@@ -584,31 +589,47 @@ impl<T: Config> Pallet<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{mock::Test, set::OrderedSet, Bond, Delegator};
+
     use super::*;
-    use crate::{mock::Test, set::OrderedSet, Bond};
 
     #[test]
     fn test_cancel_request_with_state_removes_request_for_correct_delegator_and_updates_state() {
         let mut state = Delegator {
             id: 1,
             delegations: OrderedSet::from(vec![Bond {
-                amount: 100,
+                stake: Stake {
+                    power: 100,
+                    amount: 100,
+                },
                 owner: 2,
             }]),
-            total: 100,
-            less_total: 100,
+            total: Stake {
+                power: 100,
+                amount: 100,
+            },
+            less_total: Stake {
+                power: 100,
+                amount: 100,
+            },
             status: crate::DelegatorStatus::Active,
         };
         let mut scheduled_requests = vec![
             ScheduledRequest {
                 delegator: 1,
                 when_executable: 1,
-                action: DelegationAction::Revoke(100),
+                action: DelegationAction::Revoke(Stake {
+                    power: 100,
+                    amount: 100,
+                }),
             },
             ScheduledRequest {
                 delegator: 2,
                 when_executable: 1,
-                action: DelegationAction::Decrease(50),
+                action: DelegationAction::Decrease(Stake {
+                    power: 50,
+                    amount: 50,
+                }),
             },
         ];
         let removed_request =
@@ -619,7 +640,10 @@ mod tests {
             Some(ScheduledRequest {
                 delegator: 1,
                 when_executable: 1,
-                action: DelegationAction::Revoke(100),
+                action: DelegationAction::Revoke(Stake {
+                    power: 100,
+                    amount: 100,
+                }),
             })
         );
         assert_eq!(
@@ -627,7 +651,10 @@ mod tests {
             vec![ScheduledRequest {
                 delegator: 2,
                 when_executable: 1,
-                action: DelegationAction::Decrease(50),
+                action: DelegationAction::Decrease(Stake {
+                    power: 50,
+                    amount: 50,
+                }),
             },]
         );
         assert_eq!(
@@ -635,11 +662,20 @@ mod tests {
             Delegator {
                 id: 1,
                 delegations: OrderedSet::from(vec![Bond {
-                    amount: 100,
+                    stake: Stake {
+                        power: 100,
+                        amount: 100,
+                    },
                     owner: 2,
                 }]),
-                total: 100,
-                less_total: 0,
+                total: Stake {
+                    power: 100,
+                    amount: 100,
+                },
+                less_total: Stake {
+                    power: 0,
+                    amount: 0,
+                },
                 status: crate::DelegatorStatus::Active,
             }
         );
@@ -650,17 +686,29 @@ mod tests {
         let mut state = Delegator {
             id: 1,
             delegations: OrderedSet::from(vec![Bond {
-                amount: 100,
+                stake: Stake {
+                    power: 100,
+                    amount: 200,
+                },
                 owner: 2,
             }]),
-            total: 100,
-            less_total: 100,
+            total: Stake {
+                power: 100,
+                amount: 200,
+            },
+            less_total: Stake {
+                power: 100,
+                amount: 200,
+            },
             status: crate::DelegatorStatus::Active,
         };
         let mut scheduled_requests = vec![ScheduledRequest {
             delegator: 2,
             when_executable: 1,
-            action: DelegationAction::Decrease(50),
+            action: DelegationAction::Decrease(Stake {
+                power: 50,
+                amount: 100,
+            }),
         }];
         let removed_request =
             <Pallet<Test>>::cancel_request_with_state(&1, &mut state, &mut scheduled_requests);
@@ -671,7 +719,10 @@ mod tests {
             vec![ScheduledRequest {
                 delegator: 2,
                 when_executable: 1,
-                action: DelegationAction::Decrease(50),
+                action: DelegationAction::Decrease(Stake {
+                    power: 50,
+                    amount: 100,
+                }),
             },]
         );
         assert_eq!(
@@ -679,11 +730,20 @@ mod tests {
             Delegator {
                 id: 1,
                 delegations: OrderedSet::from(vec![Bond {
-                    amount: 100,
+                    stake: Stake {
+                        power: 100,
+                        amount: 200,
+                    },
                     owner: 2,
                 }]),
-                total: 100,
-                less_total: 100,
+                total: Stake {
+                    power: 100,
+                    amount: 200,
+                },
+                less_total: Stake {
+                    power: 100,
+                    amount: 200,
+                },
                 status: crate::DelegatorStatus::Active,
             }
         );
