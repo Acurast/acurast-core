@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok};
+use sp_arithmetic::Perbill;
 
 use crate::{mock::*, stub::*, types::*, Error, Event};
 
@@ -47,18 +48,22 @@ fn test_single_vest_no_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
                         cooldown_started: None,
                     },
                 )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -74,7 +79,7 @@ fn test_single_vest_no_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -105,7 +110,7 @@ fn test_single_vest_rewards() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (0, 0),
             },
@@ -117,7 +122,7 @@ fn test_single_vest_rewards() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (4400000, 5399999),
             },
@@ -149,7 +154,7 @@ fn test_single_vest_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -157,11 +162,15 @@ fn test_single_vest_rewards() {
                     },
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 44_000_000,
                         s: 5399999,
@@ -181,7 +190,7 @@ fn test_single_vest_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 61_000_005,
                         s: 10799998,
@@ -212,7 +221,7 @@ fn test_single_revest_in_cooldown() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (0, 0),
             },
@@ -224,7 +233,7 @@ fn test_single_revest_in_cooldown() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (4400000, 5399999),
             },
@@ -275,7 +284,7 @@ fn test_single_revest_in_cooldown() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -283,11 +292,15 @@ fn test_single_revest_in_cooldown() {
                     },
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 44_000_000,
                         s: 5399999,
@@ -295,11 +308,15 @@ fn test_single_revest_in_cooldown() {
                     }
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerIncreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::Revested(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 61000005,
                         s: 10799998,
@@ -308,11 +325,15 @@ fn test_single_revest_in_cooldown() {
                     true
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 85000025,
                         s: 16199997,
@@ -331,7 +352,7 @@ fn test_single_revest_in_cooldown() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 85000025,
                         s: 16199997,
@@ -362,7 +383,7 @@ fn test_single_revest_before_cooldown() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (0, 0),
             },
@@ -374,7 +395,7 @@ fn test_single_revest_before_cooldown() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 10_000_000,
+                total_power: 10_000_000,
                 total_stake: 10u128 * UNIT,
                 s: (4400000, 5399999),
             },
@@ -416,7 +437,7 @@ fn test_single_revest_before_cooldown() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -424,11 +445,15 @@ fn test_single_revest_before_cooldown() {
                     },
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerIncreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::Revested(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 20000000,
+                        power: 20000000,
                         stake: 20 * UNIT,
                         accrued: 44000000,
                         s: 5399999,
@@ -436,11 +461,15 @@ fn test_single_revest_before_cooldown() {
                     },
                     false
                 )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10000000,
+                        power: 10000000,
                         stake: 20 * UNIT,
                         accrued: 44_000_000,
                         s: 5399999,
@@ -460,7 +489,7 @@ fn test_single_revest_before_cooldown() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10000000,
+                        power: 10000000,
                         stake: 20 * UNIT,
                         accrued: 78000010,
                         s: 10799998,
@@ -500,7 +529,7 @@ fn test_multiple_vest_rewards() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 20_000_000,
+                total_power: 20_000_000,
                 total_stake: 30u128 * UNIT,
                 s: (0, 0),
             },
@@ -512,7 +541,7 @@ fn test_multiple_vest_rewards() {
         assert_eq!(
             AcurastVesting::pool(),
             PoolState {
-                total_weight: 20_000_000,
+                total_power: 20_000_000,
                 total_stake: 30u128 * UNIT,
                 s: (2200000, 3199999),
             },
@@ -547,7 +576,7 @@ fn test_multiple_vest_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -562,7 +591,7 @@ fn test_multiple_vest_rewards() {
                     charlie_account_id(),
                     VesterState {
                         locking_period: 50,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 20 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -570,22 +599,30 @@ fn test_multiple_vest_rewards() {
                     },
                 )),
                 RuntimeEvent::AcurastVesting(Event::RewardDistributed(44 * UNIT)),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 22_000_000,
                         s: 3199999,
                         cooldown_started: Some(26),
                     }
                 )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    charlie_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     charlie_account_id(),
                     VesterState {
                         locking_period: 50,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 20 * UNIT,
                         accrued: 22_000_000,
                         s: 3199999,
@@ -604,7 +641,7 @@ fn test_multiple_vest_rewards() {
                     charlie_account_id(),
                     VesterState {
                         locking_period: 50,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 20 * UNIT,
                         accrued: 22_000_000,
                         s: 3199999,
@@ -623,7 +660,7 @@ fn test_multiple_vest_rewards() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 22_000_000,
                         s: 3199999,
@@ -758,18 +795,22 @@ fn test_cannot_revest_with_shorter_locking_period_() {
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 10_000_000,
+                        power: 10_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
                         cooldown_started: None,
                     },
                 )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::PowerDecreased(
+                    alice_account_id(),
+                    Perbill::from_percent(50)
+                )),
                 RuntimeEvent::AcurastVesting(Event::CooldownStarted(
                     alice_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,
@@ -786,7 +827,7 @@ fn test_cannot_revest_with_shorter_locking_period_() {
                     bob_account_id(),
                     VesterState {
                         locking_period: 100,
-                        weight: 5_000_000,
+                        power: 5_000_000,
                         stake: 10 * UNIT,
                         accrued: 0,
                         s: 0,

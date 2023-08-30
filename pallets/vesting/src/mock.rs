@@ -1,13 +1,15 @@
 use std::marker::PhantomData;
 
-use frame_support::parameter_types;
+use frame_support::pallet_prelude::*;
 use frame_support::{
+    parameter_types,
     sp_runtime::{
         generic,
         traits::{AccountIdLookup, BlakeTwo256},
     },
     traits::Everything,
 };
+use sp_arithmetic::Perbill;
 use sp_runtime::DispatchError;
 use sp_std::prelude::*;
 
@@ -97,6 +99,7 @@ impl mock_pallet::Config for Test {
 #[frame_support::pallet]
 pub mod mock_pallet {
     use frame_support::pallet_prelude::*;
+    use sp_arithmetic::Perbill;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + crate::Config {
@@ -113,6 +116,8 @@ pub mod mock_pallet {
         PayAccrued(T::AccountId, T::Balance),
         PayKicker(T::AccountId, T::Balance),
         UnlockStake(T::AccountId, T::Balance),
+        PowerDecreased(T::AccountId, Perbill),
+        PowerIncreased(T::AccountId, Perbill),
     }
 }
 
@@ -131,6 +136,8 @@ impl<T: Config + mock_pallet::Config> VestingBalance<T::AccountId, T::Balance>
         ));
         Ok(())
     }
+
+    fn adjust_lock(acc: &T::AccountId, stake: T::Balance) {}
 
     fn pay_accrued(
         target: &T::AccountId,
@@ -161,6 +168,25 @@ impl<T: Config + mock_pallet::Config> VestingBalance<T::AccountId, T::Balance>
         mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::UnlockStake(
             target.clone(),
             stake,
+        ));
+        Ok(())
+    }
+
+    fn power_decreased(target: &T::AccountId, perbill: Perbill) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PowerDecreased(
+            target.clone(),
+            perbill,
+        ));
+        Ok(())
+    }
+
+    fn power_increased(
+        target: &T::AccountId,
+        reciprocal_perbill: Perbill,
+    ) -> Result<(), DispatchError> {
+        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PowerIncreased(
+            target.clone(),
+            reciprocal_perbill,
         ));
         Ok(())
     }

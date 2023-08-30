@@ -29,6 +29,7 @@ pub mod pallet {
     };
     use frame_system::{ensure_signed, pallet_prelude::OriginFor};
     use sp_arithmetic::traits::EnsureAddAssign;
+    use sp_arithmetic::Perbill;
     use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
     use sp_std::prelude::*;
 
@@ -45,7 +46,7 @@ pub mod pallet {
         /// A valid exit call that claims the full reward has to occur within `[cooldown end, now + DivestTolerance]`.
         /// Since the `now` timestmap is behind the current time up to the block time, the actual tolerance is sometimes higher than the configured.
         type DivestTolerance: Get<<Self as Config<I>>::BlockNumber>;
-        /// The maximum locking period in number of blocks. Vesting weights are linearly raised with [`Vesting`]`::locking_period / MaximumLockingPeriod`.
+        /// The maximum locking period in number of blocks. Vesting powers are linearly raised with [`Vesting`]`::locking_period / MaximumLockingPeriod`.
         #[pallet::constant]
         type MaximumLockingPeriod: Get<<Self as Config<I>>::BlockNumber>;
         type Balance: Parameter + IsType<u128> + Div + Balance + MaybeSerializeDeserialize;
@@ -118,7 +119,7 @@ pub mod pallet {
         CooldownStarted(T::AccountId, VesterStateFor<T, I>),
         /// A vester divests after his cooldown ended, claiming accrued rewards. [vester, vester_state_at_divest]
         Divested(T::AccountId, VesterStateFor<T, I>),
-        /// A vester that exceeded his divest tolerance got kicked out. [vester, kicker, vester_state_at_divest, reward_cut]
+        /// A vester that exceeded his divest tolerance got kicked out. [vester, kicker, vester_state_before_kicked_out, reward_cut]
         KickedOut(T::AccountId, T::AccountId, VesterStateFor<T, I>),
         /// A reward got distributed. [amount]
         RewardDistributed(T::Balance),
@@ -163,57 +164,14 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let (vester_state, cooldown_started_before) = <VesterStates<T, I>>::try_mutate(
+            let (state_before, state, cooldown_started_before) = Self::revest_for(&who, vesting)?;
+
+            T::VestingBalance::power_increased(
                 &who,
-                |state| -> Result<(VesterStateFor<T, I>, bool), DispatchError> {
-                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
-
-                    if vesting.stake < state.stake {
-                        Err(Error::<T, I>::CannotRevestLess)?
-                    }
-                    if vesting.locking_period < state.locking_period {
-                        Err(Error::<T, I>::CannotRevestWithShorterLockingPeriod)?
-                    }
-                    if vesting.locking_period > <T as Config<I>>::MaximumLockingPeriod::get() {
-                        Err(Error::<T, I>::MaximumLockingPeriodExceeded)?
-                    }
-
-                    Self::accrue(state)?;
-
-                    let cooldown_started_before = state.cooldown_started.is_some();
-
-                    // recalculate the weight
-                    let weight_before = state.weight;
-                    let weight = Self::calculate_weight(&vesting)?;
-
-                    state.locking_period = vesting.locking_period;
-                    state.weight = weight;
-                    state.stake = vesting.stake;
-                    // record global s upper bound at time of revest
-                    state.s = <Pool<T, I>>::get().s.1;
-                    state.cooldown_started = None;
-
-                    <Pool<T, I>>::try_mutate(|pool| -> Result<(), Error<T, I>> {
-                        // due to rounding we need to substract the difference and not the new weight!
-                        pool.total_weight.saturating_add(
-                            // the new weight is always greater than the old weight, so check_sub should never fail
-                            state
-                                .weight
-                                .checked_sub(&weight_before)
-                                .ok_or(Error::<T, I>::CalculationOverflow)?,
-                        );
-                        Ok(())
-                    })?;
-
-                    Ok((state.clone(), cooldown_started_before))
-                },
+                Perbill::from_rational(state_before.power, state.power),
             )?;
 
-            Self::deposit_event(Event::<T, I>::Revested(
-                who,
-                vester_state,
-                cooldown_started_before,
-            ));
+            Self::deposit_event(Event::<T, I>::Revested(who, state, cooldown_started_before));
 
             Ok(().into())
         }
@@ -223,10 +181,11 @@ pub mod pallet {
         pub fn cooldown(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
-            let vester_state = <VesterStates<T, I>>::try_mutate(
+            let (_state_before, state) = <VesterStates<T, I>>::try_mutate(
                 &who,
-                |state| -> Result<VesterStateFor<T, I>, DispatchError> {
+                |state| -> Result<(VesterStateFor<T, I>, VesterStateFor<T, I>), DispatchError> {
                     let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
+                    let state_before = state.clone();
 
                     if let Some(_) = state.cooldown_started {
                         Err(Error::<T, I>::CannotCooldownDuringCooldown)?;
@@ -236,27 +195,30 @@ pub mod pallet {
 
                     state.cooldown_started = Some(<frame_system::Pallet<T>>::block_number().into());
 
-                    // punish divest with half the weight during cooldown
-                    let weight_before = state.weight;
-                    state.weight /= 2u128.into();
+                    // punish divest with half the power during cooldown
+                    state.power /= 2u128.into();
 
                     <Pool<T, I>>::try_mutate(|pool| -> Result<(), Error<T, I>> {
-                        // due to rounding we need to substract the difference and not the new weight!
-                        pool.total_weight
+                        // due to rounding we need to substract the difference and not the new power!
+                        pool.total_power
                             .checked_sub(
-                                &weight_before
-                                    .checked_sub(&state.weight)
+                                &state_before
+                                    .power
+                                    .checked_sub(&state.power)
                                     .ok_or(Error::<T, I>::CalculationOverflow)?,
                             )
                             .ok_or(Error::<T, I>::CalculationOverflow)?;
                         Ok(())
                     })?;
 
-                    Ok(state.clone())
+                    Ok((state_before, state.clone()))
                 },
             )?;
 
-            Self::deposit_event(Event::<T, I>::CooldownStarted(who, vester_state));
+            // It's more price to define the factor explicitly and not deriving form the state change
+            T::VestingBalance::power_decreased(&who, Perbill::from_percent(50))?;
+
+            Self::deposit_event(Event::<T, I>::CooldownStarted(who, state));
 
             Ok(().into())
         }
@@ -317,8 +279,8 @@ pub mod pallet {
 
             let vester_state = <VesterStates<T, I>>::try_mutate(
                 &vester,
-                |state| -> Result<VesterStateFor<T, I>, DispatchError> {
-                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
+                |state_| -> Result<VesterStateFor<T, I>, DispatchError> {
+                    let state = state_.as_mut().ok_or(Error::<T, I>::NotVesting)?;
 
                     let cooldown_started = state
                         .cooldown_started
@@ -336,8 +298,11 @@ pub mod pallet {
                     }
 
                     Self::accrue(state)?;
+                    let before_kicked_out_state = *state;
 
-                    Ok(*state)
+                    *state_ = None;
+
+                    Ok(before_kicked_out_state)
                 },
             )?;
 
@@ -352,7 +317,7 @@ pub mod pallet {
     }
 
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
-        pub fn vest_for(
+        fn vest_for(
             who: &T::AccountId,
             vesting: VestingFor<T, I>,
         ) -> Result<VesterStateFor<T, I>, DispatchError> {
@@ -368,11 +333,11 @@ pub mod pallet {
                         Err(Error::<T, I>::MaximumLockingPeriodExceeded)?
                     }
 
-                    let weight = Self::calculate_weight(&vesting)?;
+                    let power = Self::calculate_power(&vesting)?;
 
                     let s = VesterStateFor::<T, I> {
                         locking_period: vesting.locking_period,
-                        weight: weight,
+                        power,
                         stake: vesting.stake,
                         accrued: 0u128.into(),
                         // record global s upper bound at time of vest
@@ -388,10 +353,10 @@ pub mod pallet {
                             .total_stake
                             .ensure_add_assign(vesting.stake)
                             .map_err(|_| Error::<T, I>::CalculationOverflow)?;
-                        // total_weight += weight
+                        // total_power += power
                         state
-                            .total_weight
-                            .ensure_add_assign(weight)
+                            .total_power
+                            .ensure_add_assign(power)
                             .map_err(|_| Error::<T, I>::CalculationOverflow)?;
 
                         Ok(())
@@ -405,18 +370,78 @@ pub mod pallet {
             Ok(vester_state.into())
         }
 
+        /// The core logic for revesting, aka increasing the stake. This function is either user-initiaited or
+        /// compounding external to this pallet might increase it. Therefore this function **does not** call into hooks
+        /// like [`T::VestingBalance::power_increased`] for adapting power but the caller is expected to do so.
+        fn revest_for(
+            who: &T::AccountId,
+            vesting: VestingFor<T, I>,
+        ) -> Result<(VesterStateFor<T, I>, VesterStateFor<T, I>, bool), Error<T, I>> {
+            T::VestingBalance::adjust_lock(who, vesting.stake);
+
+            <VesterStates<T, I>>::try_mutate(
+                &who,
+                |state| -> Result<(VesterStateFor<T, I>, VesterStateFor<T, I>, bool), Error<T, I>> {
+                    let state = state.as_mut().ok_or(Error::<T, I>::NotVesting)?;
+                    let state_before = state.clone();
+
+                    if vesting.stake < state.stake {
+                        Err(Error::<T, I>::CannotRevestLess)?
+                    }
+                    if vesting.locking_period < state.locking_period {
+                        Err(Error::<T, I>::CannotRevestWithShorterLockingPeriod)?
+                    }
+                    if vesting.locking_period > <T as Config<I>>::MaximumLockingPeriod::get() {
+                        Err(Error::<T, I>::MaximumLockingPeriodExceeded)?
+                    }
+
+                    Self::accrue(state)?;
+
+                    let cooldown_started_before = state.cooldown_started.is_some();
+
+                    // recalculate the power
+                    let power_before = state.power;
+                    let power = Self::calculate_power(&vesting)?;
+
+                    state.locking_period = vesting.locking_period;
+                    state.power = power;
+                    state.stake = vesting.stake;
+                    // record global s upper bound at time of revest
+                    state.s = <Pool<T, I>>::get().s.1;
+                    state.cooldown_started = None;
+
+                    <Pool<T, I>>::try_mutate(|pool| -> Result<(), Error<T, I>> {
+                        // due to rounding we need to substract the difference and not the new power!
+                        pool.total_power.saturating_add(
+                            // the new power is always greater than the old power, so check_sub should never fail
+                            state
+                                .power
+                                .checked_sub(&power_before)
+                                .ok_or(Error::<T, I>::CalculationOverflow)?,
+                        );
+                        Ok(())
+                    })?;
+
+                    Ok((state_before, state.clone(), cooldown_started_before))
+                },
+            )
+        }
+
+        /// Distributes a reward to the entire pool according to current power distribution.
+        ///
+        /// Assumes that the reward was already minted and users of this pallet ensure only minted rewards are payed out in [`VestingBalance::pay_accrued`] and [`VestingBalance::pay_kicker`].
         pub fn distribute_reward(reward: T::Balance) -> DispatchResult {
-            // s = s + reward / total_weight = s + reward * MaximumLockingPeriod / total_weight_numerator
+            // s = s + reward / total_power = s + reward * MaximumLockingPeriod / total_power_numerator
 
             <Pool<T, I>>::try_mutate(|state| -> Result<(), DispatchError> {
-                if state.total_weight > 0u128.into() {
+                if state.total_power > 0u128.into() {
                     state.s = (
                         state
                             .s
                             .0
                             .checked_add(
                                 &(reward * <T as Config<I>>::BalanceUnit::get()
-                                    / state.total_weight),
+                                    / state.total_power),
                             )
                             .ok_or(Error::<T, I>::CalculationOverflow)?,
                         state
@@ -425,11 +450,11 @@ pub mod pallet {
                             .checked_add(
                                 &(reward
                                     // integer division, rounded up
-                                    // (we already checked for state.total_weight > 0 to avoid DivisionByZero)
-                                    .checked_add(&(state.total_weight - 1u128.into()))
+                                    // (we already checked for state.total_power > 0 to avoid DivisionByZero)
+                                    .checked_add(&(state.total_power - 1u128.into()))
                                     .ok_or(Error::<T, I>::CalculationOverflow)?
                                     * <T as Config<I>>::BalanceUnit::get()
-                                    / state.total_weight),
+                                    / state.total_power),
                             )
                             .ok_or(Error::<T, I>::CalculationOverflow)?,
                     );
@@ -445,9 +470,9 @@ pub mod pallet {
 
         fn accrue(state: &mut VesterStateFor<T, I>) -> Result<(), Error<T, I>> {
             let pool = Self::pool();
-            // reward = self.data.weight * (self.model.data.s - self.data.s)
+            // reward = self.data.power * (self.model.data.s - self.data.s)
             let reward = state
-                .weight
+                .power
                 .checked_mul(
                     &pool
                         .s
@@ -469,15 +494,28 @@ pub mod pallet {
             Ok(())
         }
 
-        fn calculate_weight(vesting: &VestingFor<T, I>) -> Result<T::Balance, Error<T, I>> {
+        pub fn calculate_power(vesting: &VestingFor<T, I>) -> Result<T::Balance, Error<T, I>> {
             let locking_period: u128 = vesting.locking_period.into();
             let max_locking_period: u128 = <T as Config<I>>::MaximumLockingPeriod::get().into();
-            // weight = locking_period / MaximumLockingPeriod * stake = locking_period * stake / MaximumLockingPeriod
+            // power = locking_period / MaximumLockingPeriod * stake = locking_period * stake / MaximumLockingPeriod
             Ok((locking_period
                 .checked_mul(vesting.stake.into())
                 .ok_or(Error::<T, I>::CalculationOverflow)?
                 / max_locking_period)
                 .into())
+        }
+
+        pub fn compound(acc: &T::AccountId, more: T::Balance) -> Result<(), Error<T, I>> {
+            let vester_state = Self::vester_states(acc).ok_or(Error::<T, I>::NotVesting)?;
+            let new_total_stake = vester_state.stake.saturating_add(more);
+            let _ = Self::revest_for(
+                acc,
+                Vesting {
+                    stake: new_total_stake,
+                    locking_period: vester_state.locking_period,
+                },
+            )?;
+            Ok(())
         }
     }
 }
