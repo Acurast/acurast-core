@@ -28,4 +28,5 @@ pub trait WeightInfo {
     fn submit_state_merkle_root() -> Weight;
     fn submit_message() -> Weight;
     fn update_target_chain_owner() -> Weight;
+    fn update_current_snapshot() -> Weight;
 }

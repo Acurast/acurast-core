@@ -19,6 +19,7 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 ] }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 hex = { version = "0.4", default-features = false }
+hex-literal = { version = "0.3", default-features = false }
 
 # Acurast
 pallet-acurast = { path = "../acurast", default-features = false }
@@ -37,7 +38,6 @@ rlp = { version = "0.5.2", default-features = false }
 alloy-sol-types = { version = "0.3.1", default-features = false }
 
 # Benchmarks
-hex-literal = { version = "0.3", optional = true }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", optional = true, default-features = false }
 
 # Substrate
@@ -51,8 +51,6 @@ sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkad
 sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 
 [dev-dependencies]
-hex-literal = "0.3"
-
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false }
@@ -78,11 +76,10 @@ std = [
 	"sp-std/std",
 	"strum/std",
 	"tezos-core/std",
-	"tezos-michelson/std",
+	"tezos-michelson/std"
 ]
 
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"hex-literal",
+	"frame-benchmarking/runtime-benchmarks"
 ]
 try-runtime = ["frame-support/try-runtime"]

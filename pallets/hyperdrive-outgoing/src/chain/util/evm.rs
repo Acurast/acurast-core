@@ -2,7 +2,7 @@ use crate::{Action, Leaf, LeafEncoder, RawAction};
 use frame_support::inherent::Vec;
 use sp_runtime::traits::{Hash, Keccak256};
 
-use alloy_sol_types::{sol, SolStruct};
+use alloy_sol_types::{sol, SolType};
 use frame_support::RuntimeDebug;
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
 
@@ -68,7 +68,7 @@ impl LeafEncoder for EvmEncoder {
                     job_id: *job_id,
                     processor: processor_address,
                 };
-                payload.eip712_encode_data()
+                EvmAssignJob::encode_single(&payload)
             }
             Action::FinalizeJob(job_id, refund_amount) => {
                 let payload = EvmFinalizeJob {
@@ -76,7 +76,7 @@ impl LeafEncoder for EvmEncoder {
                     refund_amount: *refund_amount,
                 };
 
-                payload.eip712_encode_data()
+                EvmFinalizeJob::encode_single(&payload)
             }
             Action::Noop => [].to_vec(),
         };
@@ -86,7 +86,7 @@ impl LeafEncoder for EvmEncoder {
             payload,
         };
 
-        Ok(message.eip712_encode_data())
+        Ok(EvmMessage::encode_single(&message))
     }
 }
 
