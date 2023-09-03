@@ -127,6 +127,8 @@ pub enum RawAction {
     DeregisterJob,
     #[strum(serialize = "FINALIZE_JOB")]
     FinalizeJob,
+    #[strum(serialize = "NOOP")]
+    Noop = 255,
 }
 
 /// Convert an index to a RawAction
@@ -138,6 +140,7 @@ impl TryFrom<u16> for RawAction {
             0 => Ok(RawAction::RegisterJob),
             1 => Ok(RawAction::DeregisterJob),
             2 => Ok(RawAction::FinalizeJob),
+            255 => Ok(RawAction::Noop),
             _ => Err(b"Unknown action index".to_vec()),
         }
     }
@@ -151,6 +154,7 @@ impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
             ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
+            ParsedAction::Noop => RawAction::Noop,
         }
     }
 }
@@ -163,6 +167,7 @@ pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     ),
     DeregisterJob(JobId<AccountId>),
     FinalizeJob(Vec<JobId<AccountId>>),
+    Noop,
 }
 
 pub type MessageIdentifier = u128;

@@ -222,11 +222,20 @@ pub mod pallet {
         T::TargetChainOwner::get()
     }
 
-    /// This storage field contains the latest validated snapshot number.
     #[pallet::storage]
     #[pallet::getter(fn current_target_chain_owner)]
     pub type CurrentTargetChainOwner<T: Config<I>, I: 'static = ()> =
         StorageValue<_, StateOwner, ValueQuery, FirstTargetChainOwner<T, I>>;
+
+    #[pallet::type_value]
+    pub fn InitialTransmissionRate<T: Config<I>, I: 'static>() -> T::TargetChainBlockNumber {
+        T::TransmissionRate::get()
+    }
+
+    #[pallet::storage]
+    #[pallet::getter(fn current_transmission_rate)]
+    pub type CurrentTransmissionRate<T: Config<I>, I: 'static = ()> =
+        StorageValue<_, T::TargetChainBlockNumber, ValueQuery, InitialTransmissionRate<T, I>>;
 
     #[pallet::error]
     pub enum Error<T, I = ()> {
@@ -352,7 +361,7 @@ pub mod pallet {
             });
 
             if accepted {
-                CurrentSnapshot::<T, I>::set(expected_snapshot + T::TransmissionRate::get());
+                CurrentSnapshot::<T, I>::set(expected_snapshot + Self::current_transmission_rate());
                 Self::deposit_event(Event::StateMerkleRootAccepted {
                     snapshot,
                     state_merkle_root,
@@ -412,6 +421,18 @@ pub mod pallet {
             ensure_root(origin)?;
             Self::set_target_chain_owner(owner.clone());
             Self::deposit_event(Event::TargetChainOwnerUpdated { owner });
+            Ok(())
+        }
+
+        /// Update the current snapshot being confirmed
+        #[pallet::call_index(4)]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_current_snapshot())]
+        pub fn update_current_snapshot(
+            origin: OriginFor<T>,
+            snapshot: T::TargetChainBlockNumber,
+        ) -> DispatchResult {
+            ensure_root(origin)?;
+            CurrentSnapshot::<T, I>::set(snapshot);
             Ok(())
         }
     }

@@ -13,13 +13,13 @@ use pallet_acurast::{
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
-use rlp::decode_list;
+use rlp::Rlp;
 use scale_info::TypeInfo;
 use sp_core::Hasher;
 use sp_runtime::traits::Keccak256;
 use sp_std::vec::Vec;
 
-const STORAGE_INDEX: u8 = 5u8;
+const STORAGE_INDEX: u8 = 7u8;
 
 // Declare a solidity type in standard solidity
 sol! {
@@ -82,6 +82,7 @@ pub enum EthereumValidationError {
     TooManyPlannedExecutions,
     TooManyAllowedSources,
     TooManyJobModules,
+    InvalidRlpEncoding,
 }
 
 pub type EthereumProofItem = BoundedVec<u8, ConstU32<1024>>;
@@ -116,48 +117,48 @@ where
     fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
         self: &Self,
     ) -> Result<[u8; 32], Self::Error> {
-        let account_proof: Vec<&[u8]> = self
+        let account_proof: Vec<Vec<u8>> = self
             .account_proof
             .iter()
-            .map(|node| node.as_slice())
+            .map(|node| node.to_vec())
+            .collect();
+
+        let storage_proof: Vec<Vec<u8>> = self
+            .storage_proof
+            .iter()
+            .map(|node| node.to_vec())
             .collect();
 
         // Validate account proof
-        let eth_address = crate::pallet::Pallet::<T, I>::current_target_chain_owner();
-        let root_hash = Keccak256::hash(account_proof[0]);
-        let leaf_node: &Vec<u8> = &decode_list(account_proof[account_proof.len() - 1])[1];
-        let account_state_hash: &Vec<u8> = &decode_list(leaf_node)[2];
-        let account_state_path = Keccak256::hash(eth_address.as_ref());
-        let valid = evm::verify_proof(
+        let storage_owner_address = crate::pallet::Pallet::<T, I>::current_target_chain_owner();
+
+        // Validate the storage proof against the known
+        let account_path = Keccak256::hash(storage_owner_address.as_ref())
+            .as_bytes()
+            .to_vec();
+        let storage_path = &evm::storage_path(&STORAGE_INDEX, &self.message_id).to_vec();
+        let verified_value = evm::validate_storage_proof(
+            &account_path,
+            &storage_path,
             &account_proof,
-            &root_hash.0,
-            &account_state_path.0.to_vec(),
-            leaf_node,
-        );
-
-        if !valid {
-            return Err(EthereumValidationError::InvalidAccountProof);
-        }
-
-        // Validate storage proof
-        let storage_proof: Vec<&[u8]> = self
-            .storage_proof
-            .iter()
-            .map(|node| node.as_slice())
-            .collect();
-        let proof_path = evm::storage_path(&STORAGE_INDEX, &self.message_id).to_vec();
-        let proof_value = Keccak256::hash(&self.value);
-        let proof_value = [[0xa0].to_vec(), proof_value.0.to_vec()].concat();
-        let valid = evm::verify_proof(
             &storage_proof,
-            &account_state_hash,
-            &proof_path,
-            &proof_value,
-        );
+        )?;
 
-        if !valid {
+        // Ensure the value extracted from the proof is equal to the hash of the message
+        let message_hash: [u8; 32] = Keccak256::hash(&self.value).0;
+        let verified_message_hash: &[u8] = Rlp::new(&verified_value).data().map_err(|err| {
+            log::debug!("Could not decode rlp value: {:?}", err);
+            #[cfg(test)]
+            dbg!(err);
+
+            EthereumValidationError::InvalidRlpEncoding
+        })?;
+        if verified_message_hash.ne(&message_hash) {
             return Err(EthereumValidationError::InvalidStorageProof);
         }
+
+        // TODO: Temporary work around
+        let root_hash = Keccak256::hash(&account_proof[0]);
 
         Ok(root_hash.0)
     }
@@ -298,6 +299,7 @@ where
 
                 Ok(ParsedAction::FinalizeJob(jobs))
             }
+            RawAction::Noop => Ok(ParsedAction::Noop),
         }
     }
 }

@@ -114,6 +114,7 @@ where
                         .collect(),
                 )
             }
+            RawAction::Noop => ParsedAction::Noop,
         })
     }
 }
@@ -770,6 +771,7 @@ where
                         .collect(),
                 )
             }
+            RawAction::Noop => ParsedAction::Noop,
         })
     }
 }
