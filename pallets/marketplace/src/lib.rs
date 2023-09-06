@@ -768,6 +768,21 @@ pub mod pallet {
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                     <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
+                JobStatus::Matched => {
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id))?;
+
+                    // Remove matching data
+
+                    for (p, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
+                        <StoredMatches<T>>::remove(&p, &job_id);
+                        <StoredStorageCapacity<T>>::remove(&p);
+                    }
+
+                    let _ =
+                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+                }
                 _ => Err(Error::<T>::JobRegistrationUnmodifiable)?,
             }
 
