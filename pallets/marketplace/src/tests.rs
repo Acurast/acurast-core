@@ -205,19 +205,19 @@ fn test_invalid_deregister() {
             AcurastMarketplace::stored_storage_capacity(processor_account_id())
         );
 
-        assert_err!(
-            Acurast::deregister(RuntimeOrigin::signed(alice_account_id()).into(), job_id1.1,),
-            Error::<Test>::JobRegistrationUnmodifiable
-        );
+        assert_ok!(Acurast::deregister(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            job_id1.1
+        ));
 
         // Job still assigned after trying to deregister
         assert_eq!(
-            Some(JobStatus::Matched),
+            None,
             AcurastMarketplace::stored_job_status(&job_id1.0, &job_id1.1),
         );
 
         // the full budget got refunded
-        assert_eq!(12000000, AcurastMarketplace::reserved(&job_id1));
+        assert_eq!(0, AcurastMarketplace::reserved(&job_id1));
 
         assert_eq!(
             events(),
@@ -240,6 +240,13 @@ fn test_invalid_deregister() {
                 RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationStored(
                     registration1.clone(),
                     job_id1.clone(),
+                )),
+                RuntimeEvent::MockPallet(mock_pallet::Event::RefundReward((
+                    job_id1.clone(),
+                    12_000_000
+                ))),
+                RuntimeEvent::Acurast(pallet_acurast::Event::JobRegistrationRemoved(
+                    job_id1.clone()
                 )),
             ]
         );
