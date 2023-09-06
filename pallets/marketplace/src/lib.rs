@@ -45,7 +45,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
     use reputation::{BetaParameters, BetaReputation, ReputationEngine};
-    use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
+    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
     use sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
@@ -217,6 +217,8 @@ pub mod pallet {
     pub enum Error<T> {
         /// Generic overflow during a calculating with checked operatios.
         CalculationOverflow,
+        /// Generic for unexpected checked calculation errors.
+        UnexpectedCheckedCalculation,
         /// The job registration must specify non-zero `duration`.
         JobRegistrationZeroDuration,
         /// The job registration must specify a schedule that contains a maximum of [MAX_EXECUTIONS_PER_JOB] executions.
@@ -340,6 +342,7 @@ pub mod pallet {
                 Error::CapacityNotFound => true,
 
                 Error::CalculationOverflow => false,
+                Error::UnexpectedCheckedCalculation => false,
                 Error::JobRegistrationZeroDuration => false,
                 Error::JobRegistrationScheduleExceedsMaximumExecutions => false,
                 Error::JobRegistrationScheduleContainsZeroExecutions => false,
@@ -783,7 +786,34 @@ pub mod pallet {
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                     <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
-                _ => Err(Error::<T>::JobRegistrationUnmodifiable)?,
+                JobStatus::Assigned(assigned) => {
+                    let remaining_reward = Self::reserved(job_id);
+                    let reward_per_processor = remaining_reward
+                        .checked_div(&(assigned.into()))
+                        .ok_or(Error::<T>::UnexpectedCheckedCalculation)?;
+
+                    // Pay reward to the processor and clear matching data
+                    for (processor, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
+                        match T::ManagerProvider::manager_of(&processor) {
+                            Ok(manager) => T::RewardManager::pay_reward(
+                                &job_id,
+                                reward_per_processor,
+                                &manager,
+                            ),
+                            Err(err_result) => Err(err_result.into()),
+                        }?;
+                        <StoredMatches<T>>::remove(&processor, &job_id);
+                        <StoredStorageCapacity<T>>::remove(&processor);
+                    }
+
+                    // The job creator will only receive the amount that could not be divided equaly between the processors
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id))?;
+
+                    let _ =
+                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+                }
             }
 
             Ok(().into())
