@@ -9,3 +9,7 @@ members = [
 	"p256-crypto",
 ]
 exclude = ["pallets/proxy"]
+
+# TODO: Temporary workaround (https://substrate.stackexchange.com/questions/9870)
+[patch.crates-io]
+parity-scale-codec = { git = "https://github.com/paritytech/parity-scale-codec.git", tag = "v3.6.5" }
