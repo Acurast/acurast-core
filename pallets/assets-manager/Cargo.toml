@@ -1,13 +1,13 @@
 [package]
 name = "pallet-acurast-assets-manager"
-authors = ["Papers AG"]
 description = "Pallet for managing the Acurast assets extending pallet_assets."
-version = "0.2.0"
+authors = { workspace = true }
+version = { workspace = true }
+repository = { workspace = true }
 license = "MIT"
 homepage = "https://docs.acurast.com/"
 edition = "2021"
 publish = false
-repository = "https://github.com/acurast/"
 
 
 [package.metadata.docs.rs]
