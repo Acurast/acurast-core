@@ -13,13 +13,13 @@ pub mod p256 {
     use sp_runtime::traits::{IdentifyAccount, Lazy, Verify};
     use sp_runtime_interface::pass_by::PassByInner;
 
-    #[cfg(feature = "std")]
-    use sp_core::crypto::Ss58Codec;
     use sp_core::crypto::{
-        ByteArray, CryptoType, CryptoTypeId, CryptoTypePublicPair, Derive, Public as TraitPublic,
-        UncheckedFrom,
+        ByteArray, CryptoType, CryptoTypeId, Derive, Public as TraitPublic, UncheckedFrom,
     };
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
+    use sp_core::crypto::{DeriveError, Ss58Codec};
+
+    #[cfg(feature = "std")]
     use sp_core::{
         crypto::{DeriveJunction, Pair as TraitPair, SecretStringError},
         hashing::blake2_256,
@@ -29,7 +29,7 @@ pub mod p256 {
     pub const CRYPTO_ID: CryptoTypeId = CryptoTypeId(*b"p256");
 
     /// The ECDSA compressed public key.
-    #[cfg_attr(feature = "full_crypto", derive(Hash))]
+    #[cfg_attr(feature = "std", derive(Hash))]
     #[derive(
         Clone,
         Copy,
@@ -82,30 +82,14 @@ pub mod p256 {
         }
     }
 
-    impl TraitPublic for Public {
-        fn to_public_crypto_pair(&self) -> CryptoTypePublicPair {
-            CryptoTypePublicPair(CRYPTO_ID, self.to_raw_vec())
-        }
-    }
-
-    impl From<Public> for CryptoTypePublicPair {
-        fn from(key: Public) -> Self {
-            (&key).into()
-        }
-    }
-
-    impl From<&Public> for CryptoTypePublicPair {
-        fn from(key: &Public) -> Self {
-            CryptoTypePublicPair(CRYPTO_ID, key.to_raw_vec())
-        }
-    }
+    impl TraitPublic for Public {}
 
     impl ByteArray for Public {
         const LEN: usize = 33;
     }
 
     impl CryptoType for Public {
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         type Pair = Pair;
     }
 
@@ -178,11 +162,11 @@ pub mod p256 {
     const SIGNATURE_LENGTH: usize = 65;
     const PUBLIC_KEY_LENGTH: usize = 33;
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     type Seed = [u8; SEED_LENGTH];
 
     /// A signature (a 512-bit value, plus 8 bits for recovery ID).
-    #[cfg_attr(any(feature = "std", feature = "full_crypto"), derive(Hash))]
+    #[cfg_attr(any(feature = "std"), derive(Hash))]
     #[derive(Encode, Decode, MaxEncodedLen, PassByInner, TypeInfo, PartialEq, Eq)]
     pub struct Signature(pub [u8; SIGNATURE_LENGTH]);
 
@@ -283,7 +267,7 @@ pub mod p256 {
     }
 
     impl CryptoType for Signature {
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         type Pair = Pair;
     }
 
@@ -313,7 +297,7 @@ pub mod p256 {
     #[derive(Clone)]
     pub struct Pair {
         public: Public,
-        #[cfg(feature = "full_crypto")]
+        #[cfg(feature = "std")]
         secret: SecretKey,
     }
 
@@ -324,7 +308,7 @@ pub mod p256 {
             let pub_bytes = public.to_bytes().map_err(|_| elliptic_curve::Error)?;
             Ok(Pair {
                 public: Public(pub_bytes),
-                #[cfg(feature = "full_crypto")]
+                #[cfg(feature = "std")]
                 secret,
             })
         }
@@ -334,20 +318,13 @@ pub mod p256 {
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl CryptoType for Pair {
         type Pair = Pair;
     }
 
-    /// An error when deriving a key.
-    #[cfg(feature = "full_crypto")]
-    pub enum DeriveError {
-        /// A soft key was found in the path (and is unsupported).
-        SoftKeyInPath,
-    }
-
     /// Derive a single hard junction.
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     fn derive_hard_junction(secret_seed: &Seed, cc: &[u8; SEED_LENGTH]) -> Seed {
         ("Secp256r1", secret_seed, cc).using_encoded(blake2_256)
     }
@@ -364,12 +341,11 @@ pub mod p256 {
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl TraitPair for Pair {
         type Public = Public;
         type Seed = Seed;
         type Signature = Signature;
-        type DeriveError = DeriveError;
 
         // Using default fn generate()
 
@@ -454,31 +430,13 @@ pub mod p256 {
             sig.verify(message.as_ref(), pubkey)
         }
 
-        /// Verify a signature on a message. Returns true if the signature is good.
-        ///
-        /// This doesn't use the type system to ensure that `sig` and `pubkey` are the correct
-        /// size. Use it only if you're coming from byte buffers and need the speed.
-        fn verify_weak<P: AsRef<[u8]>, M: AsRef<[u8]>>(sig: &[u8], message: M, pubkey: P) -> bool {
-            // TODO: weak version, for now use normal verify
-            let signature = match Self::Signature::try_from(sig) {
-                Err(_) => return false,
-                Ok(sign) => sign,
-            };
-            let public = match Self::Public::try_from(pubkey.as_ref()) {
-                Err(_) => return false,
-                Ok(pk) => pk,
-            };
-
-            Self::verify(&signature, message, &public)
-        }
-
         /// Return a vec filled with raw data.
         fn to_raw_vec(&self) -> Vec<u8> {
             self.seed().to_vec()
         }
     }
 
-    #[cfg(feature = "full_crypto")]
+    #[cfg(feature = "std")]
     impl Pair {
         /// Get the seed for this key.
         pub fn seed(&self) -> Seed {

@@ -9,9 +9,11 @@ use frame_support::{
 };
 use frame_system as system;
 use hex_literal::hex;
+use pallet_acurast::CU32;
 use sp_core::H256;
 use sp_core::*;
 use sp_runtime::traits::Keccak256;
+use sp_runtime::MultiSignature;
 use sp_runtime::{
     testing::Header,
     traits::{BlakeTwo256, IdentityLookup},
@@ -23,7 +25,7 @@ use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::tezos::TezosParser;
 use crate::types::RawAction;
-use crate::{weights, ActionExecutor, ParsedAction, StateOwner};
+use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -84,6 +86,8 @@ impl system::Config for Test {
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+pub type MaxAllowedSources = CU32<4>;
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ParsableAccountId = AcurastAccountId;
@@ -92,7 +96,10 @@ impl crate::Config for Test {
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
     type RegistrationExtra =
-        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId>;
+        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
+    type MaxAllowedSources = MaxAllowedSources;
+    type MaxSlots = CU32<64>;
+    type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
@@ -100,10 +107,11 @@ impl crate::Config for Test {
         Self::Balance,
         AcurastAccountId,
         <Self as frame_system::Config>::AccountId,
+        Self::MaxSlots,
         Self::RegistrationExtra,
     >;
     type ActionExecutor = ();
-    type WeightInfo = weights::Weights<Test>;
+    type WeightInfo = weights::WeightInfo<Test>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -132,8 +140,8 @@ pub fn events() -> Vec<RuntimeEvent> {
 
 pub type Balance = u128;
 
-impl<AccountId, Extra> ActionExecutor<AccountId, Extra> for () {
-    fn execute(_: ParsedAction<AccountId, Extra>) -> DispatchResultWithPostInfo {
+impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
+    fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
 }

@@ -61,6 +61,8 @@ impl fee_manager::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type DefaultFeePercentage = DefaultFeePercentage;
     type UpdateOrigin = EnsureRoot<Self::AccountId>;
+
+    type WeightInfo = crate::weights::WeightInfo<Self>;
 }
 
 // Build genesis storage according to the mock runtime.

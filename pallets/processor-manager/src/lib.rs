@@ -11,9 +11,13 @@ mod stub;
 #[cfg(test)]
 mod tests;
 
+pub mod weights;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 pub use functions::*;
 pub use pallet::*;
 pub use traits::*;
@@ -29,6 +33,8 @@ pub type ProcessorUpdatesFor<T> =
 
 #[frame_support::pallet]
 pub mod pallet {
+    #[cfg(feature = "runtime-benchmarks")]
+    use crate::benchmarking::BenchmarkHelper;
     use acurast_common::ListUpdateOperation;
     use codec::MaxEncodedLen;
     use frame_support::{
@@ -61,6 +67,8 @@ pub mod pallet {
         type UnixTime: UnixTime;
         /// Weight Info for extrinsics.
         type WeightInfo: WeightInfo;
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]
@@ -187,7 +195,7 @@ pub mod pallet {
         T::AccountId: IsType<<<T::Proof as Verify>::Signer as IdentifyAccount>::AccountId>,
     {
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::update_processor_pairings())]
+        #[pallet::weight(T::WeightInfo::update_processor_pairings(pairing_updates.len() as u32))]
         pub fn update_processor_pairings(
             origin: OriginFor<T>,
             pairing_updates: ProcessorUpdatesFor<T>,
@@ -203,6 +211,7 @@ pub mod pallet {
                 match update.operation {
                     ListUpdateOperation::Add => {
                         if !update.item.validate_timestamp::<T>() {
+                            #[cfg(not(feature = "runtime-benchmarks"))]
                             return Err(Error::<T>::PairingProofExpired)?;
                         }
                         let counter = Self::counter_for_manager(&who)
@@ -210,6 +219,7 @@ pub mod pallet {
                             .checked_add(&1u8.into())
                             .ok_or(Error::<T>::CounterOverflow)?;
                         if !update.item.validate_signature::<T>(&who, counter) {
+                            #[cfg(not(feature = "runtime-benchmarks"))]
                             return Err(Error::<T>::InvalidPairingProof)?;
                         }
                         Self::do_add_processor_manager_pairing(&update.item.account, manager_id)?;
@@ -235,6 +245,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             if !pairing.validate_timestamp::<T>() {
+                #[cfg(not(feature = "runtime-benchmarks"))]
                 return Err(Error::<T>::PairingProofExpired)?;
             }
 
@@ -252,6 +263,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::CounterOverflow)?;
 
             if !pairing.validate_signature::<T>(&pairing.account, counter) {
+                #[cfg(not(feature = "runtime-benchmarks"))]
                 return Err(Error::<T>::InvalidPairingProof)?;
             }
             Self::do_add_processor_manager_pairing(&who, manager_id)?;

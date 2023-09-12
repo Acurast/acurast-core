@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use traits::*;
 pub use types::*;
 
 #[cfg(test)]
@@ -12,6 +13,7 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+mod traits;
 
 pub mod tezos;
 mod types;
@@ -29,22 +31,20 @@ pub mod pallet {
             AtLeast32BitUnsigned, Bounded, CheckEqual, MaybeDisplay, SimpleBitOps,
         },
     };
+    use frame_support::{transactional, BoundedBTreeSet};
     use frame_system::pallet_prelude::*;
+    use pallet_acurast::ParameterBound;
     use sp_arithmetic::traits::{CheckedRem, Zero};
     use sp_runtime::traits::Hash;
-    use sp_std::collections::btree_set::BTreeSet;
     use sp_std::prelude::*;
     use sp_std::vec;
 
     use pallet_acurast_marketplace::types::RegistrationExtra;
 
-    use crate::weights::WeightInfo;
-
     use super::*;
 
     /// A instantiable pallet for receiving secure state synchronizations into Acurast.
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
     /// Configures the pallet instance for a specific target chain from which we synchronize state into Acurast.
@@ -97,7 +97,18 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type RegistrationExtra: From<RegistrationExtra<Self::Balance, Self::AccountId>>;
+        type RegistrationExtra: From<
+            RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
+        >;
+        /// The max length of the allowed sources list for a registration.
+        #[pallet::constant]
+        type MaxAllowedSources: Get<u32> + ParameterBound;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
+        /// The maximum transmitters accepted to submit a state root per snapshot.
+        #[pallet::constant]
+        type MaxTransmittersPerSnapshot: Get<u32> + ParameterBound;
 
         /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
         type TargetChainHashing: Hash<Output = Self::TargetChainHash> + TypeInfo;
@@ -107,9 +118,17 @@ pub mod pallet {
         ///
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
-        type MessageParser: MessageParser<Self::AccountId, Self::RegistrationExtra>;
+        type MessageParser: MessageParser<
+            Self::AccountId,
+            Self::MaxAllowedSources,
+            Self::RegistrationExtra,
+        >;
 
-        type ActionExecutor: ActionExecutor<Self::AccountId, Self::RegistrationExtra>;
+        type ActionExecutor: ActionExecutor<
+            Self::AccountId,
+            Self::MaxAllowedSources,
+            Self::RegistrationExtra,
+        >;
 
         type WeightInfo: WeightInfo;
     }
@@ -182,7 +201,7 @@ pub mod pallet {
         T::TargetChainBlockNumber,
         Identity,
         T::TargetChainHash,
-        BTreeSet<T::AccountId>,
+        BoundedBTreeSet<T::AccountId, T::MaxTransmittersPerSnapshot>,
     >;
 
     #[pallet::type_value]
@@ -209,7 +228,7 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         /// Used to add, update or remove state transmitters.
         #[pallet::call_index(0)]
-        #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters())]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_state_transmitters(actions.len() as u32))]
         pub fn update_state_transmitters(
             origin: OriginFor<T>,
             actions: StateTransmitterUpdates<T>,
@@ -293,11 +312,12 @@ pub mod pallet {
                     // This can be improved once [let chains feature](https://github.com/rust-lang/rust/issues/53667) lands
                     if let Some(transmitters) = submissions {
                         if !transmitters.contains(&who) {
-                            transmitters.insert(who.clone());
+                            _ = transmitters.try_insert(who.clone());
                         }
                     } else {
-                        let mut set = BTreeSet::<T::AccountId>::new();
-                        set.insert(who.clone());
+                        let mut set =
+                            BoundedBTreeSet::<T::AccountId, T::MaxTransmittersPerSnapshot>::new();
+                        _ = set.try_insert(who.clone());
                         *submissions = Some(set);
                     }
 
@@ -352,7 +372,7 @@ pub mod pallet {
             let derived_root = derive_proof::<T::TargetChainHashing, _>(proof, leaf_hash);
 
             if !Self::validate_state_merkle_root(block, derived_root) {
-                Err(Error::<T, I>::ProofInvalid)?
+                return Err(Error::<T, I>::ProofInvalid)?;
             }
 
             // don't fail extrinsic from here onwards
@@ -367,7 +387,7 @@ pub mod pallet {
 
         /// Updates the target chain owner (contract address) in storage. Can only be called by a privileged/root account.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0).saturating_add(T::DbWeight::get().reads_writes(1, 0)))]
+        #[pallet::weight(< T as Config<I>>::WeightInfo::update_target_chain_owner())]
         pub fn update_target_chain_owner(
             origin: OriginFor<T>,
             owner: StateOwner,
@@ -409,9 +429,13 @@ pub mod pallet {
             <CurrentTargetChainOwner<T, I>>::set(owner);
         }
 
+        /// Processes a message with `key and `payload`.
+        ///
+        /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
+        /// See [`Self::process_action()`].
         fn process_message(
             key_bytes: &Vec<u8>,
-            message_bytes: &Vec<u8>,
+            payload_bytes: &Vec<u8>,
         ) -> Result<(), ProcessMessageResult> {
             let message_id = T::MessageParser::parse_key(key_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingKeyFailed)?;
@@ -422,6 +446,11 @@ pub mod pallet {
             );
             <MessageSequenceId<T, I>>::set(message_id);
 
+            Self::process_action(payload_bytes)
+        }
+
+        #[transactional]
+        fn process_action(message_bytes: &Vec<u8>) -> Result<(), ProcessMessageResult> {
             let action = T::MessageParser::parse_value(message_bytes)
                 .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
             let raw_action: RawAction = (&action).into();

@@ -1,10 +1,11 @@
+use frame_support::traits::ConstU32;
 use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::{generic, AccountId32};
 
-use acurast_common::{JobModules, Schedule};
+use acurast_common::{AllowedSources, JobModules, Schedule, CU32};
 
 #[cfg(feature = "runtime-benchmarks")]
 use crate::benchmarking::BenchmarkHelper;
@@ -146,14 +147,21 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 impl parachain_info::Config for Test {}
 
+pub type MaxAllowedSources = CU32<4>;
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = ();
-    type MaxAllowedSources = frame_support::traits::ConstU32<4>;
+    type MaxAllowedSources = MaxAllowedSources;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
@@ -166,21 +174,18 @@ impl crate::Config for Test {
 }
 
 #[cfg(feature = "runtime-benchmarks")]
-impl<T: Config> BenchmarkHelper<T> for ()
+impl<T: crate::Config> BenchmarkHelper<T> for ()
 where
     T::RegistrationExtra: Default,
     T::AccountId: Into<AccountId32>,
 {
-    fn registration_extra() -> T::RegistrationExtra {
+    fn registration_extra(_instant_match: bool) -> T::RegistrationExtra {
         Default::default()
     }
 
     fn funded_account(index: u32) -> T::AccountId {
         let caller: T::AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
-            &caller.clone().into(),
-            u32::MAX.into(),
-        );
+        <Balances as fungible::Mutate<_>>::set_balance(&caller.clone().into(), u32::MAX.into());
 
         caller
     }
@@ -213,9 +218,9 @@ pub fn invalid_script_2() -> Script {
 }
 
 pub fn job_registration(
-    allowed_sources: Option<Vec<AccountId>>,
+    allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     allow_only_verified_sources: bool,
-) -> JobRegistration<AccountId, ()> {
+) -> JobRegistration<AccountId, MaxAllowedSources, ()> {
     JobRegistration {
         script: script(),
         allowed_sources,
@@ -235,7 +240,7 @@ pub fn job_registration(
     }
 }
 
-pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
+pub fn invalid_job_registration_1() -> JobRegistration<AccountId, MaxAllowedSources, ()> {
     JobRegistration {
         script: invalid_script_1(),
         allowed_sources: None,
@@ -255,7 +260,7 @@ pub fn invalid_job_registration_1() -> JobRegistration<AccountId, ()> {
     }
 }
 
-pub fn invalid_job_registration_2() -> JobRegistration<AccountId, ()> {
+pub fn invalid_job_registration_2() -> JobRegistration<AccountId, MaxAllowedSources, ()> {
     JobRegistration {
         script: invalid_script_2(),
         allowed_sources: None,

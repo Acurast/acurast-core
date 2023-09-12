@@ -14,7 +14,7 @@ mod stub;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-pub mod benchmarking;
+mod benchmarking;
 
 mod functions;
 mod migration;
@@ -25,12 +25,15 @@ pub mod traits;
 pub mod types;
 mod utils;
 pub mod weights;
-pub mod weights_with_hooks;
 
 pub(crate) use pallet::STORAGE_VERSION;
 
+use frame_support::pallet_prelude::Get;
 use pallet_acurast::MultiOrigin;
 use sp_std::prelude::*;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -46,18 +49,16 @@ pub mod pallet {
     use sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
-    use xcm::v3::AssetId;
 
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
         AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
-        Schedule, StoredJobRegistration,
+        ParameterBound, Schedule, StoredJobRegistration,
     };
 
     use crate::traits::*;
     use crate::types::*;
     use crate::utils::*;
-    use crate::weights::WeightInfo;
     use crate::{JobBudget, RewardManager};
 
     #[pallet::config]
@@ -67,8 +68,15 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedConsumers: Get<u32> + Parameter;
+        type MaxAllowedConsumers: Get<u32> + ParameterBound;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
+        /// The maximum matches that can be proposed with one extrinsic call.
+        #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
+        #[pallet::constant]
+        type MaxFinalizeJobs: Get<u32>;
         /// Extra structure to include in the registration of a job.
         type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
             + Into<JobRequirementsFor<Self>>;
@@ -95,10 +103,9 @@ pub mod pallet {
         type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
     }
 
-    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
@@ -118,8 +125,12 @@ pub mod pallet {
     /// advertisement per client is allowed.
     #[pallet::storage]
     #[pallet::getter(fn stored_advertisement)]
-    pub type StoredAdvertisementRestriction<T: Config> =
-        StorageMap<_, Blake2_128, T::AccountId, AdvertisementRestriction<T::AccountId>>;
+    pub type StoredAdvertisementRestriction<T: Config> = StorageMap<
+        _,
+        Blake2_128,
+        T::AccountId,
+        AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
+    >;
 
     /// The storage for advertisements' pricings. They are stored as a map [`AccountId`] `(source)` -> [`Pricing`] since only one
     /// advertisement per client, and at most one pricing for each distinct `AssetID` is allowed.
@@ -139,20 +150,10 @@ pub mod pallet {
     pub type StoredReputation<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BetaParameters<FixedU128>>;
 
-    /// Deprecated: Number of total jobs assigned as a map [`AssetId`] -> `Balance`
-    #[pallet::storage]
-    #[deprecated(since = "V2", note = "please use `StoredTotalAssignedV3` instead")]
-    pub type StoredTotalAssignedV2<T: Config> = StorageMap<_, Blake2_128Concat, AssetId, u128>;
-
     /// Number of total jobs assigned.
     #[pallet::storage]
     #[pallet::getter(fn total_assigned)]
     pub type StoredTotalAssignedV3<T: Config> = StorageValue<_, u128>;
-
-    /// Deprecated: Average job reward as a map [`AssetId`] -> `Balance`
-    #[pallet::storage]
-    #[deprecated(since = "V2", note = "please use `StoredAverageRewardV3` instead")]
-    pub type StoredAverageRewardV2<T> = StorageMap<_, Blake2_128Concat, AssetId, u128>;
 
     /// Average job reward.
     #[pallet::storage]
@@ -170,11 +171,6 @@ pub mod pallet {
         JobId<T::AccountId>,
         AssignmentFor<T>,
     >;
-
-    #[pallet::storage]
-    #[deprecated(since = "V2", note = "please use `AssignedProcessors` instead")]
-    pub type StoredMatchesReverseIndex<T: Config> =
-        StorageMap<_, Blake2_128, JobId<T::AccountId>, T::AccountId>;
 
     /// Job matches as a map [`JobId`] -> [`AccountId`] `(source)` -> `()`.
     ///
@@ -200,7 +196,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully matched. [Match]
-        JobRegistrationMatched(Match<T::AccountId>),
+        JobRegistrationMatched(MatchFor<T>),
         /// A registration was successfully matched. [JobId, SourceId, Assignment]
         JobRegistrationAssigned(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
         /// A report for an execution has arrived. [JobId, SourceId, Assignment]
@@ -379,7 +375,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
-            crate::migration::migrate_to_v2::<T>() + crate::migration::migrate_to_v3::<T>()
+            crate::migration::migrate::<T>()
         }
     }
 
@@ -429,10 +425,10 @@ pub mod pallet {
 
         /// Proposes processors to match with a job. The match fails if it conflicts with the processor's schedule.
         #[pallet::call_index(2)]
-        #[pallet::weight(< T as Config >::WeightInfo::propose_matching())]
+        #[pallet::weight(< T as Config >::WeightInfo::propose_matching(matches.len() as u32))]
         pub fn propose_matching(
             origin: OriginFor<T>,
-            matches: BoundedVec<Match<T::AccountId>, <T as Config>::MaxProposedMatches>,
+            matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -670,10 +666,10 @@ pub mod pallet {
         ///
         /// For details see [`Pallet<T>::finalize_jobs_for`].
         #[pallet::call_index(6)]
-        #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs())]
+        #[pallet::weight(<T as Config>::WeightInfo::finalize_jobs(job_ids.len() as u32))]
         pub fn finalize_jobs(
             origin: OriginFor<T>,
-            job_ids: Vec<JobIdSequence>,
+            job_ids: BoundedVec<JobIdSequence, T::MaxFinalizeJobs>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
 
@@ -729,7 +725,7 @@ pub mod pallet {
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
             ensure!(
-                requirements.slots as u32 <= MAX_SLOTS,
+                requirements.slots as u32 <= <T as Config>::MaxSlots::get(),
                 Error::<T>::TooManySlots
             );
 
@@ -835,7 +831,7 @@ pub mod pallet {
         ///
         /// Every other invalidity in a provided [`Match`] fails the entire call.
         fn process_matching<'a>(
-            matching: impl IntoIterator<Item = &'a Match<T::AccountId>>,
+            matching: impl IntoIterator<Item = &'a MatchFor<T>>,
         ) -> Result<Vec<(JobId<T::AccountId>, T::Balance)>, DispatchError> {
             let mut remaining_rewards: Vec<(JobId<T::AccountId>, T::Balance)> = Default::default();
 
@@ -1060,7 +1056,7 @@ pub mod pallet {
         }
 
         fn check_network_request_quota_sufficient(
-            ad: &AdvertisementRestriction<T::AccountId>,
+            ad: &AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
             schedule: &Schedule,
             network_requests: u32,
         ) -> Result<(), Error<T>> {
@@ -1106,7 +1102,7 @@ pub mod pallet {
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
         pub fn filter_matching_sources(
-            registration: PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: PartialJobRegistration<T::Balance, T::AccountId, T::MaxAllowedSources>,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
@@ -1140,7 +1136,7 @@ pub mod pallet {
         }
 
         fn check(
-            registration: &PartialJobRegistration<T::Balance, T::AccountId>,
+            registration: &PartialJobRegistrationForMarketplace<T>,
             source: &T::AccountId,
             consumer: Option<&MultiOrigin<T::AccountId>>,
         ) -> Result<(), Error<T>> {
@@ -1400,7 +1396,7 @@ pub mod pallet {
                         *c = c.unwrap_or(0).checked_add(registration.storage.into())
                     });
                 }
-                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, MAX_SLOTS, None);
+                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
 
                 T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
 
@@ -1425,9 +1421,9 @@ pub mod pallet {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with Acurast marketplace pallet.
-    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec> {
+    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>> {
          fn filter_matching_sources(
-            registration: PartialJobRegistration<R, AccountId>,
+            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources>,
             sources: Vec<AccountId>,
             consumer: Option<MultiOrigin<AccountId>>,
             latest_seen_after: Option<u128>,

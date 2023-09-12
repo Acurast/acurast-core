@@ -18,6 +18,7 @@ pub(crate) const SCRIPT_LENGTH: u32 = 53;
 /// Type representing the utf8 bytes of a string containing the value of an ipfs url.
 /// The ipfs url is expected to point to a script.
 pub type Script = BoundedVec<u8, ConstU32<SCRIPT_LENGTH>>;
+pub type AllowedSources<AccountId, MaxAllowedSources> = BoundedVec<AccountId, MaxAllowedSources>;
 
 pub fn is_valid_script(script: &Script) -> bool {
     let script_len: u32 = script.len().try_into().unwrap_or(0);
@@ -70,12 +71,12 @@ pub type AllowedSourcesUpdate<AccountId> = ListUpdate<AccountId>;
 pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct JobRegistration<AccountId, Extra> {
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<AccountId>>,
+    pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
     /// The schedule describing the desired (multiple) execution(s) of the script.
@@ -128,7 +129,7 @@ pub type JobModules = BoundedVec<JobModule, ConstU32<MAX_JOB_MODULES>>;
 ///   ```
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.
     pub duration: u64,
@@ -267,14 +268,26 @@ impl<const T: u32> Get<u32> for CU32<T> {
         T
     }
 }
+
 impl<const T: u32> Get<Option<u32>> for CU32<T> {
     fn get() -> Option<u32> {
         Some(T)
     }
 }
+
 impl<const T: u32> TypedGet for CU32<T> {
     type Type = u32;
     fn get() -> u32 {
         T
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'de, const T: u32> Deserialize<'de> for CU32<T> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(CU32::<T>)
     }
 }

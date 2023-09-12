@@ -6,7 +6,7 @@ pub mod mock;
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
-pub mod benchmarking;
+mod benchmarking;
 
 mod migration;
 mod traits;
@@ -14,16 +14,21 @@ pub mod utils;
 pub mod weights;
 
 pub use acurast_common::*;
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 pub use pallet::*;
 pub use traits::*;
 
-pub type JobRegistrationFor<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
-
-pub(crate) use pallet::STORAGE_VERSION;
+pub type JobRegistrationFor<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::MaxAllowedSources,
+    <T as Config>::RegistrationExtra,
+>;
 
 #[frame_support::pallet]
 pub mod pallet {
+    #[cfg(feature = "runtime-benchmarks")]
+    use super::BenchmarkHelper;
     use acurast_common::*;
     use core::ops::AddAssign;
     use frame_support::{
@@ -39,10 +44,10 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member;
+        type RegistrationExtra: Parameter + Member + MaxEncodedLen;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
-        type MaxAllowedSources: Get<u32>;
+        type MaxAllowedSources: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxCertificateRevocationListUpdates: Get<u32>;
         /// The ID for this pallet
@@ -60,7 +65,7 @@ pub mod pallet {
         type WeightInfo: WeightInfo;
 
         #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper: crate::benchmarking::BenchmarkHelper<Self>;
+        type BenchmarkHelper: BenchmarkHelper<Self>;
     }
 
     #[pallet::genesis_config]
@@ -188,10 +193,9 @@ pub mod pallet {
         }
     }
 
-    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
@@ -299,7 +303,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> frame_support::weights::Weight {
-            crate::migration::migrate_to_v2::<T>()
+            crate::migration::migrate::<T>()
         }
     }
 
@@ -313,7 +317,7 @@ pub mod pallet {
             registration: JobRegistrationFor<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let multi_origin = MultiOrigin::Acurast(who);
             let job_id = (multi_origin, Self::next_job_id());
             Self::register_for(job_id, registration)
         }
@@ -326,7 +330,7 @@ pub mod pallet {
             local_job_id: JobIdSequence,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
-            let multi_origin = MultiOrigin::Acurast(who.clone());
+            let multi_origin = MultiOrigin::Acurast(who);
             let job_id = (multi_origin, local_job_id);
 
             <T as Config>::JobHooks::deregister_hook(&job_id)?;
@@ -339,7 +343,7 @@ pub mod pallet {
 
         /// Updates the allowed sources list of a [JobRegistration].
         #[pallet::call_index(2)]
-        #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources())]
+        #[pallet::weight(< T as Config >::WeightInfo::update_allowed_sources(updates.len() as u32))]
         pub fn update_allowed_sources(
             origin: OriginFor<T>,
             local_job_id: JobIdSequence,
@@ -350,12 +354,15 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who.clone());
-            let job_id: JobId<T::AccountId> = (multi_origin.clone(), local_job_id);
+            let job_id: JobId<T::AccountId> = (multi_origin, local_job_id);
             let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
 
-            let mut current_allowed_sources =
-                registration.allowed_sources.clone().unwrap_or_default();
+            let mut current_allowed_sources = registration
+                .allowed_sources
+                .clone()
+                .unwrap_or_default()
+                .into_inner();
             for update in &updates {
                 let position = current_allowed_sources
                     .iter()
@@ -370,16 +377,13 @@ pub mod pallet {
                     _ => {}
                 }
             }
-            let max_allowed_sources_len = T::MaxAllowedSources::get() as usize;
-            let allowed_sources_len = current_allowed_sources.len();
-            ensure!(
-                allowed_sources_len <= max_allowed_sources_len,
-                Error::<T>::TooManyAllowedSources
-            );
             let allowed_sources = if current_allowed_sources.is_empty() {
                 None
             } else {
-                Some(current_allowed_sources)
+                Some(
+                    AllowedSources::try_from(current_allowed_sources)
+                        .map_err(|_| Error::<T>::TooManyAllowedSources)?,
+                )
             };
             <StoredJobRegistration<T>>::insert(
                 &job_id.0,
@@ -419,6 +423,7 @@ pub mod pallet {
             let attestation = validate_and_extract_attestation::<T>(&who, &attestation_chain)?;
 
             if !T::KeyAttestationBarrier::accept_attestation_for_origin(&who, &attestation) {
+                #[cfg(not(feature = "runtime-benchmarks"))]
                 return Err(Error::<T>::AttestationRejected.into());
             }
 

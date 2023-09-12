@@ -36,7 +36,6 @@ pub mod pallet {
     pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
-    #[pallet::without_storage_info]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T, I = ()>(PhantomData<(T, I)>);
 
@@ -70,7 +69,9 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
         fn build(&self) {
-            for &(internal_asset_id, parachain, pallet_instance, general_index) in &self.assets {
+            for (internal_asset_id, parachain, pallet_instance, general_index) in
+                self.assets.clone()
+            {
                 let asset_id = AssetId::Concrete(MultiLocation::new(
                     1,
                     X3(
@@ -120,7 +121,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {
         fn on_runtime_upgrade() -> Weight {
-            crate::migration::migrate_to_v2::<T, I>()
+            crate::migration::migrate::<T, I>()
         }
     }
 

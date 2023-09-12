@@ -8,7 +8,7 @@ use sp_std::prelude::*;
 use std::marker::PhantomData;
 
 use pallet_acurast::{
-    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier,
+    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier, CU32,
 };
 
 use crate::stub::*;
@@ -162,6 +162,11 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
+    type HoldIdentifier = [u8; 8];
+    type FreezeIdentifier = ();
+    // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+    type MaxHolds = ConstU32<2>;
+    type MaxFreezes = ConstU32<0>;
 }
 
 impl parachain_info::Config for Test {}
@@ -169,7 +174,7 @@ impl parachain_info::Config for Test {}
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type RegistrationExtra = JobRequirementsFor<Self>;
-    type MaxAllowedSources = frame_support::traits::ConstU32<4>;
+    type MaxAllowedSources = CU32<4>;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
     type RevocationListUpdateBarrier = Barrier;
@@ -184,8 +189,10 @@ impl pallet_acurast::Config for Test {
 #[cfg(feature = "runtime-benchmarks")]
 pub struct TestBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
-impl pallet_acurast::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
-    fn registration_extra() -> <Test as pallet_acurast::Config>::RegistrationExtra {
+impl pallet_acurast::BenchmarkHelper<Test> for TestBenchmarkHelper {
+    fn registration_extra(
+        _instant_match: bool,
+    ) -> <Test as pallet_acurast::Config>::RegistrationExtra {
         JobRequirements {
             slots: 1,
             reward: 1,
@@ -196,10 +203,7 @@ impl pallet_acurast::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper
 
     fn funded_account(index: u32) -> AccountId {
         let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(
-            &caller,
-            u32::MAX.into(),
-        );
+        <Balances as fungible::Mutate<_>>::set_balance(&caller, u32::MAX.into());
 
         caller
     }
@@ -316,7 +320,9 @@ impl crate::traits::ProcessorLastSeenProvider<Test> for ProcessorLastSeenProvide
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
+    type MaxSlots = pallet_acurast::CU32<64>;
     type MaxProposedMatches = frame_support::traits::ConstU32<10>;
+    type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type ReportTolerance = ReportTolerance;
@@ -325,7 +331,7 @@ impl Config for Test {
     type RewardManager = MockRewardManager<Pallet<Self>>;
     type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
-    type WeightInfo = weights::Weights<Test>;
+    type WeightInfo = weights::WeightInfo<Test>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = TestBenchmarkHelper;
 }
@@ -338,7 +344,7 @@ impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
 
     fn funded_account(index: u32, amount: Balance) -> AccountId {
         let caller: AccountId = frame_benchmarking::account("token_account", index, SEED);
-        <Balances as frame_support::traits::Currency<_>>::make_free_balance_be(&caller, amount);
+        <Balances as fungible::Mutate<_>>::set_balance(&caller, amount);
 
         caller
     }

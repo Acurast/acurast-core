@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use frame_support::{assert_err, assert_ok, traits::Hooks};
-use sp_runtime::Permill;
+use sp_runtime::{bounded_vec, Permill};
 
 use pallet_acurast::MultiOrigin;
 use pallet_acurast::{
@@ -41,7 +41,6 @@ fn test_valid_deregister() {
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
-            // instant_match: Some(vec![PlannedExecution { source: processor_account_id(), start_delay: 0 }]),
         },
     };
 
@@ -57,7 +56,7 @@ fn test_valid_deregister() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -157,7 +156,7 @@ fn test_invalid_deregister() {
             slots: 1,
             reward: 3_000_000 * 2,
             min_reputation: None,
-            instant_match: Some(vec![PlannedExecution {
+            instant_match: Some(bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }]),
@@ -179,7 +178,7 @@ fn test_invalid_deregister() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -228,7 +227,7 @@ fn test_invalid_deregister() {
                 )),
                 RuntimeEvent::AcurastMarketplace(crate::Event::JobRegistrationMatched(Match {
                     job_id: job_id1.clone(),
-                    sources: vec![PlannedExecution {
+                    sources: bounded_vec![PlannedExecution {
                         source: processor_account_id(),
                         start_delay: 0,
                     }],
@@ -320,7 +319,7 @@ fn test_match() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -357,14 +356,14 @@ fn test_match() {
 
         let job_match1 = Match {
             job_id: job_id1.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],
         };
         let job_match2 = Match {
             job_id: job_id2.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 5_000,
             }],
@@ -492,7 +491,7 @@ fn test_match() {
 
         assert_ok!(AcurastMarketplace::finalize_jobs(
             RuntimeOrigin::signed(alice_account_id()).into(),
-            vec![job_id1.1],
+            vec![job_id1.1].try_into().unwrap(),
         ));
 
         // Job no longer assigned after finalization
@@ -690,7 +689,7 @@ fn test_no_match_schedule_overlap() {
         // the first job matches because capacity left
         let m = Match {
             job_id: job_id1.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],
@@ -703,7 +702,7 @@ fn test_no_match_schedule_overlap() {
         // this one does not match anymore
         let m2 = Match {
             job_id: job_id2.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],
@@ -803,7 +802,7 @@ fn test_no_match_insufficient_reputation() {
         // the job matches except inssufficient reputation
         let m = Match {
             job_id: job_id.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],
@@ -881,7 +880,7 @@ fn test_more_reports_than_expected() {
                 max_memory: 50_000,
                 network_request_quota: 8,
                 storage_capacity: 100_000,
-                allowed_consumers: ad.allowed_consumers.clone().map(|value| value.to_vec()),
+                allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
@@ -894,7 +893,7 @@ fn test_more_reports_than_expected() {
 
         let m = Match {
             job_id: job_id.clone(),
-            sources: vec![PlannedExecution {
+            sources: bounded_vec![PlannedExecution {
                 source: processor_account_id(),
                 start_delay: 0,
             }],

@@ -17,14 +17,20 @@ pub type Balance = u128;
 
 pub const SCRIPT_BYTES: [u8; 53] = hex_literal::hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
+pub type MaxAllowedSources = CU32<10>;
+pub type MaxSlots = CU32<64>;
+
 pub fn alice_account_id() -> AcurastAccountId {
     [0; 32].into()
 }
 pub fn bob_account_id() -> AcurastAccountId {
     [1; 32].into()
 }
-pub fn registration(
-) -> JobRegistration<AcurastAccountId, JobRequirements<Balance, AcurastAccountId>> {
+pub fn registration() -> JobRegistration<
+    AcurastAccountId,
+    MaxAllowedSources,
+    JobRequirements<Balance, AcurastAccountId, MaxSlots>,
+> {
     JobRegistration {
         script: SCRIPT_BYTES.to_vec().try_into().unwrap(),
         allowed_sources: None,
@@ -200,6 +206,11 @@ pub mod acurast_runtime {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl frame_system::Config for Runtime {
@@ -259,8 +270,8 @@ pub mod acurast_runtime {
 
     impl pallet_acurast::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
-        type MaxAllowedSources = frame_support::traits::ConstU32<1000>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, super::MaxSlots>;
+        type MaxAllowedSources = super::MaxAllowedSources;
         type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
         type PalletId = AcurastPalletId;
         type RevocationListUpdateBarrier = ();
@@ -273,7 +284,7 @@ pub mod acurast_runtime {
     }
 
     #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_acurast::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+    impl pallet_acurast::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
         fn registration_extra() -> <Runtime as pallet_acurast::Config>::RegistrationExtra {
             JobRequirements {
                 slots: 1,
@@ -319,7 +330,9 @@ pub mod acurast_runtime {
         type RuntimeEvent = RuntimeEvent;
         type MaxAllowedConsumers = CU32<4>;
         type MaxProposedMatches = frame_support::traits::ConstU32<10>;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
+        type MaxSlots = CU32<64>;
+        type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
         type Balance = Balance;
@@ -327,13 +340,13 @@ pub mod acurast_runtime {
         type RewardManager = AssetRewardManager<FeeManagerImpl, Balances, AcurastMarketplace>;
         type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
         type MarketplaceHooks = ();
-        type WeightInfo = pallet_acurast_marketplace::weights::Weights<Runtime>;
+        type WeightInfo = pallet_acurast_marketplace::weights::WeightInfo<Runtime>;
         #[cfg(feature = "runtime-benchmarks")]
         type BenchmarkHelper = TestBenchmarkHelper;
     }
 
     #[cfg(feature = "runtime-benchmarks")]
-    impl pallet_acurast_marketplace::benchmarking::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
+    impl pallet_acurast_marketplace::BenchmarkHelper<Runtime> for TestBenchmarkHelper {
         fn registration_extra(
             r: pallet_acurast_marketplace::JobRequirementsFor<Runtime>,
         ) -> <Runtime as pallet_acurast_marketplace::Config>::RegistrationExtra {
@@ -370,6 +383,9 @@ pub mod acurast_runtime {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }
@@ -545,6 +561,11 @@ pub mod proxy_runtime {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl super::mock_msg_queue::Config for Runtime {
@@ -573,14 +594,17 @@ pub mod proxy_runtime {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }
 
     impl crate::Config for Runtime {
         type RuntimeEvent = RuntimeEvent;
-        type RegistrationExtra = JobRequirements<Balance, AccountId>;
-        type MaxAllowedSources = ConstU32<10>;
+        type RegistrationExtra = JobRequirements<Balance, AccountId, super::MaxSlots>;
+        type MaxAllowedSources = super::MaxAllowedSources;
         type MaxAllowedConsumers = CU32<10>;
         type Balance = Balance;
         type XcmSender = XcmRouter;
@@ -598,6 +622,7 @@ pub mod proxy_runtime {
     impl crate::benchmarking::BenchmarkHelper<Runtime> for BenchmarkHelper {
         fn create_job_registration() -> acurast_common::JobRegistration<
             <Runtime as frame_system::Config>::AccountId,
+            <Runtime as crate::Config>::MaxAllowedSources,
             <Runtime as crate::Config>::RegistrationExtra,
         > {
             registration()
@@ -779,6 +804,11 @@ pub mod relay_chain {
         type MaxLocks = MaxLocks;
         type MaxReserves = MaxReserves;
         type ReserveIdentifier = [u8; 8];
+        type HoldIdentifier = [u8; 8];
+        type FreezeIdentifier = ();
+        // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
+        type MaxHolds = ConstU32<2>;
+        type MaxFreezes = ConstU32<0>;
     }
 
     impl shared::Config for Runtime {}
@@ -815,6 +845,9 @@ pub mod relay_chain {
         type SovereignAccountOf = LocationToAccountId;
         type MaxLockers = ConstU32<8>;
         type WeightInfo = pallet_xcm::TestWeightInfo;
+        type AdminOrigin = EnsureRoot<AccountId>;
+        type MaxRemoteLockConsumers = ConstU32<0>;
+        type RemoteLockConsumerIdentifier = ();
         #[cfg(feature = "runtime-benchmarks")]
         type ReachableDest = ReachableDest;
     }

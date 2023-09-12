@@ -1,10 +1,11 @@
 use frame_benchmarking::benchmarks_instance_pallet;
 use frame_benchmarking::whitelist_account;
+use frame_benchmarking::whitelisted_caller;
 use frame_support::assert_ok;
 use frame_system::RawOrigin;
 use sp_core::crypto::AccountId32;
 use sp_core::H256;
-use sp_std::iter;
+use sp_std::{iter, prelude::*};
 
 pub use crate::stub::*;
 use crate::types::*;
@@ -26,9 +27,9 @@ fn update_state_transmitters_helper<T: Config<I>, I: 'static>(
 ) -> (T::AccountId, StateTransmitterUpdates<T>)
 where
     T::AccountId: From<AccountId32>,
-    T::BlockNumber: From<u64>,
+    T::BlockNumber: From<u32>,
 {
-    let caller: T::AccountId = alice_account_id().into();
+    let caller: T::AccountId = whitelisted_caller();
     whitelist_account!(caller);
 
     let actions = StateTransmitterUpdates::<T>::try_from(
@@ -60,7 +61,7 @@ benchmarks_instance_pallet! {
         where
         T: Config<I>,
         T::AccountId: From<AccountId32>,
-        T::BlockNumber: From<u64>,
+        T::BlockNumber: From<u32>,
         <T as pallet::Config<I>>::TargetChainBlockNumber: From<u64>,
         <T as pallet::Config<I>>::TargetChainHash: From<H256>,
     }
@@ -68,12 +69,12 @@ benchmarks_instance_pallet! {
         let l in 0 .. STATE_TRANSMITTER_UPDATES_MAX_LENGTH;
 
         // just create the data, do not submit the actual call (it gets executed by the benchmark call)
-        let (caller, actions) = update_state_transmitters_helper::<T, I>(l as usize, false);
+        let (account, actions) = update_state_transmitters_helper::<T, I>(l as usize, false);
     }: _(RawOrigin::Root, actions.clone())
     verify {
         assert_last_event::<T, I>(Event::StateTransmittersUpdate{
                     added: iter::repeat((
-                            alice_account_id().into(),
+                            account.into(),
                             ActivityWindow {
                                 start_block: 0.into(),
                                 end_block: 100.into()
@@ -97,6 +98,24 @@ benchmarks_instance_pallet! {
                     state_merkle_root: HASH.into()
                 }.into());
     }
+
+    submit_message {
+        let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
+        let proof = proof().into_iter().map(|node| {
+            match node {
+                StateProofNode::Left(hash) => StateProofNode::Left(hash.into()),
+                StateProofNode::Right(hash) => StateProofNode::Right(hash.into()),
+            }
+        }).collect::<Vec<_>>().try_into().unwrap();
+        let key: StateKey = key();
+        let value: StateValue = value();
+        assert_ok!(AcurastHyperdrive::<T, I>::submit_state_merkle_root(RawOrigin::Signed(caller.clone()).into(), 1.into(), ROOT_HASH.into()));
+        assert_ok!(AcurastHyperdrive::<T, I>::update_target_chain_owner(RawOrigin::Root.into(), state_owner()));
+    }: _(RawOrigin::Signed(caller), 1u8.into(), proof, key, value)
+
+    update_target_chain_owner {
+        let owner: StateOwner = state_owner();
+    }: _(RawOrigin::Root, owner)
 
     impl_benchmark_test_suite!(AcurastHyperdrive, crate::mock::new_test_ext(), mock::Test);
 }

@@ -1,7 +1,9 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
-use pallet_acurast::{JobId, JobModules, JobRegistration, MultiOrigin, Schedule};
+use pallet_acurast::{
+    AllowedSources, JobId, JobModules, JobRegistration, MultiOrigin, ParameterBound, Schedule,
+};
 
 use core::fmt::Debug;
 #[cfg(feature = "std")]
@@ -11,28 +13,40 @@ use serde::{Deserialize, Serialize};
 
 use crate::Config;
 
-pub const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
+pub(crate) const MAX_EXECUTIONS_PER_JOB: u64 = 6_308_000; // run a job every 5 seconds for a year
 
-pub const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
-pub const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
-pub const MAX_SLOTS: u32 = 64;
+pub(crate) const EXECUTION_OPERATION_HASH_MAX_LENGTH: u32 = 256;
+pub(crate) const EXECUTION_FAILURE_MESSAGE_MAX_LENGTH: u32 = 1024;
 
 pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HASH_MAX_LENGTH>>;
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
+pub type PlannedExecutions<AccountId, MaxSlots> = BoundedVec<PlannedExecution<AccountId>, MaxSlots>;
 
-pub type JobRegistrationForMarketplace<T> =
-    JobRegistration<<T as frame_system::Config>::AccountId, <T as Config>::RegistrationExtra>;
+pub type JobRegistrationForMarketplace<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
+    <T as Config>::RegistrationExtra,
+>;
+
+pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
+>;
+
+pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId, <T as Config>::MaxSlots>;
 
 /// Struct defining the extra fields for a `JobRegistration`.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]
-pub struct RegistrationExtra<Reward, AccountId> {
-    pub requirements: JobRequirements<Reward, AccountId>,
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct RegistrationExtra<Reward, AccountId, MaxSlots: ParameterBound> {
+    pub requirements: JobRequirements<Reward, AccountId, MaxSlots>,
 }
 
-impl<Reward, AccountId> From<RegistrationExtra<Reward, AccountId>>
-    for JobRequirements<Reward, AccountId>
+impl<Reward, AccountId, MaxSlots: ParameterBound>
+    From<RegistrationExtra<Reward, AccountId, MaxSlots>>
+    for JobRequirements<Reward, AccountId, MaxSlots>
 {
-    fn from(extra: RegistrationExtra<Reward, AccountId>) -> Self {
+    fn from(extra: RegistrationExtra<Reward, AccountId, MaxSlots>) -> Self {
         extra.requirements
     }
 }
@@ -62,7 +76,7 @@ pub type AdvertisementFor<T> = Advertisement<
 
 /// The resource advertisement by a source containing the base restrictions.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-pub struct AdvertisementRestriction<AccountId> {
+pub struct AdvertisementRestriction<AccountId, MaxAllowedConsumers: ParameterBound> {
     /// Maximum memory in bytes not to be exceeded during any job's execution.
     pub max_memory: u32,
     /// Maximum network requests per second not to be exceeded.
@@ -70,7 +84,7 @@ pub struct AdvertisementRestriction<AccountId> {
     /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
     pub storage_capacity: u32,
     /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-    pub allowed_consumers: Option<Vec<MultiOrigin<AccountId>>>,
+    pub allowed_consumers: Option<BoundedVec<MultiOrigin<AccountId>, MaxAllowedConsumers>>,
     /// The modules available to the job on processor.
     pub available_modules: JobModules,
 }
@@ -130,7 +144,7 @@ pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
 
 pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
 
-/// The public keys of the processor releaved when a job is acknowledge.
+/// The public keys of the processor revealed when a job is acknowledged.
 pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
 
 /// The public key revealed by a processor.
@@ -171,12 +185,15 @@ pub struct SLA {
     pub met: u64,
 }
 
-pub type JobRequirementsFor<T> =
-    JobRequirements<<T as Config>::Balance, <T as frame_system::Config>::AccountId>;
+pub type JobRequirementsFor<T> = JobRequirements<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::MaxSlots,
+>;
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-pub struct JobRequirements<Reward, AccountId> {
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
     /// Reward offered for each slot and scheduled execution of the job.
@@ -185,16 +202,16 @@ pub struct JobRequirements<Reward, AccountId> {
     pub min_reputation: Option<u128>,
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
-    pub instant_match: Option<Vec<PlannedExecution<AccountId>>>,
+    pub instant_match: Option<PlannedExecutions<AccountId, MaxSlots>>,
 }
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
-pub struct Match<AcurastAccountId> {
+pub struct Match<AccountId, MaxSlots: ParameterBound> {
     /// The job to match.
-    pub job_id: JobId<AcurastAccountId>,
+    pub job_id: JobId<AccountId>,
     /// The sources to match each of the job's slots with.
-    pub sources: Vec<PlannedExecution<AcurastAccountId>>,
+    pub sources: PlannedExecutions<AccountId, MaxSlots>,
 }
 
 /// Structure representing a job registration partially specified.
@@ -203,9 +220,9 @@ pub struct Match<AcurastAccountId> {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct PartialJobRegistration<Reward, AccountId> {
+pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>> {
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
-    pub allowed_sources: Option<Vec<AccountId>>,
+    pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
     pub allow_only_verified_sources: bool,
     /// The schedule describing the desired (multiple) execution(s) of the script.
@@ -274,7 +291,7 @@ impl<T: Config> MarketplaceHooks<T> for () {
 
 /// Runtime API error.
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
-#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq)]
+#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq, TypeInfo)]
 pub enum RuntimeApiError {
     /// Error when filtering matching sources failed.
     #[cfg_attr(feature = "std", error("Filtering matching sources failed."))]
