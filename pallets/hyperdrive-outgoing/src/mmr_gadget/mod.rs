@@ -49,6 +49,7 @@ use sp_blockchain::{HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::{Block, Header};
 
 use offchain_mmr::OffchainMmr;
+use pallet_acurast_hyperdrive::instances::HyperdriveInstanceName;
 
 use crate::{HyperdriveApi, LeafIndex};
 
@@ -60,7 +61,7 @@ pub mod test_utils;
 /// Logging target for the mmr gadget.
 pub const LOG_TARGET: &str = "mmr";
 
-struct OffchainMmrBuilder<I, B: Block, BE: Backend<B>, C, MmrHash: Codec> {
+struct OffchainMmrBuilder<I: HyperdriveInstanceName, B: Block, BE: Backend<B>, C, MmrHash: Codec> {
     backend: Arc<BE>,
     client: Arc<C>,
     offchain_db: OffchainDb<BE::OffchainStorage>,
@@ -76,7 +77,8 @@ where
     BE: Backend<B>,
     C: ProvideRuntimeApi<B> + HeaderBackend<B> + HeaderMetadata<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash, I>,
+    C::Api: HyperdriveApi<B, MmrHash>,
+    I: HyperdriveInstanceName,
 {
     async fn try_build(
         self,
@@ -86,7 +88,7 @@ where
             match self
                 .client
                 .runtime_api()
-                .first_mmr_block_number(notification.hash)
+                .first_mmr_block_number(notification.hash, I::NAME)
             {
                 Ok(Some(first_mmr_block)) => {
                     debug!(
@@ -96,7 +98,7 @@ where
                         *notification.header.number(),
                         self.client
                             .runtime_api()
-                            .number_of_leaves(notification.hash)
+                            .number_of_leaves(notification.hash, I::NAME)
                     );
                     let best_canonicalized =
                         match offchain_mmr::load_or_init_best_canonicalized::<B, BE>(
@@ -168,7 +170,8 @@ where
     BE: Backend<B>,
     C: BlockchainEvents<B> + HeaderBackend<B> + HeaderMetadata<B> + ProvideRuntimeApi<B>,
     MmrHash: Codec + Clone,
-    C::Api: HyperdriveApi<B, MmrHash, I>,
+    C::Api: HyperdriveApi<B, MmrHash>,
+    I: HyperdriveInstanceName,
 {
     async fn run(mut self, builder: OffchainMmrBuilder<I, B, BE, C, MmrHash>) {
         let mut offchain_mmr = match builder.try_build(&mut self.finality_notifications).await {

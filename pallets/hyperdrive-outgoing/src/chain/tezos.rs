@@ -1,7 +1,10 @@
+use crate::traits::MMRInstance;
 use alloc::string::String;
 use codec::alloc;
+use derive_more::Error as DError;
+use derive_more::{Display, From};
 use once_cell::race::OnceBox;
-use sp_core::H256;
+use sp_core::{RuntimeDebug, H256};
 use sp_runtime::traits::Keccak256;
 use sp_std::prelude::*;
 use sp_std::vec;
@@ -14,18 +17,27 @@ use tezos_michelson::michelson::data::String as TezosString;
 use tezos_michelson::michelson::types::{address, bytes, nat, pair, string};
 use tezos_michelson::Error as TezosMichelineError;
 
-use pallet_acurast_marketplace::PubKeyBytes;
+use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
 
+use crate::instances::TezosInstance;
 use crate::types::TargetChainConfig;
 use crate::Action;
 use crate::Leaf;
 use crate::{LeafEncoder, RawAction};
 
+#[derive(RuntimeDebug, Display, From)]
+#[cfg_attr(feature = "std", derive(DError))]
+pub enum TezosValidationError {
+    TezosMichelineError(TezosMichelineError),
+    TezosCoreError(TezosCoreError),
+    UnexpectedPublicKey,
+}
+
 /// The [`LeafEncoder`] for Tezos using Micheline/Michelson encoding/packing.
 pub struct TezosEncoder();
 
 impl LeafEncoder for TezosEncoder {
-    type Error = TezosMichelineError;
+    type Error = TezosValidationError;
 
     /// Encodes the given message for Tezos.
     ///
@@ -48,10 +60,14 @@ impl LeafEncoder for TezosEncoder {
             data::int(message.id as i64),
             data::try_string(action_str)?,
             data::bytes(match &message.action {
-                Action::AssignJob(job_id, processor_address) => {
+                Action::AssignJob(job_id, processor_public_key) => {
+                    let address = match processor_public_key {
+                        PubKey::SECP256r1(pk) => p256_pub_key_to_address(pk)?,
+                        _ => Err(TezosValidationError::UnexpectedPublicKey)?,
+                    };
                     let data = data::pair(vec![
                         data::nat(Nat::from_integer(*job_id)),
-                        data::string(TezosString::from_string(processor_address.to_owned())?),
+                        data::string(TezosString::from_string(address.to_owned())?),
                     ]);
                     Micheline::pack(data, Some(assign_payload_schema()))
                 }
@@ -66,7 +82,7 @@ impl LeafEncoder for TezosEncoder {
             }?),
         ]);
 
-        Micheline::pack(data, Some(message_schema()))
+        Ok(Micheline::pack(data, Some(message_schema()))?)
     }
 }
 
@@ -129,12 +145,29 @@ pub fn p256_pub_key_to_address(pub_key: &PubKeyBytes) -> Result<String, TezosCor
     key.bs58_address()
 }
 
+impl MMRInstance for TezosInstance {
+    const INDEXING_PREFIX: &'static [u8] = b"mmr-tez-";
+    const TEMP_INDEXING_PREFIX: &'static [u8] = b"mmr-tez-temp-";
+}
+
+#[cfg(feature = "std")]
+pub mod rpc {
+    use crate::instances::TezosInstance;
+    use crate::rpc::RpcInstance;
+
+    impl RpcInstance for TezosInstance {
+        const SNAPSHOT_ROOTS: &'static str = "hyperdrive_outgoing_tezos_snapshotRoots";
+        const SNAPSHOT_ROOT: &'static str = "hyperdrive_outgoing_tezos_snapshotRoot";
+        const GENERATE_PROOF: &'static str = "hyperdrive_outgoing_tezos_generateProof";
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
 
-    use crate::stub::tezos_account_id;
-    use crate::{tezos, Message};
+    use crate::stub::p256_public_key;
+    use crate::{chain::tezos, Message};
 
     use super::*;
 
@@ -142,10 +175,10 @@ mod tests {
     fn test_pack_assign_job() -> Result<(), <TezosEncoder as LeafEncoder>::Error> {
         let encoded = tezos::TezosEncoder::encode(&Message {
             id: 5,
-            action: Action::AssignJob(4, tezos_account_id()),
+            action: Action::AssignJob(4, p256_public_key()),
         })?;
 
-        let expected = &hex!("05070700050707010000001441535349474e5f4a4f425f50524f434553534f520a0000002005070700040a000000160000eaeec9ada5305ad61fc452a5ee9f7d4f55f80467");
+        let expected = &hex!("05070700050707010000001441535349474e5f4a4f425f50524f434553534f520a0000002005070700040a00000016000292251ea7a095ef710f65258ecd6b7246e209436e");
         assert_eq!(expected, &*encoded);
         Ok(())
     }

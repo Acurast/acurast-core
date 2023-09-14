@@ -7,9 +7,11 @@ use sp_core::crypto::AccountId32;
 use sp_core::H256;
 use sp_std::{iter, prelude::*};
 
+use crate::chain::tezos::TezosProof;
 pub use crate::stub::*;
 use crate::types::*;
 use crate::Pallet as AcurastHyperdrive;
+use core::marker::PhantomData;
 
 use super::*;
 
@@ -62,6 +64,7 @@ benchmarks_instance_pallet! {
         T: Config<I>,
         T::AccountId: From<AccountId32>,
         T::BlockNumber: From<u32>,
+        T: Config<I, Proof = TezosProof<<T as Config<I>>::ParsableAccountId, <T as frame_system::Config>::AccountId>>,
         <T as pallet::Config<I>>::TargetChainBlockNumber: From<u64>,
         <T as pallet::Config<I>>::TargetChainHash: From<H256>,
     }
@@ -101,17 +104,23 @@ benchmarks_instance_pallet! {
 
     submit_message {
         let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
-        let proof = proof().into_iter().map(|node| {
-            match node {
-                StateProofNode::Left(hash) => StateProofNode::Left(hash.into()),
-                StateProofNode::Right(hash) => StateProofNode::Right(hash.into()),
-            }
-        }).collect::<Vec<_>>().try_into().unwrap();
+        let proof_items: StateProof<H256> = proof().into_iter().map(|node| {
+                match node {
+                    StateProofNode::Left(hash) => StateProofNode::Left(hash.into()),
+                    StateProofNode::Right(hash) => StateProofNode::Right(hash.into()),
+                }
+            }).collect::<Vec<_>>().try_into().unwrap();
         let key: StateKey = key();
         let value: StateValue = value();
+        let proof = TezosProof::<<T as crate::Config<I>>::ParsableAccountId, <T as frame_system::Config>::AccountId> {
+            items: proof_items,
+            path: key,
+            value,
+            marker: PhantomData::default()
+        };
         assert_ok!(AcurastHyperdrive::<T, I>::submit_state_merkle_root(RawOrigin::Signed(caller.clone()).into(), 1.into(), ROOT_HASH.into()));
         assert_ok!(AcurastHyperdrive::<T, I>::update_target_chain_owner(RawOrigin::Root.into(), state_owner()));
-    }: _(RawOrigin::Signed(caller), 1u8.into(), proof, key, value)
+    }: _(RawOrigin::Signed(caller), 1u8.into(), proof)
 
     update_target_chain_owner {
         let owner: StateOwner = state_owner();

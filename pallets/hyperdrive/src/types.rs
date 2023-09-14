@@ -51,7 +51,7 @@ pub enum StateTransmitterUpdate<AccountId, BlockNumber> {
 /// leaf hash.
 pub type StateProof<Hash> = BoundedVec<StateProofNode<Hash>, ConstU32<256>>;
 
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
 pub enum StateProofNode<Hash> {
     Left(Hash),
     Right(Hash),
@@ -127,6 +127,23 @@ pub enum RawAction {
     DeregisterJob,
     #[strum(serialize = "FINALIZE_JOB")]
     FinalizeJob,
+    #[strum(serialize = "NOOP")]
+    Noop = 255,
+}
+
+/// Convert an index to a RawAction
+impl TryFrom<u16> for RawAction {
+    type Error = Vec<u8>;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RawAction::RegisterJob),
+            1 => Ok(RawAction::DeregisterJob),
+            2 => Ok(RawAction::FinalizeJob),
+            255 => Ok(RawAction::Noop),
+            _ => Err(b"Unknown action index".to_vec()),
+        }
+    }
 }
 
 impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
@@ -137,6 +154,7 @@ impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
             ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
+            ParsedAction::Noop => RawAction::Noop,
         }
     }
 }
@@ -149,6 +167,7 @@ pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     ),
     DeregisterJob(JobId<AccountId>),
     FinalizeJob(Vec<JobId<AccountId>>),
+    Noop,
 }
 
 pub type MessageIdentifier = u128;
@@ -177,11 +196,9 @@ pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
 /// Tracks the progress during `submit_message`, intended to be included in events.
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
 pub enum ProcessMessageResult {
-    ParsingKeyFailed,
     ParsingValueFailed,
     ActionFailed(RawAction),
     ActionSuccess,
-    InvalidSequenceId,
     ProcessingFailed(DispatchError),
 }
 

@@ -1,20 +1,3 @@
-// This file is part of Substrate.
-
-// Copyright (C) 2020-2022 Parity Technologies (UK) Ltd.
-// SPDX-License-Identifier: Apache-2.0
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// 	http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use core::fmt::Debug;
 
 #[cfg(not(feature = "std"))]
@@ -33,6 +16,7 @@ use sp_std::prelude::*;
 use strum_macros::{EnumString, IntoStaticStr};
 
 use pallet_acurast::JobIdSequence;
+use pallet_acurast_marketplace::PubKey;
 
 /// A type to describe node position in the MMR (node index).
 pub type NodeIndex = u64;
@@ -59,7 +43,6 @@ impl<Hash> OnNewRoot<Hash> for () {
 }
 
 /// The encodable version of an [`Action`].
-// #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 #[derive(
     RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq, EnumString, IntoStaticStr,
 )]
@@ -69,7 +52,7 @@ pub enum RawAction {
     #[strum(serialize = "FINALIZE_JOB")]
     FinalizeJob,
     #[strum(serialize = "NOOP")]
-    Noop,
+    Noop = 255,
 }
 
 impl From<&Action> for RawAction {
@@ -82,19 +65,26 @@ impl From<&Action> for RawAction {
     }
 }
 
+/// Convert [RawAction] to an index
+impl Into<u16> for RawAction {
+    fn into(self: Self) -> u16 {
+        self as u16
+    }
+}
+
 /// The action is triggered over Hyperdrive as part of a [`Message`].
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Eq, PartialEq, Clone)]
 pub enum Action {
     /// Assigns a job on target chain.
     ///
-    /// Consists of `(Job ID on Tezos, processor address)`,
-    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
-    AssignJob(JobIdSequence, String), // (nat, address)
+    /// Consists of `(Job ID, processor address)`,
+    /// where `Job ID` is the subset of [`pallet_acurast::JobId`] for jobs created externally.
+    AssignJob(JobIdSequence, PubKey), // (u128, address)
     /// Finalizes a job on target chain.
     ///
-    /// Consists of `(Job ID on Tezos, refund amount)`,
-    /// where `Job ID on Tezos` is the subset of [`pallet_acurast::JobId`] for jobs created on Tezos.
-    FinalizeJob(JobIdSequence, u128), // (nat, nat)
+    /// Consists of `(Job ID, refund amount)`,
+    /// where `Job ID` is the subset of [`pallet_acurast::JobId`] for jobs created externally.
+    FinalizeJob(JobIdSequence, u128), // (u128, u128)
     /// A noop action that solely suits the purpose of testing that messages get sent.
     Noop,
 }
@@ -125,7 +115,7 @@ impl<H: traits::Hash> From<Leaf> for Node<H> {
 
 /// A bundled config of encoder/hasher for the target chain.
 ///
-/// Extends traits [`traits::Hash`] and adds hashing with previsously encoded value, using an encoding supported on target chain.
+/// Extends traits [`traits::Hash`] and adds hashing with previously encoded value, using an encoding supported on target chain.
 pub trait TargetChainConfig {
     type TargetChainEncoder: LeafEncoder;
 
