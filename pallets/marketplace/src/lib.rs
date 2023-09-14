@@ -778,7 +778,6 @@ pub mod pallet {
 
                     for (p, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
                         <StoredMatches<T>>::remove(&p, &job_id);
-                        <StoredStorageCapacity<T>>::remove(&p);
                     }
 
                     let _ =
@@ -786,10 +785,17 @@ pub mod pallet {
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                     <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
-                JobStatus::Assigned(assigned) => {
+                JobStatus::Assigned(_) => {
+                    // Get the job requirements
+                    let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                        .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+                    let extra: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                    let requirements: JobRequirementsFor<T> = extra.into();
+
+                    // Compute the reward amount to be payed to each assigned processor
                     let remaining_reward = Self::reserved(job_id);
                     let reward_per_processor = remaining_reward
-                        .checked_div(&(assigned.into()))
+                        .checked_div(&(requirements.slots.into()))
                         .ok_or(Error::<T>::UnexpectedCheckedCalculation)?;
 
                     // Pay reward to the processor and clear matching data
@@ -803,7 +809,6 @@ pub mod pallet {
                             Err(err_result) => Err(err_result.into()),
                         }?;
                         <StoredMatches<T>>::remove(&processor, &job_id);
-                        <StoredStorageCapacity<T>>::remove(&processor);
                     }
 
                     // The job creator will only receive the amount that could not be divided equaly between the processors
