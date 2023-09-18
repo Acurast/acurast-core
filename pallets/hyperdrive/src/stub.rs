@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use derive_more::{Display, From, Into};
+use derive_more::{From, Into};
 use hex_literal::hex;
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -10,7 +10,7 @@ use sp_std::prelude::*;
 
 use crate::{StateKey, StateOwner, StateProof, StateProofNode, StateValue};
 
-#[derive(Display, Debug, From, Into, Clone, Eq, PartialEq)]
+#[derive(Debug, From, Into, Clone, Eq, PartialEq)]
 pub struct AcurastAccountId(AccountId32);
 impl TryFrom<Vec<u8>> for AcurastAccountId {
     type Error = ();
