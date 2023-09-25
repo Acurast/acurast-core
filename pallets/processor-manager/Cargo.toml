@@ -50,6 +50,7 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"acurast-common/std",
+	"pallet-uniques/std"
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",

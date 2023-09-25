@@ -13,6 +13,8 @@ use crate::traits::OnFulfillment;
 
 pub type BlockNumber = u32;
 
+type Block = frame_system::mocking::MockBlock<Test>;
+
 frame_support::construct_runtime!(
     pub enum Test {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,

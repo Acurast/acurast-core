@@ -57,5 +57,6 @@ std = [
 	"sp-runtime/std",
 	"acurast-common/std",
 	"serde",
+	"pallet-uniques/std"
 ]
 try-runtime = ["frame-support/try-runtime"]
