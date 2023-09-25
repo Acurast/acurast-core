@@ -1,9 +1,8 @@
 use frame_support::traits::tokens::{Fortitude, Precision, Preservation};
 use frame_support::{
     sp_runtime::{
-        generic,
         traits::{AccountIdLookup, BlakeTwo256, ConstU128, ConstU32},
-        MultiSignature,
+        BuildStorage, MultiSignature,
     },
     traits::{
         fungible::{Inspect, Mutate},
@@ -23,8 +22,8 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let mut t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         pallet_balances::GenesisConfig::<Test> {
@@ -50,12 +49,8 @@ impl Default for ExtBuilder {
 }
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block<Test>,
-        NodeBlock = Block<Test>,
-        UncheckedExtrinsic = UncheckedExtrinsic<Test>,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Uniques: pallet_uniques::{Pallet, Storage, Event<T>, Call},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
@@ -65,13 +60,12 @@ frame_support::construct_runtime!(
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block<Test>;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
@@ -102,7 +96,7 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-    type HoldIdentifier = [u8; 8];
+    type RuntimeHoldReason = ();
     type FreezeIdentifier = ();
     // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
     type MaxHolds = ConstU32<2>;

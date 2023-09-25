@@ -1,7 +1,7 @@
 use frame_support::instances::{Instance1, Instance2};
 use frame_support::pallet_prelude::{Decode, Encode};
-use frame_support::RuntimeDebug;
 use scale_info::TypeInfo;
+use sp_core::RuntimeDebug;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo)]
 pub enum HyperdriveInstance {

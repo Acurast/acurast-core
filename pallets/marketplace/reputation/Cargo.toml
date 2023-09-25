@@ -23,11 +23,11 @@ codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive
 scale-info = { version = "2.2.0", default-features = false, features = ["derive"] }
 
 # Substrate
-sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
-sp-arithmetic = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/polkadot-sdk", default-features = false, tag = "polkadot-v1.1.0" }
+sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk", default-features = false, tag = "polkadot-v1.1.0" }
 
 [dev-dependencies]
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
+sp-core = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0" }
 hex-literal = "0.3.4"
 rand = "0.8.5"
 

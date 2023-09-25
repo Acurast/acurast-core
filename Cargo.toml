@@ -2,7 +2,7 @@
 panic = "unwind"
 
 [workspace]
-resolver = "1"
+resolver = "2"
 members = [
 	"pallets/*",
 	"pallets/acurast/common",

@@ -8200,7 +8200,7 @@ fn deferred_payment_steady_state_event_flow() {
 
                 assert_events_eq!(
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 1,
                         total_exposed_amount: Stake {
                             power: 400,
@@ -8208,7 +8208,7 @@ fn deferred_payment_steady_state_event_flow() {
                         },
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 2,
                         total_exposed_amount: Stake {
                             power: 400,
@@ -8216,7 +8216,7 @@ fn deferred_payment_steady_state_event_flow() {
                         },
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 3,
                         total_exposed_amount: Stake {
                             power: 400,
@@ -8224,7 +8224,7 @@ fn deferred_payment_steady_state_event_flow() {
                         },
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 4,
                         total_exposed_amount: Stake {
                             power: 400,
@@ -8233,7 +8233,7 @@ fn deferred_payment_steady_state_event_flow() {
                     },
                     Event::NewRound {
                         starting_block: (round - 1) * 5,
-                        round: round as u32,
+                        round: round as u64,
                         selected_collators_number: 4,
                         total_balance: Stake {
                             power: 1600,

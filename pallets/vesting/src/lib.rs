@@ -25,9 +25,12 @@ pub mod pallet {
     use frame_support::sp_runtime::Saturating;
     use frame_support::traits::tokens::Balance;
     use frame_support::{
-        dispatch::DispatchResultWithPostInfo, log, pallet_prelude::*, traits::Get, Parameter,
+        dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::Get, Parameter,
     };
-    use frame_system::{ensure_signed, pallet_prelude::OriginFor};
+    use frame_system::{
+        ensure_signed,
+        pallet_prelude::{BlockNumberFor, OriginFor},
+    };
     use sp_arithmetic::traits::EnsureAddAssign;
     use sp_arithmetic::Perbill;
     use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
@@ -59,7 +62,7 @@ pub mod pallet {
             + CheckedAdd
             + Copy
             + Into<u128>
-            + IsType<<Self as frame_system::Config>::BlockNumber>
+            + IsType<BlockNumberFor<Self>>
             + MaybeSerializeDeserialize;
         type VestingBalance: VestingBalance<Self::AccountId, Self::Balance>;
         /// Weight Info for extrinsics.
@@ -81,7 +84,7 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
+    impl<T: Config<I>, I: 'static> BuildGenesisConfig for GenesisConfig<T, I> {
         fn build(&self) {
             for (who, vesting) in &self.vesters {
                 if let Err(e) = Pallet::<T, I>::vest_for(&who, vesting.to_owned()) {

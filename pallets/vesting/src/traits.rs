@@ -1,4 +1,4 @@
-use frame_support::{dispatch::Weight, sp_runtime::DispatchError};
+use frame_support::{sp_runtime::DispatchError, weights::Weight};
 use sp_arithmetic::Perbill;
 
 /// Trait used to manage vesting stakes and accrued rewards.

@@ -2,7 +2,7 @@
 
 use asn1::ParseError;
 use codec::{Decode, Encode};
-use frame_support::RuntimeDebug;
+use frame_support::pallet_prelude::RuntimeDebug;
 use scale_info::TypeInfo;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Eq)]

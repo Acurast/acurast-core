@@ -28,7 +28,7 @@ use pallet_acurast_hyperdrive::instances::HyperdriveInstanceName;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
-use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
+use sp_runtime::traits::{HashingFor, MaybeSerializeDeserialize};
 
 use crate::{HyperdriveApi, LeafIndex, MMRError, SnapshotNumber, TargetChainProof};
 
@@ -432,7 +432,7 @@ impl<I, C, B> Mmr<I, C, B> {
 
 #[async_trait]
 impl<I: RpcInstance + HyperdriveInstanceName + 'static, Client, Block, MmrHash>
-    MmrApiServer<I, HashFor<Block>, MmrHash> for Mmr<I, Client, (Block, MmrHash)>
+    MmrApiServer<I, HashingFor<Block>, MmrHash> for Mmr<I, Client, (Block, MmrHash)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,

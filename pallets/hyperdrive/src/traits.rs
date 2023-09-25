@@ -1,8 +1,8 @@
 use crate::{MessageIdentifier, ParsedAction};
-use frame_support::dispatch::fmt::Debug;
 use frame_support::weights::Weight;
 use pallet_acurast::ParameterBound;
 use pallet_acurast_marketplace::RegistrationExtra;
+use sp_std::fmt::Debug;
 
 pub trait Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
 where

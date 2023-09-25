@@ -1,8 +1,7 @@
 use frame_support::{
-    pallet_prelude::GenesisBuild,
     sp_runtime::{
-        generic,
         traits::{AccountIdLookup, BlakeTwo256, ConstU128, ConstU32},
+        BuildStorage,
     },
     traits::{AsEnsureOriginWithArg, Everything},
 };
@@ -15,8 +14,8 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let mut t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         pallet_balances::GenesisConfig::<Test> {
@@ -55,12 +54,8 @@ impl Default for ExtBuilder {
 }
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block<Test>,
-        NodeBlock = Block<Test>,
-        UncheckedExtrinsic = UncheckedExtrinsic<Test>,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         Assets: pallet_assets::{Pallet, Config<T>, Event<T>, Storage},
         AcurastAssetManager: crate::{Pallet, Call, Storage, Event<T>},
@@ -79,7 +74,7 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-    type HoldIdentifier = [u8; 8];
+    type RuntimeHoldReason = ();
     type FreezeIdentifier = ();
     // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
     type MaxHolds = ConstU32<2>;
@@ -92,13 +87,12 @@ impl frame_system::Config for Test {
     type BlockLength = ();
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block<Self>;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type BlockHashCount = BlockHashCount;
     type DbWeight = ();
