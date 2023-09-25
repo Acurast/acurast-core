@@ -12,6 +12,7 @@ pub use crate::stub::*;
 use crate::types::*;
 use crate::Pallet as AcurastHyperdrive;
 use core::marker::PhantomData;
+use frame_system::pallet_prelude::BlockNumberFor;
 use hex_literal::hex;
 
 use super::*;
@@ -30,7 +31,7 @@ fn update_state_transmitters_helper<T: Config<I>, I: 'static>(
 ) -> (T::AccountId, StateTransmitterUpdates<T>)
 where
     T::AccountId: From<AccountId32>,
-    T::BlockNumber: From<u32>,
+    BlockNumberFor<T>: From<u64>,
 {
     let caller: T::AccountId = whitelisted_caller();
     whitelist_account!(caller);
@@ -64,7 +65,7 @@ benchmarks_instance_pallet! {
         where
         T: Config<I>,
         T::AccountId: From<AccountId32>,
-        T::BlockNumber: From<u32>,
+        BlockNumberFor<T>: From<u64>,
         T: Config<I, Proof = TezosProof<<T as Config<I>>::ParsableAccountId, <T as frame_system::Config>::AccountId>>,
         <T as pallet::Config<I>>::TargetChainBlockNumber: From<u64>,
         <T as pallet::Config<I>>::TargetChainHash: From<H256>,
@@ -85,7 +86,7 @@ benchmarks_instance_pallet! {
                             }
                         ))
                         .take(l as usize)
-                        .collect::<Vec<(T::AccountId, ActivityWindow<<T as frame_system::Config>::BlockNumber>)>>(),
+                        .collect::<Vec<(T::AccountId, ActivityWindow<BlockNumberFor<T>>)>>(),
                     updated: vec![],
                     removed: vec![],
                 }.into());

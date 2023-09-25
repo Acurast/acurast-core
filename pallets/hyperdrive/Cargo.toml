@@ -54,7 +54,7 @@ sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk", tag = "pol
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
-log = "0.4.17"
+log = "0.4.20"
 
 
 [features]
