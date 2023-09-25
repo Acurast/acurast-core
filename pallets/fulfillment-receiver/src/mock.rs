@@ -4,22 +4,18 @@ use acurast_common::Script;
 use frame_support::sp_runtime::DispatchError;
 use frame_support::{parameter_types, sp_runtime, traits::Everything, PalletId};
 use hex_literal::hex;
-use sp_runtime::generic;
-use sp_runtime::traits::{AccountIdLookup, BlakeTwo256};
+use sp_runtime::{
+    traits::{AccountIdLookup, BlakeTwo256},
+    BuildStorage,
+};
 
 use crate::traits::OnFulfillment;
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
-type Block = frame_system::mocking::MockBlock<Test>;
 pub type BlockNumber = u32;
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         AcurastFulfillmentReceiver: crate::{Pallet, Call, Event<T>}
     }
 );
@@ -41,13 +37,12 @@ parameter_types! {
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
@@ -89,8 +84,8 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);

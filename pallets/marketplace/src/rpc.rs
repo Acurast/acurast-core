@@ -14,7 +14,8 @@ use pallet_acurast::MultiOrigin;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
-use sp_runtime::traits::{HashFor, MaybeSerializeDeserialize};
+use sp_runtime::traits::HashingFor;
+use sp_runtime::traits::MaybeSerializeDeserialize;
 
 const RUNTIME_ERROR: i32 = 8001;
 const MARKETPLACE_ERROR: i32 = 8011;
@@ -58,7 +59,7 @@ impl<C, B> Marketplace<C, B> {
 
 #[async_trait]
 impl<Client, Block, Reward, AccountId, MaxAllowedSources>
-    MarketplaceApiServer<HashFor<Block>, Reward, AccountId, MaxAllowedSources>
+    MarketplaceApiServer<HashingFor<Block>, Reward, AccountId, MaxAllowedSources>
     for Marketplace<Client, (Block, Reward, AccountId)>
 where
     Block: BlockT,

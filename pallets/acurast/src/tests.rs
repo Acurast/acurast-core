@@ -5,9 +5,9 @@ use crate::{
     CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
 use acurast_common::MultiOrigin;
-use frame_support::{assert_err, assert_ok, bounded_vec};
+use frame_support::{assert_err, assert_ok};
 use hex_literal::hex;
-use sp_runtime::AccountId32;
+use sp_runtime::{bounded_vec, AccountId32};
 
 #[test]
 fn test_job_registration() {

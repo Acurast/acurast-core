@@ -9,6 +9,7 @@ members = [
 	"p256-crypto",
 ]
 exclude = ["pallets/proxy"]
+resolver = "2"
 
 [workspace.package]
 authors = [ "Papers AG" ]

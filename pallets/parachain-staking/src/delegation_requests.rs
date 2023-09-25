@@ -8,9 +8,10 @@ use crate::pallet::{
     Pallet, Round, RoundIndex, Total,
 };
 use crate::{auto_compound::AutoCompoundDelegations, Delegator, DelegatorStatus};
+use frame_support::dispatch::DispatchResultWithPostInfo;
 use frame_support::ensure;
+use frame_support::pallet_prelude::RuntimeDebug;
 use frame_support::traits::Get;
-use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_runtime::traits::Saturating;

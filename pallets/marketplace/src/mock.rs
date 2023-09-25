@@ -1,9 +1,9 @@
-use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
+use frame_support::{parameter_types, traits::Everything, PalletId};
 use sp_core::*;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::DispatchError;
-use sp_runtime::{generic, Percent};
+use sp_runtime::{BuildStorage, Percent};
 use sp_std::prelude::*;
 use std::marker::PhantomData;
 
@@ -14,7 +14,6 @@ use pallet_acurast::{
 use crate::stub::*;
 use crate::*;
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 pub struct Barrier;
@@ -48,15 +47,16 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let mut t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         let parachain_info_config = parachain_info::GenesisConfig {
             parachain_id: 2000.into(),
+            ..Default::default()
         };
 
-        <parachain_info::GenesisConfig as GenesisBuild<Test, _>>::assimilate_storage(
+        <parachain_info::GenesisConfig<Test> as BuildStorage>::assimilate_storage(
             &parachain_info_config,
             &mut t,
         )
@@ -86,15 +86,11 @@ impl Default for ExtBuilder {
 }
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        ParachainInfo: parachain_info::{Pallet, Storage, Config},
+        ParachainInfo: parachain_info::{Pallet, Storage, Config<T>},
         Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
         AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>},
         MockPallet: mock_pallet::{Pallet, Event<T>}
@@ -118,13 +114,12 @@ parameter_types! {
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
@@ -162,8 +157,8 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-    type HoldIdentifier = [u8; 8];
     type FreezeIdentifier = ();
+    type RuntimeHoldReason = ();
     // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
     type MaxHolds = ConstU32<2>;
     type MaxFreezes = ConstU32<0>;

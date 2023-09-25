@@ -89,7 +89,7 @@ pub mod pallet {
     #[pallet::without_storage_info]
     pub struct Pallet<T>(PhantomData<T>);
 
-    pub type RoundIndex = u32;
+    pub type RoundIndex = u64;
     type RewardPoint = u32;
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -223,7 +223,7 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// Started new round.
         NewRound {
-            starting_block: T::BlockNumber,
+            starting_block: BlockNumberFor<T>,
             round: RoundIndex,
             selected_collators_number: u32,
             total_balance: BalanceOf<T>,
@@ -392,7 +392,7 @@ pub mod pallet {
         /// Set blocks per round
         BlocksPerRoundSet {
             current_round: RoundIndex,
-            first_block: T::BlockNumber,
+            first_block: BlockNumberFor<T>,
             old: u32,
             new: u32,
             new_per_round_inflation_min: Perbill,
@@ -414,7 +414,7 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_initialize(n: T::BlockNumber) -> Weight {
+        fn on_initialize(n: BlockNumberFor<T>) -> Weight {
             let mut weight = T::WeightInfo::base_on_initialize();
 
             let mut round = <Round<T>>::get();
@@ -451,7 +451,7 @@ pub mod pallet {
             weight = weight.saturating_add(T::DbWeight::get().reads_writes(3, 2));
             weight
         }
-        fn on_finalize(_n: T::BlockNumber) {
+        fn on_finalize(_n: BlockNumberFor<T>) {
             Self::award_points_to_block_author();
         }
     }
@@ -475,7 +475,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn round)]
     /// Current round index and next round scheduled transition
-    pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<T::BlockNumber>, ValueQuery>;
+    pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<BlockNumberFor<T>>, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn delegator_state)]
@@ -642,7 +642,7 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             assert!(self.blocks_per_round > 0, "Blocks per round must be > 0");
             let mut candidate_count = 0u32;
@@ -733,18 +733,18 @@ pub mod pallet {
             );
             <TotalSelected<T>>::put(self.num_selected_candidates);
             // Choose top TotalSelected collator candidates
-            let (_, v_count, _, total_staked) = <Pallet<T>>::select_top_candidates(1u32);
+            let (_, v_count, _, total_staked) = <Pallet<T>>::select_top_candidates(1u64);
             // Start Round 1 at Block 0
-            let round: RoundInfo<T::BlockNumber> =
-                RoundInfo::new(1u32, 0u32.into(), self.blocks_per_round);
+            let round: RoundInfo<BlockNumberFor<T>> =
+                RoundInfo::new(1u64, 0u32.into(), self.blocks_per_round);
             <Round<T>>::put(round);
             // Snapshot total stake
-            <Staked<T>>::insert(1u32, <Total<T>>::get());
+            <Staked<T>>::insert(1u64, <Total<T>>::get());
             // Calculate round inflation
             <InflationConfig<T>>::put(InflationInfo::new::<T>(self.inflation_config.clone()));
             <Pallet<T>>::deposit_event(Event::NewRound {
-                starting_block: T::BlockNumber::zero(),
-                round: 1u32,
+                starting_block: BlockNumberFor::<T>::zero(),
+                round: 1u64,
                 selected_collators_number: v_count,
                 total_balance: total_staked,
             });
@@ -1758,7 +1758,7 @@ pub mod pallet {
             let collators = Self::compute_top_candidates();
             if collators.is_empty() {
                 // SELECTION FAILED TO SELECT >=1 COLLATOR => select collators from previous round
-                let last_round = now.saturating_sub(1u32);
+                let last_round = now.saturating_sub(1u64);
                 let mut total_per_candidate: BTreeMap<T::AccountId, BalanceOf<T>> = BTreeMap::new();
                 // set this round AtStake to last round AtStake
                 for (account, snapshot) in <AtStake<T>>::iter_prefix(last_round) {
@@ -1971,7 +1971,7 @@ pub mod pallet {
         // TODO: Remove once consensus has been migrated from PoA to PoS
         // TODO: enable this again once we migrate Kusama to PoA -> PoS
         // pub fn initialize_pallet(
-        //     starting_block: <T as frame_system::Config>::BlockNumber,
+        //     starting_block: <T as frame_system::Config>::Block,
         //     candidates: Vec<T::AccountId>,
         //     inflation_config: InflationInfoWithoutRound,
         //     collator_commission: Perbill,
@@ -2019,7 +2019,7 @@ pub mod pallet {
         //     let (_, v_count, _, total_staked) = <Pallet<T>>::select_top_candidates(1u32);
         //
         //     // Start Round 1 at the given starting block
-        //     let round: RoundInfo<T::BlockNumber> =
+        //     let round: RoundInfo<T::Block> =
         //         RoundInfo::new(1u32, starting_block, T::MinBlocksPerRound::get());
         //     <Round<T>>::put(round);
         //

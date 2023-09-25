@@ -1,4 +1,5 @@
-use frame_support::{dispatch::Weight, pallet_prelude::DispatchResult, sp_runtime::DispatchError};
+use frame_support::pallet_prelude::Weight;
+use frame_support::{pallet_prelude::DispatchResult, sp_runtime::DispatchError};
 
 use crate::Config;
 

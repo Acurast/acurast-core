@@ -1720,7 +1720,7 @@ impl<
     }
     /// New round
     pub fn update(&mut self, now: B) {
-        self.current = self.current.saturating_add(1u32);
+        self.current = self.current.saturating_add(1u64);
         self.first = now;
     }
 }
@@ -1729,7 +1729,7 @@ impl<
     > Default for RoundInfo<B>
 {
     fn default() -> RoundInfo<B> {
-        RoundInfo::new(1u32, 1u32.into(), 20u32)
+        RoundInfo::new(1u64, 1u32.into(), 20u32)
     }
 }
 

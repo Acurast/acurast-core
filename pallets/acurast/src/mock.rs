@@ -1,9 +1,9 @@
 use frame_support::traits::ConstU32;
-use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
+use frame_support::{parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
-use sp_runtime::{generic, AccountId32};
+use sp_runtime::{AccountId32, BuildStorage};
 
 use acurast_common::{AllowedSources, JobModules, Schedule, CU32};
 
@@ -14,7 +14,6 @@ use crate::{AttestationChain, JobRegistration, RevocationListUpdateBarrier, Scri
 pub const SEED: u32 = 1337;
 
 type AccountId = AccountId32;
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub type Balance = u128;
 pub type BlockNumber = u32;
@@ -34,15 +33,16 @@ pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let mut t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         let parachain_info_config = parachain_info::GenesisConfig {
             parachain_id: 2000.into(),
+            ..Default::default()
         };
 
-        <parachain_info::GenesisConfig as GenesisBuild<Test, _>>::assimilate_storage(
+        <parachain_info::GenesisConfig<Test> as BuildStorage>::assimilate_storage(
             &parachain_info_config,
             &mut t,
         )
@@ -72,15 +72,11 @@ pub const INT_CERT_2: [u8; 564] = hex!("30820230308201b7a003020102020a1590585746
 pub const LEAF_CERT: [u8; 672] = hex!("3082029c30820241a003020102020101300c06082a8648ce3d0403020500302f31193017060355040513103937333533373739333664306464373431123010060355040c0c095374726f6e67426f783022180f32303232303730393130353135355a180f32303238303532333233353935395a301f311d301b06035504030c14416e64726f6964204b657973746f7265204b65793059301306072a8648ce3d020106082a8648ce3d03010703420004b20c1d15477662623ecf430104898006e0f81c0db1bae87cb96a87c7777404659e585d3d9057b8a2ff8ae61f401a078fc75cf52c8c4268e810f93798c729e862a382015630820152300e0603551d0f0101ff0404030207803082013e060a2b06010401d6790201110482012e3082012a0201040a01020201290a0102040874657374617364660400306cbf853d0802060181e296611fbf85455c045a305831323030042b636f6d2e7562696e657469632e61747465737465642e6578656375746f722e746573742e746573746e657402010e31220420bdcb4560f6b3c41dad920668169c28be1ef9ea49f23d98cd8eb2f37ae4488ff93081a1a1053103020102a203020103a30402020100a5053103020100aa03020101bf8377020500bf853e03020100bf85404c304a0420879cd3f18ea76e244d4d4ac3bcb9c337c13b4667190b19035afe2536550050f10101ff0a010004203f4136ee3581e6aba8ea337a6b43d703de1eca241f9b7f277ecdfafff7a8dcf1bf854105020301d4c0bf85420502030315debf854e06020401348abdbf854f06020401348abd300c06082a8648ce3d04030205000347003044022033a613cce9a6ed25026a492b651f0ac67c3c0289d4e4743168c6903e2faa0bda0220324cd35c4bf2695d71ad12a28868e69232112922eaf0e3699f6add8133d528d9");
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        ParachainInfo: parachain_info::{Pallet, Storage, Config},
+        ParachainInfo: parachain_info::{Pallet, Storage, Config<T>},
         Acurast: crate::{Pallet, Call, Storage, Event<T>}
     }
 );
@@ -103,13 +99,12 @@ parameter_types! {
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;
@@ -147,7 +142,7 @@ impl pallet_balances::Config for Test {
     type MaxLocks = MaxLocks;
     type MaxReserves = MaxReserves;
     type ReserveIdentifier = [u8; 8];
-    type HoldIdentifier = [u8; 8];
+    type RuntimeHoldReason = ();
     type FreezeIdentifier = ();
     // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
     type MaxHolds = ConstU32<2>;

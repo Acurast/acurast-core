@@ -150,14 +150,8 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config<I>, I: 'static = ()> {
         StateTransmittersUpdate {
-            added: Vec<(
-                T::AccountId,
-                types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
-            )>,
-            updated: Vec<(
-                T::AccountId,
-                types::ActivityWindow<<T as frame_system::Config>::BlockNumber>,
-            )>,
+            added: Vec<(T::AccountId, types::ActivityWindow<BlockNumberFor<T>>)>,
+            updated: Vec<(T::AccountId, types::ActivityWindow<BlockNumberFor<T>>)>,
             removed: Vec<T::AccountId>,
         },
         StateMerkleRootSubmitted {
@@ -181,13 +175,8 @@ pub mod pallet {
     /// source chains to acurast.
     #[pallet::storage]
     #[pallet::getter(fn state_transmitter)]
-    pub type StateTransmitter<T: Config<I>, I: 'static = ()> = StorageMap<
-        _,
-        Blake2_128,
-        T::AccountId,
-        ActivityWindow<<T as frame_system::Config>::BlockNumber>,
-        ValueQuery,
-    >;
+    pub type StateTransmitter<T: Config<I>, I: 'static = ()> =
+        StorageMap<_, Blake2_128, T::AccountId, ActivityWindow<BlockNumberFor<T>>, ValueQuery>;
 
     #[pallet::type_value]
     pub fn FirstSnapshot<T: Config<I>, I: 'static>() -> T::TargetChainBlockNumber {

@@ -6853,28 +6853,28 @@ fn deferred_payment_steady_state_event_flow() {
 
                 assert_events_eq!(
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 1,
                         total_exposed_amount: 400,
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 2,
                         total_exposed_amount: 400,
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 3,
                         total_exposed_amount: 400,
                     },
                     Event::CollatorChosen {
-                        round: round as u32,
+                        round: round as u64,
                         collator_account: 4,
                         total_exposed_amount: 400,
                     },
                     Event::NewRound {
                         starting_block: (round - 1) * 5,
-                        round: round as u32,
+                        round: round as u64,
                         selected_collators_number: 4,
                         total_balance: 1600,
                     },

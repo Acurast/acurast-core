@@ -31,6 +31,7 @@ pub mod pallet {
     use super::BenchmarkHelper;
     use acurast_common::*;
     use core::ops::AddAssign;
+    use frame_support::sp_runtime;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
         Blake2_128Concat, PalletId,
@@ -88,7 +89,7 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             for (who, attestation) in self.attestations.clone() {
                 <StoredAttestation<T>>::insert(

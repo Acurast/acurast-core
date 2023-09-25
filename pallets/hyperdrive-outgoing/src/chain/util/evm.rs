@@ -1,10 +1,10 @@
 use crate::{Action, Leaf, LeafEncoder, RawAction};
-use frame_support::inherent::Vec;
 use sp_runtime::traits::{Hash, Keccak256};
+use sp_std::vec::Vec;
 
 use alloy_sol_types::{sol, SolType};
-use frame_support::RuntimeDebug;
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
+use sp_runtime::RuntimeDebug;
 
 #[derive(RuntimeDebug)]
 pub enum EvmValidationError {

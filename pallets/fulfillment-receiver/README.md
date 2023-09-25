@@ -171,7 +171,7 @@ contract SimpleFulfill {
 
 ### Example integration with WASM smart contract parachain
 
-The following example shows a possible integration approach for a WASM smart contract parachain (using [pallet-contracts](https://github.com/paritytech/substrate/tree/master/frame/contracts)).
+The following example shows a possible integration approach for a WASM smart contract parachain (using [pallet-contracts](https://github.com/paritytech/polkadot-sdk/tree/master/frame/contracts)).
 Similarly to the EVM integration, the example shows how to route the fulfillment's payload to a smart contract by calling the `fulfill` method on it and passing the payload bytes as argument.
 
 ```rust

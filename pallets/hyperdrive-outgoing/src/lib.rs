@@ -22,6 +22,7 @@ use core::ops::AddAssign;
 
 use frame_support::dispatch::{Pays, PostDispatchInfo};
 use frame_support::ensure;
+use frame_system::pallet_prelude::{BlockNumberFor, HeaderFor};
 use sp_core::Get;
 use sp_runtime::traits::Block as BlockT;
 use sp_runtime::traits::NumberFor;
@@ -240,7 +241,7 @@ pub mod pallet {
             }
         }
 
-        fn on_initialize(current_block: T::BlockNumber) -> Weight {
+        fn on_initialize(current_block: BlockNumberFor<T>) -> Weight {
             // add weight used here in on_finalize
 
             // We did the check already and will repeat it in on_finalize
@@ -331,7 +332,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
         parent_hash: <T as frame_system::Config>::Hash,
         unique: HashOf<T, I>,
     ) -> Vec<u8> {
-        NodesUtils::node_temp_offchain_key::<<T as frame_system::Config>::Header, _>(
+        NodesUtils::node_temp_offchain_key::<HeaderFor<T>, _>(
             &T::MMRInfo::TEMP_INDEXING_PREFIX,
             pos,
             parent_hash,
@@ -352,7 +353,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// according to [`T::MaximumBlocksBeforeSnapshot`].
     ///
     /// This function should be combined with a check (not included!) if there was at least one new message to snapshot.
-    fn maximum_blocks_before_snapshot_reached(current_block: T::BlockNumber) -> bool {
+    fn maximum_blocks_before_snapshot_reached(current_block: BlockNumberFor<T>) -> bool {
         if let Some(first_block_number) = Self::first_mmr_block_number() {
             // there was at least one message/leaf inserted (not necessarily snapshotted)
             let last_block = Self::snapshot_meta(Self::next_snapshot_number().saturating_sub(1))

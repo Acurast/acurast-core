@@ -9,31 +9,26 @@ use crate::{
 };
 use frame_support::{
     construct_runtime, parameter_types,
-    traits::{Everything, GenesisBuild, LockIdentifier, OnFinalize, OnInitialize},
+    traits::{Everything, LockIdentifier, OnFinalize, OnInitialize},
     weights::{constants::RocksDbWeight, Weight},
 };
 use sp_core::{ConstU32, H256};
 use sp_io;
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    Perbill, Percent,
+    BuildStorage, Perbill, Percent,
 };
 
 pub type AccountId = u64;
 pub type Balance = u128;
-pub type BlockNumber = u32;
+pub type BlockNumber = u64;
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 // Configure a mock runtime to test the pallet.
 construct_runtime!(
-    pub enum Test where
-        Block = Block,
-        NodeBlock = Block,
-        UncheckedExtrinsic = UncheckedExtrinsic,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         ParachainStaking: pallet_parachain_staking::{Pallet, Call, Storage, Config<T>, Event<T>},
         BlockAuthor: block_author::{Pallet, Storage},
@@ -51,14 +46,13 @@ impl frame_system::Config for Test {
     type BaseCallFilter = Everything;
     type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
-    type Index = u64;
-    type BlockNumber = BlockNumber;
+    type Nonce = u64;
+    type Block = Block;
     type RuntimeCall = RuntimeCall;
     type Hash = H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
-    type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type BlockHashCount = BlockHashCount;
     type Version = ();
@@ -86,14 +80,14 @@ impl pallet_balances::Config for Test {
     type ExistentialDeposit = ExistentialDeposit;
     type AccountStore = System;
     type WeightInfo = ();
-    type HoldIdentifier = [u8; 8];
+    type RuntimeHoldReason = ();
     type FreezeIdentifier = ();
     // Holds are used with COLLATOR_LOCK_ID and DELEGATOR_LOCK_ID
     type MaxHolds = ConstU32<2>;
     type MaxFreezes = ConstU32<0>;
 }
 impl block_author::Config for Test {}
-const GENESIS_BLOCKS_PER_ROUND: u32 = 5;
+const GENESIS_BLOCKS_PER_ROUND: u64 = 5;
 const GENESIS_COLLATOR_COMMISSION: Perbill = Perbill::from_percent(20);
 const GENESIS_PARACHAIN_BOND_RESERVE_PERCENT: Percent = Percent::from_percent(30);
 const GENESIS_NUM_SELECTED_CANDIDATES: u32 = 5;
@@ -104,7 +98,7 @@ parameter_types! {
     pub const LeaveDelegatorsDelay: u32 = 2;
     pub const RevokeDelegationDelay: u32 = 2;
     pub const DelegationBondLessDelay: u32 = 2;
-    pub const RewardPaymentDelay: u32 = 2;
+    pub const RewardPaymentDelay: u64 = 2;
     pub const MinSelectedCandidates: u32 = GENESIS_NUM_SELECTED_CANDIDATES;
     pub const MaxTopDelegationsPerCandidate: u32 = 4;
     pub const MaxBottomDelegationsPerCandidate: u32 = 4;
@@ -206,8 +200,8 @@ impl ExtBuilder {
     }
 
     pub(crate) fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let mut t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .expect("Frame system builds valid default genesis config");
 
         pallet_balances::GenesisConfig::<Test> {
@@ -221,7 +215,7 @@ impl ExtBuilder {
             inflation_config: self.inflation,
             collator_commission: GENESIS_COLLATOR_COMMISSION,
             parachain_bond_reserve_percent: GENESIS_PARACHAIN_BOND_RESERVE_PERCENT,
-            blocks_per_round: GENESIS_BLOCKS_PER_ROUND,
+            blocks_per_round: GENESIS_BLOCKS_PER_ROUND as u32,
             num_selected_candidates: GENESIS_NUM_SELECTED_CANDIDATES,
         }
         .assimilate_storage(&mut t)
@@ -246,7 +240,7 @@ fn roll_one_block() -> BlockNumber {
 }
 
 /// Rolls to the desired block. Returns the number of blocks played.
-pub(crate) fn roll_to(n: BlockNumber) -> u32 {
+pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
     let mut num_blocks = 0;
     let mut block = System::block_number();
     while block < n {
