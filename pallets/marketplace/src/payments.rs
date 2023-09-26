@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use frame_support::traits::tokens::Preservation;
+use frame_support::traits::tokens::{Fortitude, Precision, Preservation};
 use frame_support::{
     pallet_prelude::Member,
     sp_runtime::{
@@ -33,7 +33,7 @@ pub trait RewardManager<T: frame_system::Config + Config> {
         remaining_rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
         matcher: &T::AccountId,
     ) -> Result<(), DispatchError>;
-    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance;
+    fn refund(job_id: &JobId<T::AccountId>) -> Result<T::Balance, DispatchError>;
 }
 
 impl<T: frame_system::Config + Config> RewardManager<T> for () {
@@ -59,8 +59,8 @@ impl<T: frame_system::Config + Config> RewardManager<T> for () {
         Ok(())
     }
 
-    fn refund(_job_id: &JobId<T::AccountId>) -> T::Balance {
-        0u8.into()
+    fn refund(_job_id: &JobId<T::AccountId>) -> Result<T::Balance, DispatchError> {
+        Ok(0u8.into())
     }
 }
 
@@ -204,8 +204,30 @@ where
         Ok(())
     }
 
-    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance {
-        Budget::unreserve_remaining(&job_id)
+    fn refund(job_id: &JobId<T::AccountId>) -> Result<T::Balance, DispatchError> {
+        let remaining = Budget::unreserve_remaining(&job_id);
+        // Send remaining funds to the job creator
+        let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
+        match &job_id.0 {
+            MultiOrigin::Acurast(who) => {
+                Currency::transfer(
+                    &pallet_account,
+                    who,
+                    remaining.saturated_into(),
+                    Preservation::Preserve,
+                )?;
+            }
+            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
+                Currency::burn_from(
+                    &pallet_account,
+                    remaining.saturated_into(),
+                    Precision::BestEffort,
+                    Fortitude::Polite,
+                )?;
+            }
+        };
+
+        Ok(remaining)
     }
 }
 
