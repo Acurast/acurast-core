@@ -5,10 +5,9 @@ use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};
 use sp_runtime::DispatchError;
 use sp_runtime::{generic, Percent};
 use sp_std::prelude::*;
-use std::marker::PhantomData;
 
 use pallet_acurast::{
-    CertificateRevocationListUpdate, JobId, JobModules, RevocationListUpdateBarrier, CU32,
+    CertificateRevocationListUpdate, JobModules, RevocationListUpdateBarrier, CU32,
 };
 
 use crate::stub::*;
@@ -64,10 +63,13 @@ impl ExtBuilder {
 
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
-                (alice_account_id(), INITIAL_BALANCE),
+                (alice_account_id(), 100_000_000),
+                (charlie_account_id(), 100_000_000),
                 (pallet_fees_account(), INITIAL_BALANCE),
+                (pallet_acurast_acount(), INITIAL_BALANCE),
                 (bob_account_id(), INITIAL_BALANCE),
                 (processor_account_id(), INITIAL_BALANCE),
+                (processor_2_account_id(), INITIAL_BALANCE),
             ],
         }
         .assimilate_storage(&mut t)
@@ -96,8 +98,7 @@ frame_support::construct_runtime!(
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         ParachainInfo: parachain_info::{Pallet, Storage, Config},
         Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
-        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>},
-        MockPallet: mock_pallet::{Pallet, Event<T>}
+        AcurastMarketplace: crate::{Pallet, Call, Storage, Event<T>}
     }
 );
 
@@ -209,96 +210,6 @@ impl pallet_acurast::BenchmarkHelper<Test> for TestBenchmarkHelper {
     }
 }
 
-impl mock_pallet::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-}
-
-#[frame_support::pallet]
-pub mod mock_pallet {
-    use frame_support::pallet_prelude::*;
-    use pallet_acurast::JobId;
-
-    use crate::stub::Balance;
-
-    #[pallet::config]
-    pub trait Config: frame_system::Config + crate::Config {
-        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-    }
-
-    #[pallet::pallet]
-    pub struct Pallet<T>(_);
-
-    #[pallet::event]
-    #[pallet::generate_deposit(pub (super) fn deposit_event)]
-    pub enum Event<T: Config> {
-        LockReward((JobId<T::AccountId>, Balance)),
-        PayReward((JobId<T::AccountId>, Balance, T::AccountId)),
-        PayMatcherReward((Vec<(JobId<T::AccountId>, T::Balance)>, T::AccountId)),
-        RefundReward((JobId<T::AccountId>, T::Balance)),
-    }
-}
-
-pub struct MockRewardManager<Budget>(PhantomData<Budget>);
-
-impl<T: Config + mock_pallet::Config, Budget: JobBudget<T>> RewardManager<T>
-    for MockRewardManager<Budget>
-{
-    fn lock_reward(
-        job_id: &JobId<T::AccountId>,
-        reward: <T as Config>::Balance,
-    ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::LockReward((
-            job_id.clone(),
-            reward.into(),
-        )));
-        Budget::reserve(job_id, reward).unwrap();
-        Ok(())
-    }
-
-    fn pay_reward(
-        job_id: &JobId<T::AccountId>,
-        reward: <T as Config>::Balance,
-        target: &T::AccountId,
-    ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayReward((
-            job_id.clone(),
-            reward.into(),
-            target.clone(),
-        )));
-        Budget::unreserve(job_id, reward).unwrap();
-        Ok(())
-    }
-
-    fn pay_matcher_reward(
-        remaining_rewards: Vec<(JobId<T::AccountId>, <T as Config>::Balance)>,
-        matcher: &T::AccountId,
-    ) -> Result<(), DispatchError> {
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::PayMatcherReward((
-            remaining_rewards.clone(),
-            matcher.clone(),
-        )));
-
-        let mut matcher_reward: T::Balance = 0u8.into();
-        for (job_id, remaining_reward) in remaining_rewards.into_iter() {
-            let matcher_fee = FeeManagerImpl::get_matcher_percentage().mul_floor(remaining_reward);
-            Budget::unreserve(&job_id, matcher_fee)
-                .map_err(|_| DispatchError::Other("Severe Error: JobBudget::unreserve failed"))?;
-            matcher_reward += matcher_fee;
-        }
-
-        Ok(())
-    }
-
-    fn refund(job_id: &JobId<T::AccountId>) -> T::Balance {
-        let remaining = Budget::unreserve_remaining(job_id);
-        mock_pallet::Pallet::deposit_event(mock_pallet::Event::<T>::RefundReward((
-            job_id.clone(),
-            remaining,
-        )));
-        remaining
-    }
-}
-
 pub struct ManagerOf;
 
 impl ManagerProvider<Test> for ManagerOf {
@@ -328,7 +239,7 @@ impl Config for Test {
     type ReportTolerance = ReportTolerance;
     type Balance = Balance;
     type ManagerProvider = ManagerOf;
-    type RewardManager = MockRewardManager<Pallet<Self>>;
+    type RewardManager = AssetRewardManager<FeeManagerImpl, Balances, Pallet<Self>>;
     type ProcessorLastSeenProvider = ProcessorLastSeenProvider;
     type MarketplaceHooks = ();
     type WeightInfo = weights::WeightInfo<Test>;
@@ -363,6 +274,10 @@ pub fn events() -> Vec<RuntimeEvent> {
 
 pub fn pallet_fees_account() -> <Test as frame_system::Config>::AccountId {
     FeeManagerImpl::pallet_id().into_account_truncating()
+}
+
+pub fn pallet_acurast_acount() -> <Test as frame_system::Config>::AccountId {
+    PalletId(*b"acrstpid").into_account_truncating()
 }
 
 pub fn advertisement(
