@@ -45,7 +45,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
     use reputation::{BetaParameters, BetaReputation, ReputationEngine};
-    use sp_runtime::traits::{CheckedAdd, CheckedMul, CheckedSub};
+    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
     use sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
@@ -217,6 +217,8 @@ pub mod pallet {
     pub enum Error<T> {
         /// Generic overflow during a calculating with checked operatios.
         CalculationOverflow,
+        /// Generic for unexpected checked calculation errors.
+        UnexpectedCheckedCalculation,
         /// The job registration must specify non-zero `duration`.
         JobRegistrationZeroDuration,
         /// The job registration must specify a schedule that contains a maximum of [MAX_EXECUTIONS_PER_JOB] executions.
@@ -340,6 +342,7 @@ pub mod pallet {
                 Error::CapacityNotFound => true,
 
                 Error::CalculationOverflow => false,
+                Error::UnexpectedCheckedCalculation => false,
                 Error::JobRegistrationZeroDuration => false,
                 Error::JobRegistrationScheduleExceedsMaximumExecutions => false,
                 Error::JobRegistrationScheduleContainsZeroExecutions => false,
@@ -763,12 +766,77 @@ pub mod pallet {
                 .ok_or(Error::<T>::JobStatusNotFound)?;
             match job_status {
                 JobStatus::Open => {
-                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id))?;
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
 
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                     <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
-                _ => Err(Error::<T>::JobRegistrationUnmodifiable)?,
+                JobStatus::Matched => {
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
+
+                    // Get the job requirements
+                    let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                        .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+
+                    // Remove matching data and increase processor capacity
+                    for (p, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
+                        <StoredMatches<T>>::remove(&p, &job_id);
+                        // increase capacity
+                        <StoredStorageCapacity<T>>::mutate(&p, |c| {
+                            *c = c.unwrap_or(0).checked_add(registration.storage.into())
+                        });
+                    }
+
+                    let _ =
+                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+                }
+                JobStatus::Assigned(_) => {
+                    // Get the job requirements
+                    let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                        .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
+                    let extra: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                    let requirements: JobRequirementsFor<T> = extra.into();
+
+                    // Compute the reward amount to be payed to each assigned processor
+                    let remaining_reward = Self::reserved(job_id);
+                    let reward_per_processor = remaining_reward
+                        .checked_div(&(requirements.slots.into()))
+                        .ok_or(Error::<T>::UnexpectedCheckedCalculation)?;
+
+                    // Pay reward to the processor and clear matching data
+                    for (processor, _) in <AssignedProcessors<T>>::iter_prefix(&job_id) {
+                        // find assignment
+                        let assignment = <StoredMatches<T>>::get(&processor, &job_id)
+                            .ok_or(Error::<T>::JobNotAssigned)?;
+                        // Compensate processor for acknowledging the job
+                        if assignment.acknowledged {
+                            match T::ManagerProvider::manager_of(&processor) {
+                                Ok(manager) => T::RewardManager::pay_reward(
+                                    &job_id,
+                                    reward_per_processor,
+                                    &manager,
+                                ),
+                                Err(err_result) => Err(err_result.into()),
+                            }?;
+                        }
+                        // Remove match
+                        <StoredMatches<T>>::remove(&processor, &job_id);
+                        // increase capacity
+                        <StoredStorageCapacity<T>>::mutate(&processor, |c| {
+                            *c = c.unwrap_or(0).checked_add(registration.storage.into())
+                        });
+                    }
+
+                    // The job creator will only receive the amount that could not be divided between the acknowledged processors
+                    T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
+
+                    let _ =
+                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
+                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+                }
             }
 
             Ok(().into())
@@ -1398,7 +1466,7 @@ pub mod pallet {
                 }
                 let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
 
-                T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id))?;
+                T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id)?)?;
 
                 <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                 <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
