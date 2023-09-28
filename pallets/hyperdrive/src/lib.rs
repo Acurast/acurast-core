@@ -459,9 +459,13 @@ pub mod pallet {
         /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
         /// See [`Self::process_action()`].
         fn process_message_id(proof: &T::Proof) -> Result<MessageIdentifier, Error<T, I>> {
-            let message_id = proof
-                .message_id()
-                .map_err(|_| Error::<T, I>::InvalidMessageId)?;
+            let message_id = proof.message_id().map_err(|err| {
+                log::debug!("Could get message id: {:?}", err);
+                #[cfg(test)]
+                dbg!(err);
+
+                Error::<T, I>::InvalidMessageId
+            })?;
 
             ensure!(
                 Self::message_seq_id() + 1 == message_id.into(),

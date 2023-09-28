@@ -12,6 +12,7 @@ pub use crate::stub::*;
 use crate::types::*;
 use crate::Pallet as AcurastHyperdrive;
 use core::marker::PhantomData;
+use hex_literal::hex;
 
 use super::*;
 
@@ -103,23 +104,24 @@ benchmarks_instance_pallet! {
     }
 
     submit_message {
+        <MessageSequenceId::<T, I>>::set(74);
         let (caller, _) = update_state_transmitters_helper::<T, I>(1, true);
-        let proof_items: StateProof<H256> = proof().into_iter().map(|node| {
-                match node {
-                    StateProofNode::Left(hash) => StateProofNode::Left(hash.into()),
-                    StateProofNode::Right(hash) => StateProofNode::Right(hash.into()),
-                }
-            }).collect::<Vec<_>>().try_into().unwrap();
-        let key: StateKey = key();
-        let value: StateValue = value();
+        let proof_items: StateProof<H256> = vec![].try_into().unwrap();
+        let key = StateKey::try_from(hex!("05008b01").to_vec()).unwrap();
+        let value = StateValue::try_from(hex!("050707010000000c52454749535445525f4a4f4207070a00000016000016e64994c2ddbd293695b63e4cade029d3c8b5e30a000000ec050707030a0707050902000000250a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f070707070509020000002907070a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f00000707050900000707008080e898a9bf8d0700010707001d0707000107070001070702000000000707070700b40707070080cfb1eca062070700a0a9070707000000a0a5aaeca06207070a00000035697066733a2f2f516d536e317252737a444b354258634e516d4e367543767a4d376858636548555569426b61777758396b534d474b0000").to_vec()).unwrap();
+
         let proof = TezosProof::<<T as crate::Config<I>>::ParsableAccountId, <T as frame_system::Config>::AccountId> {
             items: proof_items,
             path: key,
             value,
             marker: PhantomData::default()
         };
-        assert_ok!(AcurastHyperdrive::<T, I>::submit_state_merkle_root(RawOrigin::Signed(caller.clone()).into(), 1.into(), ROOT_HASH.into()));
-        assert_ok!(AcurastHyperdrive::<T, I>::update_target_chain_owner(RawOrigin::Root.into(), state_owner()));
+        let snapshot_root_1 = H256(hex!(
+            "8303857bb23c1b072d9b52409fffe7cf6de57c33b2776c7de170ec94d01f02fc"
+        ));
+        assert_ok!(AcurastHyperdrive::<T, I>::submit_state_merkle_root(RawOrigin::Signed(caller.clone()).into(), 1.into(), snapshot_root_1.into()));
+        let state_owner = StateOwner::try_from(hex!("050a000000160199651cbe1a155a5c8e5af7d6ea5c3f48eebb8c9c00").to_vec()).unwrap();
+        assert_ok!(AcurastHyperdrive::<T, I>::update_target_chain_owner(RawOrigin::Root.into(), state_owner));
     }: _(RawOrigin::Signed(caller), 1u8.into(), proof)
 
     update_target_chain_owner {
