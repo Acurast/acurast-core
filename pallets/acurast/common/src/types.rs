@@ -7,6 +7,7 @@ pub use bounded_attestation::*;
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
+use crate::ParameterBound;
 #[cfg(feature = "std")]
 use serde;
 #[cfg(feature = "std")]
@@ -93,6 +94,23 @@ pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     pub required_modules: JobModules,
     /// Extra parameters. This type can be configured through [Config::RegistrationExtra].
     pub extra: Extra,
+}
+
+pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
+pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
+
+/// Structure representing execution environment variables encrypted for a specific processor.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+pub struct Environment<
+    MaxEnvVars: ParameterBound,
+    KeyMaxSize: ParameterBound,
+    ValueMaxSize: ParameterBound,
+> {
+    /// Public key of key pair specifically created to encrypt environment secrets.
+    pub public_key: PubKeyBytes,
+    /// Environment variables with cleartext key, encrypted value.
+    pub variables:
+        BoundedVec<(BoundedVec<u8, KeyMaxSize>, BoundedVec<u8, ValueMaxSize>), MaxEnvVars>,
 }
 
 pub const MAX_JOB_MODULES: u32 = 1;

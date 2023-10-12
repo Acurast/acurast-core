@@ -164,6 +164,9 @@ impl crate::Config for Test {
     type MaxAllowedSources = MaxAllowedSources;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type PalletId = AcurastPalletId;
+    type MaxEnvVars = CU32<10>;
+    type EnvKeyMaxSize = CU32<32>;
+    type EnvValueMaxSize = CU32<1024>;
     type RevocationListUpdateBarrier = Barrier;
     type KeyAttestationBarrier = ();
     type UnixTime = pallet_timestamp::Pallet<Test>;
