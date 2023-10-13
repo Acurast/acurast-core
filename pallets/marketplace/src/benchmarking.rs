@@ -248,7 +248,7 @@ benchmarks! {
         let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0, 1_000_000_000_000u64.into());
         whitelist_account!(caller);
         let mut registered_jobs: Vec<(T::AccountId, JobRegistrationFor<T>, JobIdSequence)> = vec![];
-        let max_slots = T::MaxSlots::get();
+        let max_slots = <T as pallet_acurast::Config>::MaxSlots::get();
         for i in 0..x {
             (&mut registered_jobs).push(register_submit_helper::<T>(i, max_slots as u8));
         }

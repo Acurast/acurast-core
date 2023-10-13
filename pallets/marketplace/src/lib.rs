@@ -69,9 +69,6 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedConsumers: Get<u32> + ParameterBound;
-        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
-        #[pallet::constant]
-        type MaxSlots: Get<u32> + ParameterBound;
         /// The maximum matches that can be proposed with one extrinsic call.
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
@@ -728,7 +725,7 @@ pub mod pallet {
             );
             ensure!(requirements.slots > 0, Error::<T>::JobRegistrationZeroSlots);
             ensure!(
-                requirements.slots as u32 <= <T as Config>::MaxSlots::get(),
+                requirements.slots as u32 <= <T as pallet_acurast::Config>::MaxSlots::get(),
                 Error::<T>::TooManySlots
             );
 
@@ -761,6 +758,9 @@ pub mod pallet {
         }
 
         /// Deregisters a job.
+        ///
+        /// The final act of removing the job from [`StoredJobRegistration`] is the responsibility of the caller,
+        /// since this storage point is owned by pallet_acurast.
         fn deregister_hook(job_id: &JobId<T::AccountId>) -> DispatchResultWithPostInfo {
             let job_status = <StoredJobStatus<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobStatusNotFound)?;
@@ -769,7 +769,6 @@ pub mod pallet {
                     T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
 
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
                 JobStatus::Matched => {
                     T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
@@ -787,10 +786,12 @@ pub mod pallet {
                         });
                     }
 
-                    let _ =
-                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    let _ = <AssignedProcessors<T>>::clear_prefix(
+                        &job_id,
+                        <T as pallet_acurast::Config>::MaxSlots::get(),
+                        None,
+                    );
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
                 JobStatus::Assigned(_) => {
                     // Get the job requirements
@@ -832,10 +833,12 @@ pub mod pallet {
                     // The job creator will only receive the amount that could not be divided between the acknowledged processors
                     T::MarketplaceHooks::finalize_job(job_id, T::RewardManager::refund(job_id)?)?;
 
-                    let _ =
-                        <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                    let _ = <AssignedProcessors<T>>::clear_prefix(
+                        &job_id,
+                        <T as pallet_acurast::Config>::MaxSlots::get(),
+                        None,
+                    );
                     <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
-                    <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
                 }
             }
 
@@ -1464,7 +1467,11 @@ pub mod pallet {
                         *c = c.unwrap_or(0).checked_add(registration.storage.into())
                     });
                 }
-                let _ = <AssignedProcessors<T>>::clear_prefix(&job_id, T::MaxSlots::get(), None);
+                let _ = <AssignedProcessors<T>>::clear_prefix(
+                    &job_id,
+                    <T as pallet_acurast::Config>::MaxSlots::get(),
+                    None,
+                );
 
                 T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id)?)?;
 

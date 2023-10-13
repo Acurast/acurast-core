@@ -34,7 +34,8 @@ pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
     <T as pallet_acurast::Config>::MaxAllowedSources,
 >;
 
-pub type MatchFor<T> = Match<<T as frame_system::Config>::AccountId, <T as Config>::MaxSlots>;
+pub type MatchFor<T> =
+    Match<<T as frame_system::Config>::AccountId, <T as pallet_acurast::Config>::MaxSlots>;
 
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
@@ -188,7 +189,7 @@ pub struct SLA {
 pub type JobRequirementsFor<T> = JobRequirements<
     <T as Config>::Balance,
     <T as frame_system::Config>::AccountId,
-    <T as Config>::MaxSlots,
+    <T as pallet_acurast::Config>::MaxSlots,
 >;
 
 /// Structure representing a job registration.
