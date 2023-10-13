@@ -80,6 +80,9 @@ pub mod pallet {
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
+        /// The ID of the hyperdrive pallet
+        #[pallet::constant]
+        type HyperdrivePalletId: Get<PalletId>;
         /// The the time tolerance in milliseconds. Represents the delta by how much we expect `now` timestamp being stale,
         /// hence `now <= currentmillis <= now + ReportTolerance`.
         ///

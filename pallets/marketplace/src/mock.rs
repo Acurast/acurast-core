@@ -114,6 +114,7 @@ parameter_types! {
     pub const MaxReserves: u32 = 50;
     pub const MaxLocks: u32 = 50;
     pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
+    pub const HyperdrivePalletId: PalletId = PalletId(*b"hypdrpid");
     pub const ReportTolerance: u64 = 12000;
 }
 
@@ -239,6 +240,7 @@ impl Config for Test {
     type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
+    type HyperdrivePalletId = HyperdrivePalletId;
     type ReportTolerance = ReportTolerance;
     type Balance = Balance;
     type ManagerProvider = ManagerOf;
