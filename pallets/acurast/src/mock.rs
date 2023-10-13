@@ -163,6 +163,7 @@ impl crate::Config for Test {
     type RegistrationExtra = ();
     type MaxAllowedSources = MaxAllowedSources;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
+    type MaxSlots = CU32<64>;
     type PalletId = AcurastPalletId;
     type MaxEnvVars = CU32<10>;
     type EnvKeyMaxSize = CU32<32>;

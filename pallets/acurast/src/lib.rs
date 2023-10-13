@@ -56,6 +56,9 @@ pub mod pallet {
         type MaxAllowedSources: Get<u32> + ParameterBound;
         #[pallet::constant]
         type MaxCertificateRevocationListUpdates: Get<u32>;
+        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
+        #[pallet::constant]
+        type MaxSlots: Get<u32> + ParameterBound;
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
@@ -362,6 +365,7 @@ pub mod pallet {
             <T as Config>::JobHooks::deregister_hook(&job_id)?;
 
             <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
+            Self::clear_environment_for(&job_id);
 
             Self::deposit_event(Event::JobRegistrationRemoved(job_id));
             Ok(().into())
@@ -558,6 +562,10 @@ pub mod pallet {
             <ExecutionEnvironment<T>>::insert(&job_id, source.clone(), environment);
             Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
             Ok(().into())
+        }
+
+        pub fn clear_environment_for(job_id: &JobId<T::AccountId>) {
+            let _ = <ExecutionEnvironment<T>>::clear_prefix(job_id, T::MaxSlots::get(), None);
         }
     }
 }
