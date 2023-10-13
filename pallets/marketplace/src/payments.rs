@@ -99,6 +99,8 @@ where
 {
     fn lock_reward(job_id: &JobId<T::AccountId>, reward: T::Balance) -> Result<(), DispatchError> {
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
+        let hyperdrive_pallet_account: T::AccountId =
+            <T as Config>::HyperdrivePalletId::get().into_account_truncating();
         match &job_id.0 {
             MultiOrigin::Acurast(who) => {
                 Currency::transfer(
@@ -109,11 +111,12 @@ where
                 )?;
             }
             MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
-                // The availability of these funds was ensured on Tezos side, so we just mint the amount here
-                Currency::mint_into(
+                // The availability of these funds was ensured on the target chain side
+                Currency::transfer(
+                    &hyperdrive_pallet_account,
                     &pallet_account,
-                    reward
-                        .saturated_into::<<Currency as fungible::Inspect<T::AccountId>>::Balance>(),
+                    reward.saturated_into(),
+                    Preservation::Preserve,
                 )?;
             }
         };
