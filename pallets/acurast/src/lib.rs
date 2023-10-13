@@ -505,11 +505,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who);
             let job_id: JobId<T::AccountId> = (multi_origin, job_id_seq);
-            let _registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
-                .ok_or(Error::<T>::JobRegistrationNotFound)?;
-            <ExecutionEnvironment<T>>::insert(&job_id, source.clone(), environment);
-            Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
-            Ok(().into())
+            Self::set_environment_for(job_id, source, environment)
         }
     }
 
@@ -549,6 +545,18 @@ pub mod pallet {
             <T as Config>::JobHooks::register_hook(&job_id.0, &job_id, &registration)?;
 
             Self::deposit_event(Event::JobRegistrationStored(registration, job_id.clone()));
+            Ok(().into())
+        }
+
+        pub fn set_environment_for(
+            job_id: JobId<T::AccountId>,
+            source: T::AccountId,
+            environment: EnvironmentFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            let _registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            <ExecutionEnvironment<T>>::insert(&job_id, source.clone(), environment);
+            Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
             Ok(().into())
         }
     }
