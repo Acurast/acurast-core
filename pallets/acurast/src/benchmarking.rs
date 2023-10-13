@@ -1,6 +1,6 @@
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
-    assert_ok,
+    assert_ok, bounded_vec,
     sp_runtime::traits::{AccountIdConversion, Get},
     traits::OriginTrait,
     BoundedVec,
@@ -170,6 +170,27 @@ benchmarks! {
         assert_last_event::<T>(Event::CertificateRecovationListUpdated(
             pallet_account,
             updates.try_into().unwrap()
+        ).into());
+    }
+
+    set_environment {
+        let x in 1 .. T::MaxEnvVars::get();
+        let (caller, job) = register_job::<T>(true, false);
+        let mut vars: Vec<(BoundedVec<u8, T::EnvKeyMaxSize>, BoundedVec<u8, T::EnvValueMaxSize>)> = vec![];
+        for i in 0..x {
+            (&mut vars).push((bounded_vec![
+                105, 112, 102, 115, 58, 47, 47, 8], bounded_vec![
+                105, 112, 102, 115, 58, 47, 47, 8]))
+        }
+        let env: EnvironmentFor<T> = Environment{
+            public_key: bounded_vec![105, 112, 102, 115, 58, 47, 47, 8],
+            variables: BoundedVec::try_from(vars).unwrap(),
+        };
+        let local_job_id = 1;
+    }: _(RawOrigin::Signed(caller.clone()), local_job_id, account("processor", 0, SEED), env.clone())
+    verify {
+        assert_last_event::<T>(Event::ExecutionEnvironmentUpdated(
+            (MultiOrigin::Acurast(caller), 1), account("processor", 0, SEED)
         ).into());
     }
 

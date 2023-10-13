@@ -25,6 +25,12 @@ pub type JobRegistrationFor<T> = JobRegistration<
     <T as Config>::RegistrationExtra,
 >;
 
+pub type EnvironmentFor<T> = Environment<
+    <T as Config>::MaxEnvVars,
+    <T as Config>::EnvKeyMaxSize,
+    <T as Config>::EnvValueMaxSize,
+>;
+
 #[frame_support::pallet]
 pub mod pallet {
     #[cfg(feature = "runtime-benchmarks")]
@@ -38,7 +44,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
 
-    use crate::{traits::*, utils::*, JobRegistrationFor};
+    use crate::{traits::*, utils::*, EnvironmentFor, JobRegistrationFor};
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -53,6 +59,12 @@ pub mod pallet {
         /// The ID for this pallet
         #[pallet::constant]
         type PalletId: Get<PalletId>;
+        #[pallet::constant]
+        type MaxEnvVars: Get<u32> + ParameterBound;
+        #[pallet::constant]
+        type EnvKeyMaxSize: Get<u32> + ParameterBound;
+        #[pallet::constant]
+        type EnvValueMaxSize: Get<u32> + ParameterBound;
         /// Barrier for the update_certificate_revocation_list extrinsic call.
         type RevocationListUpdateBarrier: RevocationListUpdateBarrier<Self>;
         /// Barrier for submit_attestation extrinsic call.
@@ -216,6 +228,18 @@ pub mod pallet {
         JobRegistrationFor<T>,
     >;
 
+    /// Env variables as a map [`JobId`] -> [`AccountId`] `(source)` -> [`EnvVars`].
+    #[pallet::storage]
+    #[pallet::getter(fn execution_environment)]
+    pub type ExecutionEnvironment<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        JobId<T::AccountId>,
+        Blake2_128Concat,
+        T::AccountId,
+        EnvironmentFor<T>,
+    >;
+
     /// The storage for [Attestation]s. They are stored by [AccountId].
     #[pallet::storage]
     #[pallet::getter(fn stored_attestation)]
@@ -248,6 +272,8 @@ pub mod pallet {
             T::AccountId,
             BoundedVec<CertificateRevocationListUpdate, T::MaxCertificateRevocationListUpdates>,
         ),
+        /// The execution environment has been updated. [job_id, source]
+        ExecutionEnvironmentUpdated(JobId<T::AccountId>, T::AccountId),
     }
 
     #[pallet::error]
@@ -462,6 +488,27 @@ pub mod pallet {
                 }
             }
             Self::deposit_event(Event::CertificateRecovationListUpdated(who, updates));
+            Ok(().into())
+        }
+
+        /// Updates the certificate revocation list by adding or removing a revoked certificate serial number. Attestations signed
+        /// by a revoked certificate will not be considered valid anymore. The `RevocationListUpdateBarrier` configured in [Config] can be used to
+        /// customize who can execute this action.
+        #[pallet::weight(<T as Config>::WeightInfo::set_environment())]
+        #[pallet::call_index(7)]
+        pub fn set_environment(
+            origin: OriginFor<T>,
+            job_id_seq: JobIdSequence,
+            source: T::AccountId,
+            environment: EnvironmentFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            let multi_origin = MultiOrigin::Acurast(who);
+            let job_id: JobId<T::AccountId> = (multi_origin, job_id_seq);
+            let _registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                .ok_or(Error::<T>::JobRegistrationNotFound)?;
+            <ExecutionEnvironment<T>>::insert(&job_id, source.clone(), environment);
+            Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
             Ok(().into())
         }
     }
