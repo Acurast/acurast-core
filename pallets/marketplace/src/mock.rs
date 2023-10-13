@@ -177,6 +177,7 @@ impl pallet_acurast::Config for Test {
     type RegistrationExtra = JobRequirementsFor<Self>;
     type MaxAllowedSources = CU32<4>;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
+    type MaxSlots = CU32<64>;
     type PalletId = AcurastPalletId;
     type MaxEnvVars = CU32<10>;
     type EnvKeyMaxSize = CU32<32>;
@@ -234,7 +235,6 @@ impl crate::traits::ProcessorLastSeenProvider<Test> for ProcessorLastSeenProvide
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
-    type MaxSlots = pallet_acurast::CU32<64>;
     type MaxProposedMatches = frame_support::traits::ConstU32<10>;
     type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
     type RegistrationExtra = JobRequirementsFor<Self>;

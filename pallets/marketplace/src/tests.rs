@@ -950,7 +950,7 @@ fn test_multi_assignments() {
             )
         );
 
-        let job_sources: PlannedExecutions<AccountId, <Test as crate::Config>::MaxSlots> =
+        let job_sources: PlannedExecutions<AccountId, <Test as pallet_acurast::Config>::MaxSlots> =
             processors
                 .iter()
                 .map(|(processor, _)| PlannedExecution {
