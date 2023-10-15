@@ -1,6 +1,6 @@
 use frame_benchmarking::{account, benchmarks, whitelist_account};
 use frame_support::{
-    assert_ok, bounded_vec,
+    assert_ok,
     sp_runtime::traits::{AccountIdConversion, Get},
     traits::OriginTrait,
     BoundedVec,
@@ -178,12 +178,12 @@ benchmarks! {
         let (caller, job) = register_job::<T>(true, false);
         let mut vars: Vec<(BoundedVec<u8, T::EnvKeyMaxSize>, BoundedVec<u8, T::EnvValueMaxSize>)> = vec![];
         for i in 0..x {
-            (&mut vars).push((bounded_vec![
-                105, 112, 102, 115, 58, 47, 47, 8], bounded_vec![
-                105, 112, 102, 115, 58, 47, 47, 8]))
+            (&mut vars).push((BoundedVec::truncate_from(vec![
+                105, 112, 102, 115, 58, 47, 47, 8]), BoundedVec::truncate_from(vec![
+                105, 112, 102, 115, 58, 47, 47, 8])))
         }
         let env: EnvironmentFor<T> = Environment{
-            public_key: bounded_vec![105, 112, 102, 115, 58, 47, 47, 8],
+            public_key: BoundedVec::truncate_from(vec![105, 112, 102, 115, 58, 47, 47, 8]),
             variables: BoundedVec::try_from(vars).unwrap(),
         };
         let local_job_id = 1;
