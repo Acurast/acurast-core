@@ -42,7 +42,7 @@ pub trait WeightInfo {
     fn update_allowed_sources(x: u32) -> Weight;
     fn submit_attestation() -> Weight;
     fn update_certificate_revocation_list() -> Weight;
-    fn set_environment() -> Weight;
+    fn set_environment(x: u32) -> Weight;
 }
 
 /// Allows to hook additional logic for various job related extrinsics.
