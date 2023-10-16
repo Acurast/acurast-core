@@ -84,6 +84,7 @@ impl TryFrom<KeyDescription<'_>> for BoundedKeyDescription {
             KeyDescription::V4(kd) => kd.try_into(),
             KeyDescription::V100(kd) => kd.try_into(),
             KeyDescription::V200(kd) => kd.try_into(),
+            KeyDescription::V300(kd) => kd.try_into(),
         }
     }
 }
@@ -140,10 +141,10 @@ impl TryFrom<asn::KeyDescriptionV4<'_>> for BoundedKeyDescription {
     }
 }
 
-impl TryFrom<asn::KeyDescriptionV100V200<'_>> for BoundedKeyDescription {
+impl TryFrom<asn::KeyDescriptionKeyMint<'_>> for BoundedKeyDescription {
     type Error = ();
 
-    fn try_from(data: asn::KeyDescriptionV100V200) -> Result<Self, Self::Error> {
+    fn try_from(data: asn::KeyDescriptionKeyMint) -> Result<Self, Self::Error> {
         Ok(BoundedKeyDescription {
             attestation_security_level: data.attestation_security_level.into(),
             key_mint_security_level: data.key_mint_security_level.into(),
@@ -585,10 +586,10 @@ impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
     }
 }
 
-impl TryFrom<asn::AuthorizationListV100V200<'_>> for BoundedAuthorizationList {
+impl TryFrom<asn::AuthorizationListKeyMint<'_>> for BoundedAuthorizationList {
     type Error = ();
 
-    fn try_from(data: asn::AuthorizationListV100V200) -> Result<Self, Self::Error> {
+    fn try_from(data: asn::AuthorizationListKeyMint) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
             purpose: try_bound_set!(data.purpose, Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
