@@ -168,7 +168,7 @@ pub struct KeyDescriptionV4<'a> {
 }
 
 #[derive(Asn1Read, Asn1Write)]
-pub struct KeyDescriptionV100V200<'a> {
+pub struct KeyDescriptionKeyMint<'a> {
     /// The [version](https://developer.android.com/training/articles/security-key-attestation#certificate_schema) of the attestation.
     /// It's necessary to peak this field before parsing all fields, since fields differ in versions and ASN parsing fails with a single deviating field.
     pub attestation_version: i64,
@@ -177,8 +177,8 @@ pub struct KeyDescriptionV100V200<'a> {
     pub key_mint_security_level: SecurityLevel,
     pub attestation_challenge: &'a [u8],
     pub unique_id: &'a [u8],
-    pub software_enforced: AuthorizationListV100V200<'a>,
-    pub tee_enforced: AuthorizationListV100V200<'a>,
+    pub software_enforced: AuthorizationListKeyMint<'a>,
+    pub tee_enforced: AuthorizationListKeyMint<'a>,
 }
 
 pub enum KeyDescription<'a> {
@@ -186,8 +186,9 @@ pub enum KeyDescription<'a> {
     V2(KeyDescriptionV2<'a>),
     V3(KeyDescriptionV3<'a>),
     V4(KeyDescriptionV4<'a>),
-    V100(KeyDescriptionV100V200<'a>),
-    V200(KeyDescriptionV100V200<'a>),
+    V100(KeyDescriptionKeyMint<'a>),
+    V200(KeyDescriptionKeyMint<'a>),
+    V300(KeyDescriptionKeyMint<'a>),
 }
 
 /// One of
@@ -480,7 +481,7 @@ pub struct AuthorizationListV4<'a> {
 }
 
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
-pub struct AuthorizationListV100V200<'a> {
+pub struct AuthorizationListKeyMint<'a> {
     #[explicit(1)]
     pub purpose: Option<SetOf<'a, i64>>,
     #[explicit(2)]

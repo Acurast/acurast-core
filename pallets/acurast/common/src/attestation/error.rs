@@ -25,7 +25,7 @@ pub enum ValidationError {
     /// Error occured when parsing the extension field
     ParseExtension,
     /// Attestation version is not supported
-    UnsupportedAttestationVersion,
+    UnsupportedAttestationVersion(i64),
     /// Error occured while parsing the P256 public key
     ParseP256PublicKey,
     /// Error occured while parsing the P384 public key

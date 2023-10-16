@@ -80,16 +80,21 @@ pub fn extract_attestation<'a>(
             Ok(KeyDescription::V4(parsed))
         }
         100 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV100V200>(extension.extn_value)
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
                 .map_err(|_| ValidationError::ParseError)?;
             Ok(KeyDescription::V100(parsed))
         }
         200 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV100V200>(extension.extn_value)
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
                 .map_err(|_| ValidationError::ParseError)?;
             Ok(KeyDescription::V200(parsed))
         }
-        _ => Err(ValidationError::UnsupportedAttestationVersion),
+        300 => {
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
+                .map_err(|_| ValidationError::ParseError)?;
+            Ok(KeyDescription::V300(parsed))
+        }
+        _ => Err(ValidationError::UnsupportedAttestationVersion(version)),
     }
 }
 
@@ -432,6 +437,13 @@ mod tests {
                 PIXEL_INTERMEDIATE_1_CERT,
                 PIXEL_KEY_CERT,
             ],
+            vec![
+                r"MIIFHDCCAwSgAwIBAgIJANUP8luj8tazMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTkxMTIyMjAzNzU4WhcNMzQxMTE4MjAzNzU4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQBOMaBc8oumXb2voc7XCWnuXKhBBK3e2KMGz39t7lA3XXRe2ZLLAkLM5y3J7tURkf5a1SutfdOyXAmeE6SRo83Uh6WszodmMkxK5GM4JGrnt4pBisu5igXEydaW7qq2CdC6DOGjG+mEkN8/TA6p3cnoL/sPyz6evdjLlSeJ8rFBH6xWyIZCbrcpYEJzXaUOEaxxXxgYz5/cTiVKN2M1G2okQBUIYSY6bjEL4aUN5cfo7ogP3UvliEo3Eo0YgwuzR2v0KR6C1cZqZJSTnghIC/vAD32KdNQ+c3N+vl2OTsUVMC1GiWkngNx1OO1+kXW+YTnnTUOtOIswUP/Vqd5SYgAImMAfY8U9/iIgkQj6T2W6FsScy94IN9fFhE1UtzmLoBIuUFsVXJMTz+Jucth+IqoWFua9v1R93/k98p41pjtFX+H8DslVgfP097vju4KDlqN64xV1grw3ZLl4CiOe/A91oeLm2UHOq6wn3esB4r2EIQKb6jTVGu5sYCcdWpXr0AUVqcABPdgL+H7qJguBw09ojm6xNIrw2OocrDKsudk/okr/AwqEyPKw9WnMlQgLIKw1rODG2NvU9oR3GVGdMkUBZutL8VuFkERQGt6vQ2OCw0sV47VMkuYbacK/xyZFiRcrPJPb41zgbQj9XAEyLKCHex0SdDrx+tWUDqG8At2JHA==",
+                r"MIIDgDCCAWigAwIBAgIKA4gmZ2BliZaGDTANBgkqhkiG9w0BAQsFADAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MB4XDTIyMDEyNjIyNDc1MloXDTM3MDEyMjIyNDc1MlowKTETMBEGA1UEChMKR29vZ2xlIExMQzESMBAGA1UEAxMJRHJvaWQgQ0EyMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuppxbZvJgwNXXe6qQKidXqUt1ooT8M6Q+ysWIwpduM2EalST8v/Cy2JN10aqTfUSThJha/oCtG+F9TUUviOch6RahrpjVyBdhopM9MFDlCfkiCkPCPGu2ODMj7O/bKnko2YwZDAdBgNVHQ4EFgQUu/g2rYmubOLlnpTw1bLX0nrkfEEwHwYDVR0jBBgwFoAUNmHhAHyIBQlRi0RsR/8aTMnqTxIwEgYDVR0TAQH/BAgwBgEB/wIBAjAOBgNVHQ8BAf8EBAMCAQYwDQYJKoZIhvcNAQELBQADggIBAIFxUiFHYfObqrJM0eeXI+kZFT57wBplhq+TEjd+78nIWbKvKGUFlvt7IuXHzZ7YJdtSDs7lFtCsxXdrWEmLckxRDCRcth3Eb1leFespS35NAOd0Hekg8vy2G31OWAe567l6NdLjqytukcF4KAzHIRxoFivN+tlkEJmg7EQw9D2wPq4KpBtug4oJE53R9bLCT5wSVj63hlzEY3hC0NoSAtp0kdthow86UFVzLqxEjR2B1MPCMlyIfoGyBgkyAWhd2gWN6pVeQ8RZoO5gfPmQuCsn8m9kv/dclFMWLaOawgS4kyAn9iRi2yYjEAI0VVi7u3XDgBVnowtYAn4gma5q4BdXgbWbUTaMVVVZsepXKUpDpKzEfss6Iw0zx2Gql75zRDsgyuDyNUDzutvDMw8mgJmFkWjlkqkVM2diDZydzmgi8br2sJTLdG4lUwvedIaLgjnIDEG1J8/5xcPVQJFgRf3m5XEZB4hjG3We/49p+JRVQSpE1+QzG0raYpdNsxBUO+41diQo7qC7S8w2J+TMeGdpKGjCIzKjUDAy2+gOmZdZacanFN/03SydbKVHV0b/NYRWMa4VaZbomKON38IH2ep8pdj++nmSIXeWpQE8LnMEdnUFjvDzp0f0ELSXVW2+5xbl+fcqWgmOupmU4+bxNJLtknLo49Bg5w9jNn7T7rkF",
+                r"MIIB1jCCAVygAwIBAgITcM+MOFG89A40Y9HIF2M9NY+PTzAKBggqhkjOPQQDAzApMRMwEQYDVQQKEwpHb29nbGUgTExDMRIwEAYDVQQDEwlEcm9pZCBDQTIwHhcNMjMxMDE1MTkyNDUxWhcNMjMxMjA0MTkyNDUwWjApMRMwEQYDVQQKEwpHb29nbGUgTExDMRIwEAYDVQQDEwlEcm9pZCBDQTMwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARr95AOrHbuQ6kHxl+7t71D6qJmN8YreftJFZBhPA5Kw0RrM6KuYvYBF6gPqt8Sov+UWvWtDeL5sGGRybmN/gtWo2MwYTAOBgNVHQ8BAf8EBAMCAgQwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUSDkbhn725ZTB2PKmrq+6FSkfWmowHwYDVR0jBBgwFoAUu/g2rYmubOLlnpTw1bLX0nrkfEEwCgYIKoZIzj0EAwMDaAAwZQIxALFBTZe5vl4PBmAO8KHACvb4Qg6TLsnTrunrs9eja1oMmeYPO1dU0V8N0+nZRkP59gIwXDIumMPdaqz39DW6g38vizFhdvimGaEDQBZn7irtlbV5mao04wTZ3WRgp2L9fNHP",
+                r"MIIB3jCCAYSgAwIBAgIRAPb+T4MpCZjDmbqiVhfq+HIwCgYIKoZIzj0EAwIwKTETMBEGA1UEChMKR29vZ2xlIExMQzESMBAGA1UEAxMJRHJvaWQgQ0EzMB4XDTIzMTAxNDE1MzYxMFoXDTIzMTExODE1MzYxMFowPzESMBAGA1UEChMJU3Ryb25nQm94MSkwJwYDVQQDEyBmNmZlNGY4MzI5MDk5OGMzOTliYWEyNTYxN2VhZjg3MjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCUqltkFs/h7vHKQ2ZCcmw3vKi7AgFZZ24+lrL6jxXJ6l7HslskshJDa3QlYCAl6s/EBw94qilUvTI2h/V/h3W+jdzB1MB0GA1UdDgQWBBQIfrJVw4FkRZjl3aykqPe67idvPTAfBgNVHSMEGDAWgBRIORuGfvbllMHY8qaur7oVKR9aajAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwICBDASBgorBgEEAdZ5AgEeBAShARhAMAoGCCqGSM49BAMCA0gAMEUCIBmpMpCMKbBuvMK+0FHR5pnjJWfmpwOt9T8FgedpEzdWAiEA8gzScTX2ZUc5DMYm2Zrhx4SRMVP4XNHGTIhiSjWvM5w=",
+                r"MIICvTCCAmSgAwIBAgIBATAKBggqhkjOPQQDAjA/MRIwEAYDVQQKEwlTdHJvbmdCb3gxKTAnBgNVBAMTIGY2ZmU0ZjgzMjkwOTk4YzM5OWJhYTI1NjE3ZWFmODcyMB4XDTcwMDEwMTAwMDAwMFoXDTQ4MDEwMTAwMDAwMFowHzEdMBsGA1UEAxMUQW5kcm9pZCBLZXlzdG9yZSBLZXkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATDGqojP3482hCBZkLBXCfKeaq43Xh+AeUOI9Ym9F0ch3gtfgfJmjU2Z3EXR7YYE+AKh91ysxVc0Xs7lpm2HOcGo4IBbzCCAWswDgYDVR0PAQH/BAQDAgMIMIIBVwYKKwYBBAHWeQIBEQSCAUcwggFDAgIBLAoBAgICASwKAQIEIFn60RrhIWvgMbYX5Yen3U+9/33bdmX070ih8hd+Z4I/BAAwZb+FPQgCBgGLOSJgrr+FRVUEUzBRMSswKQQkY29tLmFjdXJhc3QuYXR0ZXN0ZWQuZXhlY3V0b3IuY2FuYXJ5AgEPMSIEIOxwwqTgcqD1hlUqaDV7I2l8nUXx4SV6jE0polrEmCQzMIGnoQsxCQIBAgIBAwIBBqIDAgEDowQCAgEApQUxAwIBAKoDAgEBv4N3AgUAv4U+AwIBAL+FQEwwSgQgJqxMYL6x43g1fK0MMGE0evjfb7q7sNjOokRYVe4B42gBAf8KAQAEIHkY01pAyfdaFbiuYRh2UFMeF4ltt8FCbyvwoDT6CfTLv4VBBQIDAiLgv4VCBQIDAxZGv4VOBgIEATSzXb+FTwYCBAE0s10wCgYIKoZIzj0EAwIDRwAwRAIgP/JcTQhcHftUQRZSUdKedvMAUzj02tfvKP8t/7ruzgcCIHMS0aiL/dbzq+E1+bxtPL0pMZPjCxyGLdPcIySI8yk/",
+            ],
         ];
 
         for chain in chains {
@@ -439,7 +451,11 @@ mod tests {
             validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
             let (_, cert, _) =
                 validate_certificate_chain(&decoded_chain).expect("validating chain failed");
-            let key_description = extract_attestation(cert.extensions)?;
+            let key_description = extract_attestation(cert.extensions).map_err(|err| {
+                dbg!(err.clone());
+
+                err
+            })?;
             match &key_description {
                 KeyDescription::V4(key_description) => {
                     assert_eq!(key_description.attestation_version, 4)
@@ -449,6 +465,9 @@ mod tests {
                 }
                 KeyDescription::V200(key_description) => {
                     assert_eq!(key_description.attestation_version, 200)
+                }
+                KeyDescription::V300(key_description) => {
+                    assert_eq!(key_description.attestation_version, 300)
                 }
                 _ => return Err(()),
             }
