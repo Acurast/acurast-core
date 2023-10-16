@@ -1475,6 +1475,7 @@ pub mod pallet {
 
                 T::MarketplaceHooks::finalize_job(&job_id, T::RewardManager::refund(&job_id)?)?;
 
+                pallet_acurast::Pallet::<T>::clear_environment_for(&job_id);
                 <StoredJobStatus<T>>::remove(&job_id.0, &job_id.1);
                 <StoredJobRegistration<T>>::remove(&job_id.0, &job_id.1);
 
