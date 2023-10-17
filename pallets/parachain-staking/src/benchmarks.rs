@@ -135,7 +135,7 @@ impl Seed {
 benchmarks! {
     // MONETARY ORIGIN DISPATCHABLES
     set_staking_expectation {
-        let ideal_staked = Perbill::from_percent(75);
+        let ideal_staked = Perbill::from_percent(80);
         let decay_rate = None;
     }: _(RawOrigin::Root, ideal_staked, decay_rate)
     verify {
@@ -168,9 +168,7 @@ benchmarks! {
 
     // ROOT DISPATCHABLES
 
-    set_total_selected {
-        Pallet::<T>::set_blocks_per_round(RawOrigin::Root.into(), 101u32)?;
-    }: _(RawOrigin::Root, 100u32)
+    set_total_selected {}: _(RawOrigin::Root, 100u32)
     verify {
         assert_eq!(Pallet::<T>::total_selected(), 100u32);
     }
@@ -189,8 +187,8 @@ benchmarks! {
 
     join_candidates {
         let x in 3..1_000;
-        // Worst Case Complexity is insertion into an ordered list so \exists full list before call
-        let mut candidate_count = 1u32;
+        // Worst Case Complexity is insertion into an ordered list so that exists full list before call
+        let mut candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         for i in 2..x {
             let seed = USER_SEED - i;
             let collator = create_funded_collator::<T>(
@@ -213,7 +211,7 @@ benchmarks! {
     schedule_leave_candidates {
         let x in 3..1_000;
         // Worst Case Complexity is removal from an ordered list so \exists full list before call
-        let mut candidate_count = 1u32;
+        let mut candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         for i in 2..x {
             let seed = USER_SEED - i;
             let collator = create_funded_collator::<T>(
@@ -242,21 +240,25 @@ benchmarks! {
         // x is total number of delegations for the candidate
         let x in 2..(<<T as Config>::MaxTopDelegationsPerCandidate as Get<u32>>::get()
         + <<T as Config>::MaxBottomDelegationsPerCandidate as Get<u32>>::get());
+
+        let mut candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         let candidate: T::AccountId = create_funded_collator::<T>(
             "unique_caller",
             USER_SEED - 100,
             0u32.into(),
             true,
-            1u32,
+            candidate_count,
         )?;
+        candidate_count += 1u32;
         // 2nd delegation required for all delegators to ensure DelegatorState updated not removed
         let second_candidate: T::AccountId = create_funded_collator::<T>(
             "unique__caller",
             USER_SEED - 99,
             0u32.into(),
             true,
-            2u32,
+            candidate_count
         )?;
+        candidate_count += 1u32;
         let mut delegators: Vec<T::AccountId> = Vec::new();
         let mut col_del_count = 0u32;
         for i in 1..x {
@@ -285,9 +287,9 @@ benchmarks! {
         }
         Pallet::<T>::schedule_leave_candidates(
             RawOrigin::Signed(candidate.clone()).into(),
-            3u32
+            candidate_count
         )?;
-        roll_to_and_author::<T>(2, candidate.clone());
+        roll_to_and_author::<T>(<T as Config>::LeaveCandidatesDelay::get(), candidate.clone());
     }: _(RawOrigin::Signed(candidate.clone()), candidate.clone(), col_del_count)
     verify {
         assert!(Pallet::<T>::candidate_info(&candidate).is_none());
@@ -300,7 +302,7 @@ benchmarks! {
     cancel_leave_candidates {
         let x in 3..1_000;
         // Worst Case Complexity is removal from an ordered list so \exists full list before call
-        let mut candidate_count = 1u32;
+        let mut candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         for i in 2..x {
             let seed = USER_SEED - i;
             let collator = create_funded_collator::<T>(
@@ -336,7 +338,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
     }: _(RawOrigin::Signed(caller.clone()))
     verify {
@@ -349,7 +351,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         Pallet::<T>::go_offline(RawOrigin::Signed(caller.clone()).into())?;
     }: _(RawOrigin::Signed(caller.clone()))
@@ -364,7 +366,7 @@ benchmarks! {
             USER_SEED,
             more,
             true,
-            1u32,
+            Pallet::<T>::candidate_pool().0.len() as u32,
         )?;
     }: _(RawOrigin::Signed(caller.clone()), more)
     verify {
@@ -382,7 +384,7 @@ benchmarks! {
             USER_SEED,
             min_candidate_stk,
             false,
-            1u32,
+            Pallet::<T>::candidate_pool().0.len() as u32,
         )?;
     }: _(RawOrigin::Signed(caller.clone()), min_candidate_stk)
     verify {
@@ -391,7 +393,7 @@ benchmarks! {
             state.request,
             Some(CandidateBondLessRequest {
                 amount: min_candidate_stk,
-                when_executable: 3,
+                when_executable: 4*7+1,
             })
         );
     }
@@ -403,13 +405,13 @@ benchmarks! {
             USER_SEED,
             min_candidate_stk,
             false,
-            1u32,
+            Pallet::<T>::candidate_pool().0.len() as u32,
         )?;
         Pallet::<T>::schedule_candidate_bond_less(
             RawOrigin::Signed(caller.clone()).into(),
             min_candidate_stk
         )?;
-        roll_to_and_author::<T>(2, caller.clone());
+        roll_to_and_author::<T>(<T as Config>::CandidateBondLessDelay::get(), caller.clone());
     }: {
         Pallet::<T>::execute_candidate_bond_less(
             RawOrigin::Signed(caller.clone()).into(),
@@ -429,7 +431,7 @@ benchmarks! {
             USER_SEED,
             min_candidate_stk,
             false,
-            1u32,
+            Pallet::<T>::candidate_pool().0.len() as u32,
         )?;
         Pallet::<T>::schedule_candidate_bond_less(
             RawOrigin::Signed(caller.clone()).into(),
@@ -450,6 +452,7 @@ benchmarks! {
         let y in 2..<<T as Config>::MaxTopDelegationsPerCandidate as Get<u32>>::get();
         // Worst Case is full of delegations before calling `delegate`
         let mut collators: Vec<T::AccountId> = Vec::new();
+        let candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         // Initialize MaxDelegationsPerDelegator collator candidates
         for i in 2..x {
             let seed = USER_SEED - i;
@@ -458,7 +461,7 @@ benchmarks! {
                 seed,
                 0u32.into(),
                 true,
-                collators.len() as u32 + 1u32,
+                collators.len() as u32 + candidate_count,
             )?;
             collators.push(collator.clone());
         }
@@ -484,7 +487,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            collators.len() as u32 + 1u32,
+            collators.len() as u32 + candidate_count,
         )?;
         // Worst Case Complexity is insertion into an almost full collator
         let mut col_del_count = 0u32;
@@ -511,7 +514,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -543,7 +546,7 @@ benchmarks! {
                 seed,
                 0u32.into(),
                 true,
-                collators.len() as u32 + 1u32
+                collators.len() as u32 + Pallet::<T>::candidate_pool().0.len() as u32
             )?;
             collators.push(collator.clone());
         }
@@ -572,7 +575,7 @@ benchmarks! {
             delegation_count += 1u32;
         }
         Pallet::<T>::schedule_leave_delegators(RawOrigin::Signed(caller.clone()).into())?;
-        roll_to_and_author::<T>(2, author);
+        roll_to_and_author::<T>(<T as Config>::LeaveDelegatorsDelay::get(), author);
     }: _(RawOrigin::Signed(caller.clone()), caller.clone(), delegation_count)
     verify {
         assert!(Pallet::<T>::delegator_state(&caller).is_none());
@@ -584,7 +587,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -607,7 +610,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -624,7 +627,7 @@ benchmarks! {
             Pallet::<T>::delegation_scheduled_requests(&collator),
             vec![ScheduledRequest {
                 delegator: caller,
-                when_executable: 3,
+                when_executable: 4*7+1,
                 action: DelegationAction::Revoke(Stake{power: bond, amount: bond}),
             }],
         );
@@ -636,7 +639,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -662,7 +665,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, total) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         Pallet::<T>::delegate(RawOrigin::Signed(
@@ -681,7 +684,7 @@ benchmarks! {
             Pallet::<T>::delegation_scheduled_requests(&collator),
             vec![ScheduledRequest {
                 delegator: caller,
-                when_executable: 3,
+                when_executable: <T as Config>::DelegationBondLessDelay::get() + 1,
                 action: DelegationAction::Decrease(Stake{power: bond_less, amount: bond_less}),
             }],
         );
@@ -693,7 +696,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -708,7 +711,7 @@ benchmarks! {
             caller.clone()).into(),
             collator.clone()
         )?;
-        roll_to_and_author::<T>(2, collator.clone());
+        roll_to_and_author::<T>(<T as Config>::RevokeDelegationDelay::get(), collator.clone());
     }: {
         Pallet::<T>::execute_delegation_request(
             RawOrigin::Signed(caller.clone()).into(),
@@ -727,7 +730,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, total) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         Pallet::<T>::delegate(RawOrigin::Signed(
@@ -743,7 +746,7 @@ benchmarks! {
             collator.clone(),
             bond_less
         )?;
-        roll_to_and_author::<T>(2, collator.clone());
+        roll_to_and_author::<T>(<T as Config>::DelegationBondLessDelay::get(), collator.clone());
     }: {
         Pallet::<T>::execute_delegation_request(
             RawOrigin::Signed(caller.clone()).into(),
@@ -764,7 +767,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, _) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         let bond = <<T as Config>::MinDelegatorStk as Get<BalanceOf<T>>>::get();
@@ -798,7 +801,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let (caller, total) = create_funded_user::<T>("caller", USER_SEED, 0u32.into());
         Pallet::<T>::delegate(RawOrigin::Signed(
@@ -866,15 +869,14 @@ benchmarks! {
             ideal: Perbill::one()
         };
         Pallet::<T>::set_inflation(RawOrigin::Root.into(), high_inflation.clone())?;
-        Pallet::<T>::set_blocks_per_round(RawOrigin::Root.into(), 101u32)?;
-        Pallet::<T>::set_total_selected(RawOrigin::Root.into(), 100u32)?;
+        Pallet::<T>::set_total_selected(RawOrigin::Root.into(), 20u32)?;
 
         let collator = create_funded_collator::<T>(
             "collator",
             0,
             min_candidate_stk::<T>() * 1_000_000u32.into(),
             true,
-            1,
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
 
         // create delegators
@@ -911,8 +913,7 @@ benchmarks! {
             ideal: Perbill::one()
         };
         Pallet::<T>::set_inflation(RawOrigin::Root.into(), high_inflation.clone())?;
-        Pallet::<T>::set_blocks_per_round(RawOrigin::Root.into(), 101u32)?;
-        Pallet::<T>::set_total_selected(RawOrigin::Root.into(), 100u32)?;
+        Pallet::<T>::set_total_selected(RawOrigin::Root.into(), 20u32)?;
 
         let mut seed = USER_SEED + 1;
 
@@ -965,7 +966,7 @@ benchmarks! {
             0,
             initial_stake_amount,
             true,
-            1u32,
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         total_staked += initial_stake_amount;
 
@@ -1043,7 +1044,7 @@ benchmarks! {
             USER_SEED,
             0u32.into(),
             true,
-            1u32
+            Pallet::<T>::candidate_pool().0.len() as u32
         )?;
         let start = <frame_system::Pallet<T>>::block_number();
         parachain_staking_on_finalize::<T>(collator.clone());
@@ -1072,12 +1073,13 @@ benchmarks! {
         let mut seed = Seed::new();
 
         // initialize the prime collator
+        let candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         let prime_candidate = create_funded_collator::<T>(
             "collator",
             seed.take(),
             min_candidate_stake,
             true,
-            1,
+            candidate_count
         )?;
 
         // initialize the prime delegator
@@ -1117,7 +1119,7 @@ benchmarks! {
                 seed.take(),
                 min_candidate_stake,
                 true,
-                i+1,
+                candidate_count+i,
             )?;
             Pallet::<T>::delegate(
                 RawOrigin::Signed(prime_delegator.clone()).into(),
@@ -1164,12 +1166,13 @@ benchmarks! {
         let mut seed = Seed::new();
 
         // initialize the prime collator
+        let candidate_count = Pallet::<T>::candidate_pool().0.len() as u32;
         let prime_candidate = create_funded_collator::<T>(
             "collator",
             seed.take(),
             min_candidate_stake,
             true,
-            1,
+            candidate_count,
         )?;
 
         // initialize the future delegator
@@ -1209,7 +1212,7 @@ benchmarks! {
                 seed.take(),
                 min_candidate_stake,
                 true,
-                i+1,
+                candidate_count+i,
             )?;
             Pallet::<T>::delegate(
                 RawOrigin::Signed(prime_delegator.clone()).into(),
@@ -1249,7 +1252,7 @@ benchmarks! {
             seed.take(),
             0u32.into(),
             true,
-            1,
+            Pallet::<T>::candidate_pool().0.len() as u32,
         )?;
         let original_free_balance = T::Currency::free_balance(&collator);
     }: {
