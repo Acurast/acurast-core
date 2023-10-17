@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use frame_support::traits::tokens::{Fortitude, Precision, Preservation};
+use frame_support::traits::tokens::Preservation;
 use frame_support::{
     pallet_prelude::Member,
     sp_runtime::{
@@ -211,6 +211,8 @@ where
         let remaining = Budget::unreserve_remaining(&job_id);
         // Send remaining funds to the job creator
         let pallet_account: T::AccountId = <T as Config>::PalletId::get().into_account_truncating();
+        let hyperdrive_pallet_account: T::AccountId =
+            <T as Config>::HyperdrivePalletId::get().into_account_truncating();
         match &job_id.0 {
             MultiOrigin::Acurast(who) => {
                 Currency::transfer(
@@ -221,11 +223,11 @@ where
                 )?;
             }
             MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
-                Currency::burn_from(
+                Currency::transfer(
                     &pallet_account,
+                    &hyperdrive_pallet_account,
                     remaining.saturated_into(),
-                    Precision::BestEffort,
-                    Fortitude::Polite,
+                    Preservation::Preserve,
                 )?;
             }
         };
