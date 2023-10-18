@@ -4,8 +4,8 @@ use crate::{
     mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate, AttestationChain,
     CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
-use acurast_common::MultiOrigin;
-use frame_support::{assert_err, assert_ok, bounded_vec};
+use acurast_common::{Environment, MultiOrigin};
+use frame_support::{assert_err, assert_ok, bounded_vec, BoundedVec};
 use hex_literal::hex;
 use sp_runtime::AccountId32;
 
@@ -548,6 +548,58 @@ fn test_update_revocation_list_assign_job() {
                 RuntimeEvent::Acurast(crate::Event::CertificateRecovationListUpdated(
                     alice_account_id(),
                     updates.try_into().unwrap()
+                )),
+            ]
+        );
+    });
+}
+
+#[test]
+fn test_set_environment() {
+    let registration = job_registration(
+        Some(bounded_vec![
+            alice_account_id(),
+            bob_account_id(),
+            charlie_account_id(),
+            dave_account_id(),
+        ]),
+        false,
+    );
+    ExtBuilder::default().build().execute_with(|| {
+        let initial_job_id = Acurast::job_id_sequence();
+
+        assert_ok!(Acurast::register(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            registration.clone(),
+        ));
+        let job_id = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
+
+        let env = Environment {
+            public_key: BoundedVec::truncate_from(
+                hex!("000000000000000000000000000000000000000000000000000000000000000000").into(),
+            ),
+            variables: bounded_vec![(
+                BoundedVec::truncate_from(hex!("AAAA").into()),
+                BoundedVec::truncate_from(hex!("BBBB").into())
+            )],
+        };
+        assert_ok!(Acurast::set_environment(
+            RuntimeOrigin::signed(alice_account_id()).into(),
+            initial_job_id + 1,
+            bob_account_id(),
+            env
+        ));
+
+        assert_eq!(
+            events(),
+            [
+                RuntimeEvent::Acurast(crate::Event::JobRegistrationStored(
+                    registration.clone(),
+                    job_id.clone()
+                )),
+                RuntimeEvent::Acurast(crate::Event::ExecutionEnvironmentUpdated(
+                    job_id.clone(),
+                    bob_account_id()
                 )),
             ]
         );
