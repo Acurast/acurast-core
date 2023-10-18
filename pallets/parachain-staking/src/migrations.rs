@@ -1,88 +1,133 @@
-// // Copyright 2019-2022 PureStake Inc.
-// // Copyright 2023 Papers AG
-//
-// //! # Migrations
-//
-// #![allow(deprecated)]
-//
-// use frame_support::{
-//     traits::{GetStorageVersion, StorageVersion},
-//     weights::Weight,
-// };
-// use pallet_acurast::JobModules;
-// use sp_core::Get;
-//
-// use super::*;
-//
-// pub mod v1 {
-//     use frame_support::pallet_prelude::*;
-//     use pallet_acurast::{MultiOrigin, ParameterBound};
-//     use sp_std::prelude::*;
-//
-//     /// The resource advertisement by a source containing the base restrictions.
-//     #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
-//     pub struct AdvertisementRestriction<AccountId, MaxAllowedConsumers: ParameterBound> {
-//         /// Maximum memory in bytes not to be exceeded during any job's execution.
-//         pub max_memory: u32,
-//         /// Maximum network requests per second not to be exceeded.
-//         pub network_request_quota: u8,
-//         /// Storage capacity in bytes not to be exceeded in matching. The associated fee is listed in [pricing].
-//         pub storage_capacity: u32,
-//         /// An optional array of the [AccountId]s of consumers whose jobs should get accepted. If the array is [None], then jobs from all consumers are accepted.
-//         pub allowed_consumers: Option<BoundedVec<MultiOrigin<AccountId>, MaxAllowedConsumers>>,
-//     }
-// }
-//
-// pub fn migrate<T: Config>() -> Weight {
-//     let migrations: [(u16, &dyn Fn() -> Weight); 3] = [
-//         (2, &migrate_to_v2::<T>),
-//         (3, &migrate_to_v3::<T>),
-//         (4, &migrate_to_v4::<T>),
-//     ];
-//
-//     let onchain_version = Pallet::<T>::on_chain_storage_version();
-//     let mut weight: Weight = Default::default();
-//     for (i, f) in migrations.into_iter() {
-//         if onchain_version < StorageVersion::new(i) {
-//             weight += f();
-//         }
-//     }
-//
-//     STORAGE_VERSION.put::<Pallet<T>>();
-//     weight + T::DbWeight::get().writes(1)
-// }
-//
-// fn migrate_to_v2<T: Config>() -> Weight {
-//     StoredAdvertisementRestriction::<T>::translate_values::<
-//         v1::AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
-//         _,
-//     >(|ad| {
-//         Some(AdvertisementRestriction {
-//             max_memory: ad.max_memory,
-//             network_request_quota: ad.network_request_quota,
-//             storage_capacity: ad.storage_capacity,
-//             allowed_consumers: ad.allowed_consumers,
-//             available_modules: JobModules::default(),
-//         })
-//     });
-//     let count = StoredAdvertisementRestriction::<T>::iter_values().count() as u64;
-//     T::DbWeight::get().reads_writes(count + 1, count + 1)
-// }
-//
-// fn migrate_to_v3<T: Config>() -> Weight {
-//     let mut count = 0u32;
-//     // we know they are reasonably few items and we can clear them within a single migration
-//     count += StoredJobStatus::<T>::clear(10_000, None).loops;
-//     count += StoredAdvertisementRestriction::<T>::clear(10_000, None).loops;
-//     count += StoredAdvertisementPricing::<T>::clear(10_000, None).loops;
-//     count += StoredStorageCapacity::<T>::clear(10_000, None).loops;
-//     count += StoredReputation::<T>::clear(10_000, None).loops;
-//     count += StoredMatches::<T>::clear(10_000, None).loops;
-//
-//     T::DbWeight::get().writes((count + 1).into())
-// }
-//
-// fn migrate_to_v4<T: Config>() -> Weight {
-//     // clear again all storages since we want to clear at the same time as pallet acurast for consistent state
-//     migrate_to_v3::<T>()
-// }
+// Copyright 2019-2022 PureStake Inc.
+// Copyright 2023 Papers AG
+
+//! # Migrations
+
+#![allow(deprecated)]
+
+use frame_support::{
+    traits::{GetStorageVersion, StorageVersion},
+    weights::Weight,
+};
+use num_traits::Saturating;
+use sp_core::Get;
+use sp_runtime::traits::Zero;
+use sp_std::prelude::*;
+
+use crate::hooks::StakingHooks;
+
+use super::*;
+
+pub mod v1 {
+    use frame_support::pallet_prelude::*;
+
+    use crate::*;
+
+    #[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
+    /// All candidate info except the top and bottom delegations
+    pub struct CandidateMetadata<Balance> {
+        /// This candidate's self bond amount
+        pub bond: Balance,
+        /// Total number of delegations to this candidate
+        pub delegation_count: u32,
+        /// Self bond + sum of top delegations
+        pub total_counted: Balance,
+        /// The smallest top delegation amount
+        pub lowest_top_delegation_amount: Balance,
+        /// The highest bottom delegation amount
+        pub highest_bottom_delegation_amount: Balance,
+        /// The smallest bottom delegation amount
+        pub lowest_bottom_delegation_amount: Balance,
+        /// Capacity status for top delegations
+        pub top_capacity: CapacityStatus,
+        /// Capacity status for bottom delegations
+        pub bottom_capacity: CapacityStatus,
+        /// Maximum 1 pending request to decrease candidate self bond at any given time
+        pub request: Option<CandidateBondLessRequest<Balance>>,
+        /// Current status of the collator
+        pub status: CollatorStatus,
+    }
+}
+
+pub fn migrate<T: Config>() -> Weight {
+    let migrations: [(u16, &dyn Fn() -> Weight); 1] = [(2, &migrate_to_v1::<T>)];
+
+    let onchain_version = Pallet::<T>::on_chain_storage_version();
+    let mut weight: Weight = Default::default();
+    for (i, f) in migrations.into_iter() {
+        if onchain_version < StorageVersion::new(i) {
+            weight += f();
+        }
+    }
+
+    STORAGE_VERSION.put::<Pallet<T>>();
+    weight + T::DbWeight::get().writes(1)
+}
+
+fn migrate_to_v1<T: Config>() -> Weight {
+    // 0) remember the candidates
+    // translate just to preserve the bond (we don't get the key in translate_values closure :( )
+    CandidateInfo::<T>::translate_values::<v1::CandidateMetadata<BalanceOf<T>>, _>(|info| {
+        Some(CandidateMetadata::<BalanceOf<T>> {
+            stake: Stake::new(info.bond, 0u32.into()),
+            delegation_count: 0,
+            total_stake_counted: Zero::zero(),
+            lowest_top_delegation: Zero::zero(),
+            highest_bottom_delegation: Zero::zero(),
+            lowest_bottom_delegation: Zero::zero(),
+            top_capacity: CapacityStatus::Full,
+            bottom_capacity: CapacityStatus::Full,
+            request: None,
+            status: Default::default(),
+        })
+    });
+    let mut count = CandidateInfo::<T>::iter_values().count() as u32;
+
+    // retrieve tuples of (account, bond)
+    let previous_candidates: Vec<_> = CandidateInfo::<T>::drain()
+        .map(|(acc, info)| (acc, info.stake.amount))
+        .collect();
+
+    // 1) clear out all structures that changed to StakeOf<T>
+    // we know they are reasonably few items and we can clear them within a single migration
+    count += DelegatorState::<T>::clear(10_000, None).loops;
+    count += CandidateInfo::<T>::clear(10_000, None).loops;
+    count += DelegationScheduledRequests::<T>::clear(10_000, None).loops;
+    count += AutoCompoundingDelegations::<T>::clear(10_000, None).loops;
+    count += TopDelegations::<T>::clear(10_000, None).loops;
+    count += BottomDelegations::<T>::clear(10_000, None).loops;
+    Total::<T>::kill();
+    count += 1;
+    CandidatePool::<T>::kill();
+    count += 1;
+    count += AtStake::<T>::clear(10_000, None).loops;
+    count += Staked::<T>::clear(10_000, None).loops;
+
+    // 2) redo some steps of join_candidate extrinsic for each previous candidate
+    let mut candidates = <CandidatePool<T>>::get();
+    for (acc, amount) in previous_candidates {
+        // let stake = T::StakingHooks::power(&acc, amount).unwrap();
+        let stake = Stake::new(amount, amount);
+        candidates.insert(Bond {
+            owner: acc.clone(),
+            stake,
+        });
+        let candidate = CandidateMetadata::new(stake);
+        <CandidateInfo<T>>::insert(&acc, candidate);
+        let empty_delegations: Delegations<T::AccountId, BalanceOf<T>> = Default::default();
+        // insert empty top delegations
+        <TopDelegations<T>>::insert(&acc, empty_delegations.clone());
+        // insert empty bottom delegations
+        <BottomDelegations<T>>::insert(&acc, empty_delegations);
+        let _ = <Total<T>>::mutate(|total| {
+            *total = total.saturating_add(stake);
+            *total
+        });
+
+        count += 4;
+    }
+    <CandidatePool<T>>::put(candidates);
+    count += 1;
+
+    T::DbWeight::get().writes((count + 1).into())
+}

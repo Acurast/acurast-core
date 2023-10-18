@@ -48,9 +48,9 @@ pub use RoundIndex;
 
 mod auto_compound;
 mod delegation_requests;
+mod migrations;
 pub mod hooks;
 pub mod inflation;
-pub mod migrations;
 pub mod traits;
 pub mod types;
 pub mod weights;
@@ -85,9 +85,12 @@ pub mod pallet {
     };
     use crate::{AutoCompoundConfig, AutoCompoundDelegations};
 
+    pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     /// Pallet for parachain staking
     #[pallet::pallet]
     #[pallet::without_storage_info]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(PhantomData<T>);
 
     pub type RoundIndex = u32;
@@ -455,6 +458,9 @@ pub mod pallet {
         fn on_finalize(_n: T::BlockNumber) {
             Self::award_points_to_block_author();
         }
+        fn on_runtime_upgrade() -> frame_support::weights::Weight {
+            crate::migrations::migrate::<T>()
+        }
     }
 
     #[pallet::storage]
@@ -754,7 +760,7 @@ pub mod pallet {
         /// Set the expectation for total staked. The expectation determines the issuance for
         /// the round according to logic in `fn compute_issuance`
         #[pallet::call_index(0)]
-        #[pallet::weight(<T as Config>::WeightInfo::set_staking_expectations())]
+        #[pallet::weight(<T as Config>::WeightInfo::set_staking_expectation())]
         pub fn set_staking_expectation(
             origin: OriginFor<T>,
             ideal_staked: Perbill,

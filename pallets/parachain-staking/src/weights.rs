@@ -38,7 +38,7 @@ use sp_std::marker::PhantomData;
 
 /// Weight functions needed for parachain_staking.
 pub trait WeightInfo {
-	fn set_staking_expectations() -> Weight;
+	fn set_staking_expectation() -> Weight;
 	fn set_inflation() -> Weight;
 	fn set_parachain_bond_account() -> Weight;
 	fn set_parachain_bond_reserve_percent() -> Weight;
@@ -81,7 +81,7 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: ParachainStaking InflationConfig (r:1 w:1)
 	/// Proof Skipped: ParachainStaking InflationConfig (max_values: Some(1), max_size: None, mode: Measured)
-	fn set_staking_expectations() -> Weight {
+	fn set_staking_expectation() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `88`
 		//  Estimated: `1573`
@@ -744,7 +744,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 impl WeightInfo for () {
 	/// Storage: ParachainStaking InflationConfig (r:1 w:1)
 	/// Proof Skipped: ParachainStaking InflationConfig (max_values: Some(1), max_size: None, mode: Measured)
-	fn set_staking_expectations() -> Weight {
+	fn set_staking_expectation() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `88`
 		//  Estimated: `1573`
