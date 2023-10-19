@@ -4,6 +4,8 @@
 //! Scheduled requests functionality for delegators
 
 use frame_support::ensure;
+use frame_support::pallet_prelude::DispatchResult;
+use frame_support::sp_runtime::DispatchError;
 use frame_support::traits::Get;
 use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
 use num_traits::Saturating;
@@ -204,125 +206,152 @@ impl<T: Config> Pallet<T> {
         collator: T::AccountId,
         delegator: T::AccountId,
     ) -> DispatchResultWithPostInfo {
-        let mut state = <DelegatorState<T>>::get(&delegator).ok_or(<Error<T>>::DelegatorDNE)?;
-        let mut scheduled_requests = <DelegationScheduledRequests<T>>::get(&collator);
-        let request_idx = scheduled_requests
-            .iter()
-            .position(|req| req.delegator == delegator)
-            .ok_or(<Error<T>>::PendingDelegationRequestDNE)?;
-        let request = &scheduled_requests[request_idx];
-
-        let now = <Round<T>>::get().current;
-        ensure!(
-            request.when_executable <= now,
-            <Error<T>>::PendingDelegationRequestNotDueYet
-        );
-
-        match request.action {
-            DelegationAction::Revoke(stake) => {
-                // revoking last delegation => leaving set of delegators
-                let leaving = if state.delegations.0.len() == 1usize {
-                    true
-                } else {
-                    ensure!(
-                        sp_arithmetic::traits::Saturating::saturating_sub(
-                            state.total().amount,
-                            T::MinDelegatorStk::get().into()
-                        ) >= stake.amount,
-                        <Error<T>>::DelegatorBondBelowMin
-                    );
-                    false
-                };
-
+        <DelegationScheduledRequests<T>>::try_mutate(
+            &collator,
+            |scheduled_requests| -> DispatchResult {
+                let request_idx = scheduled_requests
+                    .iter()
+                    .position(|req| req.delegator == delegator)
+                    .ok_or(<Error<T>>::PendingDelegationRequestDNE)?;
                 // remove from pending requests
-                let amount = scheduled_requests.remove(request_idx).action.amount();
-                state.less_total = state.less_total.saturating_sub(amount);
+                let request = scheduled_requests.remove(request_idx);
 
-                // remove delegation from delegator state
-                state.rm_delegation::<T>(&collator);
+                let now = <Round<T>>::get().current;
+                ensure!(
+                    request.when_executable <= now,
+                    <Error<T>>::PendingDelegationRequestNotDueYet
+                );
 
-                // remove delegation from auto-compounding info
-                <AutoCompoundDelegations<T>>::remove_auto_compound(&collator, &delegator);
-
-                // remove delegation from collator state delegations
-                Self::delegator_leaves_candidate(collator.clone(), delegator.clone(), amount)?;
-                Self::deposit_event(Event::DelegationRevoked {
-                    delegator: delegator.clone(),
-                    candidate: collator.clone(),
-                    unstaked_amount: amount,
-                });
-
-                <DelegationScheduledRequests<T>>::insert(collator, scheduled_requests);
-                if leaving {
-                    <DelegatorState<T>>::remove(&delegator);
-                    Self::deposit_event(Event::DelegatorLeft {
-                        delegator,
-                        unstaked_amount: amount,
-                    });
-                } else {
-                    <DelegatorState<T>>::insert(&delegator, state);
-                }
-                Ok(().into())
-            }
-            DelegationAction::Decrease(_) => {
-                // remove from pending requests
-                let less = scheduled_requests.remove(request_idx).action.amount();
-                state.less_total = state.less_total.saturating_sub(less);
-
-                // decrease delegation
-                for bond in &mut state.delegations.0 {
-                    if bond.owner == collator {
-                        return if bond.stake > less {
-                            let amount_before: StakeOf<T> = bond.stake.into();
-                            bond.stake = bond.stake.saturating_sub(less);
-                            let mut collator_info = <CandidateInfo<T>>::get(&collator)
-                                .ok_or(<Error<T>>::CandidateDNE)?;
-
-                            state.total_sub_if::<T, _>(less, |total| {
-                                ensure!(
-                                    total.amount >= T::MinDelegation::get(),
-                                    <Error<T>>::DelegationBelowMin
-                                );
-                                ensure!(
-                                    total.amount >= T::MinDelegatorStk::get(),
-                                    <Error<T>>::DelegatorBondBelowMin
-                                );
-
-                                Ok(())
-                            })?;
-
-                            // need to go into decrease_delegation
-                            let in_top = collator_info.decrease_delegation::<T>(
-                                &collator,
-                                delegator.clone(),
-                                amount_before,
-                                less,
-                            )?;
-                            <CandidateInfo<T>>::insert(&collator, collator_info);
-                            let new_total_staked = <Total<T>>::get().saturating_sub(less);
-                            <Total<T>>::put(new_total_staked);
-
-                            <DelegationScheduledRequests<T>>::insert(
-                                collator.clone(),
-                                scheduled_requests,
-                            );
-                            <DelegatorState<T>>::insert(delegator.clone(), state);
-                            Self::deposit_event(Event::DelegationDecreased {
-                                delegator,
-                                candidate: collator.clone(),
-                                less,
-                                in_top,
-                            });
-                            Ok(().into())
-                        } else {
-                            // must rm entire delegation if bond.amount <= less or cancel request
-                            Err(<Error<T>>::DelegationBelowMin.into())
-                        };
+                let mut state =
+                    <DelegatorState<T>>::get(&delegator).ok_or(<Error<T>>::DelegatorDNE)?;
+                match request.action {
+                    DelegationAction::Revoke(stake) => {
+                        Self::revoke_delegator_stake(
+                            &mut state,
+                            collator.clone(),
+                            delegator.clone(),
+                            stake,
+                        )?;
+                        Self::deposit_event(Event::DelegationRevoked {
+                            delegator: delegator,
+                            candidate: collator.clone(),
+                            unstaked_amount: stake,
+                        });
                     }
-                }
-                Err(<Error<T>>::DelegationDNE.into())
+                    DelegationAction::Decrease(stake) => {
+                        let in_top = Self::decrease_delegator_stake(
+                            &mut state,
+                            collator.clone(),
+                            delegator.clone(),
+                            stake,
+                        )?;
+                        Self::deposit_event(Event::DelegationDecreased {
+                            delegator,
+                            candidate: collator.clone(),
+                            less: stake,
+                            in_top,
+                        });
+                    }
+                };
+                Ok(())
+            },
+        )?;
+        Ok(().into())
+    }
+
+    pub(crate) fn revoke_delegator_stake(
+        state: &mut DelegatorOf<T>,
+        collator: T::AccountId,
+        delegator: T::AccountId,
+        stake: StakeOf<T>,
+    ) -> DispatchResult {
+        // revoking last delegation => leaving set of delegators
+        let leaving = if state.delegations.0.len() == 1usize {
+            true
+        } else {
+            ensure!(
+                sp_arithmetic::traits::Saturating::saturating_sub(
+                    state.total().amount,
+                    T::MinDelegatorStk::get().into()
+                ) >= stake.amount,
+                <Error<T>>::DelegatorBondBelowMin
+            );
+            false
+        };
+
+        state.less_total = state.less_total.saturating_sub(stake);
+
+        // remove delegation from delegator state
+        state.rm_delegation::<T>(&collator);
+
+        // remove delegation from auto-compounding info
+        <AutoCompoundDelegations<T>>::remove_auto_compound(&collator, &delegator);
+
+        // remove delegation from collator state delegations
+        Self::delegator_leaves_candidate(collator.clone(), delegator.clone(), stake)?;
+
+        if leaving {
+            <DelegatorState<T>>::remove(&delegator);
+            Self::deposit_event(Event::DelegatorLeft {
+                delegator,
+                unstaked_amount: stake,
+            });
+        } else {
+            <DelegatorState<T>>::insert(&delegator, state);
+        }
+        Ok(().into())
+    }
+
+    pub(crate) fn decrease_delegator_stake(
+        state: &mut DelegatorOf<T>,
+        collator: T::AccountId,
+        delegator: T::AccountId,
+        stake: StakeOf<T>,
+    ) -> Result<bool, DispatchError> {
+        state.less_total = state.less_total.saturating_sub(stake);
+
+        // decrease delegation
+        for bond in &mut state.delegations.0 {
+            if bond.owner == collator {
+                return if bond.stake > stake {
+                    let amount_before: StakeOf<T> = bond.stake.into();
+                    bond.stake = bond.stake.saturating_sub(stake);
+                    let mut collator_info =
+                        <CandidateInfo<T>>::get(&collator).ok_or(<Error<T>>::CandidateDNE)?;
+
+                    state.total_sub_if::<T, _>(stake, |total| {
+                        ensure!(
+                            total.amount >= T::MinDelegation::get(),
+                            <Error<T>>::DelegationBelowMin
+                        );
+                        ensure!(
+                            total.amount >= T::MinDelegatorStk::get(),
+                            <Error<T>>::DelegatorBondBelowMin
+                        );
+
+                        Ok(())
+                    })?;
+
+                    // need to go into decrease_delegation
+                    let in_top = collator_info.decrease_delegation::<T>(
+                        &collator,
+                        delegator.clone(),
+                        amount_before,
+                        stake,
+                    )?;
+                    <CandidateInfo<T>>::insert(&collator, collator_info);
+                    let new_total_staked = <Total<T>>::get().saturating_sub(stake);
+                    <Total<T>>::put(new_total_staked);
+
+                    <DelegatorState<T>>::insert(delegator.clone(), state);
+                    Ok(in_top.into())
+                } else {
+                    // must rm entire delegation if bond.amount <= less or cancel request
+                    Err(<Error<T>>::DelegationBelowMin.into())
+                };
             }
         }
+        Err(<Error<T>>::DelegationDNE.into())
     }
 
     /// Schedules [DelegationAction::Revoke] for the delegator, towards all delegated collator.
