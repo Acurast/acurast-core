@@ -48,9 +48,9 @@ pub use RoundIndex;
 
 mod auto_compound;
 mod delegation_requests;
-mod migrations;
 pub mod hooks;
 pub mod inflation;
+mod migrations;
 pub mod traits;
 pub mod types;
 pub mod weights;
@@ -2019,13 +2019,40 @@ pub mod pallet {
         }
 
         /// Bond less since power decreased. Performs different actions depending on if target is delegating or a candidate.
-        pub fn power_decreased(target: &T::AccountId, perbill: Perbill) -> DispatchResult {
-            if Self::is_candidate(&target) {
-                let mut state = <CandidateInfo<T>>::get(target).ok_or(Error::<T>::CandidateDNE)?;
-                state.bond_less::<T>(
-                    target.clone(),
-                    Stake::new(0u32.into(), perbill * state.stake.power),
-                )?;
+        pub fn power_decreased(acc: &T::AccountId, perbill: Perbill) -> DispatchResult {
+            if Self::is_candidate(&acc) {
+                <CandidateInfo<T>>::try_mutate(acc, |state| -> DispatchResult {
+                    let state = state.as_mut().ok_or(Error::<T>::CandidateDNE)?;
+                    state.bond_less::<T>(
+                        acc.clone(),
+                        Stake::new(0u32.into(), perbill * state.stake.power),
+                    )?;
+                    Ok(())
+                })?;
+            }
+            if let Some(mut delegator_state) = <DelegatorState<T>>::get(acc) {
+                for bond in delegator_state.clone().delegations.0.into_iter() {
+                    if let Err(e) = Self::decrease_delegator_stake(
+                        &mut delegator_state,
+                        bond.owner.clone(),
+                        acc.clone(),
+                        Stake::new(0u32.into(), perbill * bond.stake.power),
+                    ) {
+                        let delegation_bond_below_min_err: DispatchError =
+                            Error::<T>::DelegatorBondBelowMin.into();
+                        if e == delegation_bond_below_min_err {
+                            // fallback to revoke delegation since we should not fail the power_decreased whenever possible (would block e.g. cooldown in vesting)
+                            Self::revoke_delegator_stake(
+                                &mut delegator_state,
+                                bond.owner.clone(),
+                                acc.clone(),
+                                Stake::new(0u32.into(), perbill * bond.stake.power),
+                            )?;
+                        } else {
+                            Err(e)?;
+                        }
+                    }
+                }
             }
             Ok(())
         }
@@ -2042,8 +2069,8 @@ pub mod pallet {
                     ),
                 )?;
             }
-            if let Some(delegator) = <DelegatorState<T>>::get(acc) {
-                for bond in delegator.delegations.0.into_iter() {
+            if let Some(delegator_state) = <DelegatorState<T>>::get(acc) {
+                for bond in delegator_state.delegations.0.into_iter() {
                     let _ = Self::delegation_bond_more_without_event(
                         acc.clone(),
                         bond.owner.clone(),

@@ -14,8 +14,6 @@ use sp_core::Get;
 use sp_runtime::traits::Zero;
 use sp_std::prelude::*;
 
-use crate::hooks::StakingHooks;
-
 use super::*;
 
 pub mod v1 {
@@ -106,8 +104,8 @@ fn migrate_to_v1<T: Config>() -> Weight {
     // 2) redo some steps of join_candidate extrinsic for each previous candidate
     let mut candidates = <CandidatePool<T>>::get();
     for (acc, amount) in previous_candidates {
-        // let stake = T::StakingHooks::power(&acc, amount).unwrap();
-        let stake = Stake::new(amount, amount);
+        // Commit to 1/64 of MaximumLockingPeriod
+        let stake = Stake::new(amount, amount / 64u32.into());
         candidates.insert(Bond {
             owner: acc.clone(),
             stake,
