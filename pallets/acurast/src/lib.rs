@@ -503,7 +503,31 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who);
             let job_id: JobId<T::AccountId> = (multi_origin, job_id_seq);
-            Self::set_environment_for(job_id, source, environment)
+            Self::set_environment_for(job_id.clone(), source.clone(), environment)?;
+            Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
+
+            Ok(().into())
+        }
+
+        /// Updates the certificate revocation list by adding or removing a revoked certificate serial number. Attestations signed
+        /// by a revoked certificate will not be considered valid anymore. The `RevocationListUpdateBarrier` configured in [Config] can be used to
+        /// customize who can execute this action.
+        #[pallet::weight(<T as Config>::WeightInfo::set_environments(environments.len() as u32, environments.iter().map(|(_, env)| env.variables.len() as u32).max().unwrap_or(0u32)))]
+        #[pallet::call_index(8)]
+        pub fn set_environments(
+            origin: OriginFor<T>,
+            job_id_seq: JobIdSequence,
+            environments: BoundedVec<(T::AccountId, EnvironmentFor<T>), T::MaxSlots>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            for (source, env) in environments {
+                let multi_origin = MultiOrigin::Acurast(who.clone());
+                let job_id: JobId<T::AccountId> = (multi_origin, job_id_seq);
+                Self::set_environment_for(job_id, source, env)?;
+            }
+
+            Ok(().into())
         }
     }
 
@@ -562,7 +586,6 @@ pub mod pallet {
             let _registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                 .ok_or(Error::<T>::JobRegistrationNotFound)?;
             <ExecutionEnvironment<T>>::insert(&job_id, source.clone(), environment);
-            Self::deposit_event(Event::ExecutionEnvironmentUpdated(job_id, source));
             Ok(().into())
         }
 
