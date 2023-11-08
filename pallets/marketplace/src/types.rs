@@ -1,15 +1,14 @@
 use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec, PalletError};
 use sp_std::prelude::*;
 
-use pallet_acurast::{
-    AllowedSources, JobId, JobModules, JobRegistration, MultiOrigin, ParameterBound, Schedule,
-};
+use pallet_acurast::{AllowedSources, JobId, JobModules, MultiOrigin, ParameterBound, Schedule};
 
 use core::fmt::Debug;
 #[cfg(feature = "std")]
 use serde;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
+use sp_core::H256;
 
 use crate::Config;
 
@@ -22,16 +21,11 @@ pub type ExecutionOperationHash = BoundedVec<u8, ConstU32<EXECUTION_OPERATION_HA
 pub type ExecutionFailureMessage = BoundedVec<u8, ConstU32<EXECUTION_FAILURE_MESSAGE_MAX_LENGTH>>;
 pub type PlannedExecutions<AccountId, MaxSlots> = BoundedVec<PlannedExecution<AccountId>, MaxSlots>;
 
-pub type JobRegistrationForMarketplace<T> = JobRegistration<
-    <T as frame_system::Config>::AccountId,
-    <T as pallet_acurast::Config>::MaxAllowedSources,
-    <T as Config>::RegistrationExtra,
->;
-
 pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
     <T as Config>::Balance,
     <T as frame_system::Config>::AccountId,
     <T as pallet_acurast::Config>::MaxAllowedSources,
+    <T as pallet_acurast::Config>::MaxSlots,
 >;
 
 pub type MatchFor<T> =
@@ -52,7 +46,31 @@ impl<Reward, AccountId, MaxSlots: ParameterBound>
     }
 }
 
-/// The resource advertisement by a source containing pricing and capacity announcements.
+/// Migration implemantation.
+impl<Reward, AccountId, MaxSlots: ParameterBound>
+    From<v4::RegistrationExtra<Reward, AccountId, MaxSlots>>
+    for RegistrationExtra<Reward, AccountId, MaxSlots>
+{
+    fn from(extra: v4::RegistrationExtra<Reward, AccountId, MaxSlots>) -> Self {
+        RegistrationExtra {
+            requirements: extra.requirements.into(),
+        }
+    }
+}
+
+/// The source's location provided over `publish_location` extrinsic.
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq, Default)]
+pub struct SourceLocation {
+    /// ISO 3166-1 alpha-2 country code (to ASCII letters case insensitive, stored in upper case)
+    pub country_code: Option<[u8; 2]>,
+    pub city: Option<CityName>,
+    /// IPv4 as salted hash to obfuscate the real IP
+    pub ipv4: Option<H256>,
+    /// IPv6 as salted hash to obfuscate the real IP
+    pub ipv6: Option<H256>,
+}
+
+/// The resource advertisement stated intially by a source with pricing and capacity announcements.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct Advertisement<AccountId, Reward, MaxAllowedConsumers: Get<u32>> {
     /// The reward token accepted. Understood as one-of per job assigned.
@@ -88,6 +106,8 @@ pub struct AdvertisementRestriction<AccountId, MaxAllowedConsumers: ParameterBou
     pub allowed_consumers: Option<BoundedVec<MultiOrigin<AccountId>, MaxAllowedConsumers>>,
     /// The modules available to the job on processor.
     pub available_modules: JobModules,
+    /// Source's location.
+    pub source_location: SourceLocation,
 }
 
 /// Defines the scheduling window in which to accept matches for this pricing,
@@ -142,11 +162,15 @@ pub struct Assignment<Reward> {
 
 pub const NUMBER_OF_PUB_KEYS: u32 = 2;
 pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
+pub const CITY_NAME_MAX_LENGTH: u32 = 100;
 
 pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
 
 /// The public keys of the processor revealed when a job is acknowledged.
 pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
+
+/// City name used to define [`SourceLocation`].
+pub type CityName = BoundedVec<u8, ConstU32<CITY_NAME_MAX_LENGTH>>;
 
 /// The public key revealed by a processor.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
@@ -186,17 +210,56 @@ pub struct SLA {
     pub met: u64,
 }
 
+pub type JobRequirementsV4For<T> = v4::JobRequirements<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxSlots,
+>;
+
 pub type JobRequirementsFor<T> = JobRequirements<
     <T as Config>::Balance,
     <T as frame_system::Config>::AccountId,
     <T as pallet_acurast::Config>::MaxSlots,
 >;
 
+pub mod v4 {
+    use super::*;
+
+    /// Structure representing a job registration.
+    #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+    pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
+        /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
+        pub slots: u8,
+        /// Reward offered for each slot and scheduled execution of the job.
+        pub reward: Reward,
+        /// Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
+        pub min_reputation: Option<u128>,
+        /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
+        /// registration call and validation errors lead to abortion of the call.
+        pub instant_match: Option<PlannedExecutions<AccountId, MaxSlots>>,
+    }
+
+    /// Struct defining the extra fields for a `JobRegistration`.
+    #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+    pub struct RegistrationExtra<Reward, AccountId, MaxSlots: ParameterBound> {
+        pub requirements: JobRequirements<Reward, AccountId, MaxSlots>,
+    }
+}
+
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
 pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
+    /// Job requirements: The countries assignable to the slots.
+    ///
+    /// - Must have maximum [`Self.slots`] entries.
+    /// - If less then [`Self.slots`] countries are listed, the remainings are arbitrarily assigned.
+    /// - Country can be listed multiple times to have resilience within one country.
+    /// - Empty vec means all countries are assignable.
+    pub countries: BoundedVec<CountryCode, MaxSlots>,
+    /// Job requirements: Distinct IP addresses for each slot (IPv4 and IPv6 need to be different if both got provided). Ads without IP are not respected.
+    pub distinct_ip: bool,
     /// Reward offered for each slot and scheduled execution of the job.
     pub reward: Reward,
     /// Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
@@ -204,6 +267,22 @@ pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// Optional match provided with the job requirements. If provided, it gets processed instantaneously during
     /// registration call and validation errors lead to abortion of the call.
     pub instant_match: Option<PlannedExecutions<AccountId, MaxSlots>>,
+}
+
+impl<Reward, AccountId, MaxSlots: ParameterBound>
+    From<v4::JobRequirements<Reward, AccountId, MaxSlots>>
+    for JobRequirements<Reward, AccountId, MaxSlots>
+{
+    fn from(req: v4::JobRequirements<Reward, AccountId, MaxSlots>) -> Self {
+        JobRequirements {
+            slots: req.slots,
+            countries: BoundedVec::new(),
+            distinct_ip: false,
+            reward: req.reward,
+            min_reputation: req.min_reputation,
+            instant_match: req.instant_match,
+        }
+    }
 }
 
 /// A (one-sided) matching of a job to sources such that the requirements of both sides, consumer and source, are met.
@@ -221,7 +300,12 @@ pub struct Match<AccountId, MaxSlots: ParameterBound> {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>> {
+pub struct PartialJobRegistration<
+    Reward,
+    AccountId,
+    MaxAllowedSources: Get<u32>,
+    MaxSlots: Get<u32>,
+> {
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
     pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,
     /// A boolean indicating if only verified sources can fulfill the job. A verified source is one that has provided a valid key attestation.
@@ -238,11 +322,22 @@ pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>
     pub required_modules: JobModules,
     /// Job requirements: The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: Option<u8>,
+    /// Job requirements: The countries assignable to the slots.
+    ///
+    /// - Must have maximum [`Self.slots`] entries.
+    /// - If less then [`Self.slots`] countries are listed, the remainings are arbitrarily assigned.
+    /// - Country can be listed multiple times to have resilience within one country.
+    /// - Empty vec means all countries are assignable.
+    pub countries: BoundedVec<CountryCode, MaxSlots>,
+    /// Job requirements: Distinct IP addresses for each slot (IPv4 and IPv6 need to be different if both got provided). Ads without IP are not respected.
+    pub distinct_ip: bool,
     /// Job requirements: Reward offered for each slot and scheduled execution of the job.
     pub reward: Reward,
     /// Job requirements: Minimum reputation required to process job, in parts per million, `r ∈ [0, 1_000_000]`.
     pub min_reputation: Option<u128>,
 }
+
+pub type CountryCode = [u8; 2];
 
 /// The details for a single planned slot execution with the delay.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]

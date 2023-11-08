@@ -2,14 +2,15 @@ use crate::{MessageIdentifier, ParsedAction};
 use frame_support::dispatch::fmt::Debug;
 use frame_support::weights::Weight;
 use pallet_acurast::ParameterBound;
-use pallet_acurast_marketplace::RegistrationExtra;
+use pallet_acurast_marketplace::{v4, RegistrationExtra};
 
-pub trait Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
+pub trait Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
 where
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
     MaxSlots: ParameterBound,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV4: From<v4::RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV5: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
 {
     type Error: Debug;
 
@@ -19,7 +20,7 @@ where
     fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error>;
     fn message(
         self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>, Self::Error>;
 }
 
 /// Weight functions needed for pallet_acurast_hyperdrive.

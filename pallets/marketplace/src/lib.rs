@@ -52,7 +52,7 @@ pub mod pallet {
 
     use pallet_acurast::utils::ensure_source_verified;
     use pallet_acurast::{
-        AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationFor, MultiOrigin,
+        AllowedSourcesUpdate, JobHooks, JobId, JobIdSequence, JobRegistrationV5For, MultiOrigin,
         ParameterBound, Schedule, StoredJobRegistration,
     };
 
@@ -74,8 +74,10 @@ pub mod pallet {
         type MaxProposedMatches: Get<u32>;
         #[pallet::constant]
         type MaxFinalizeJobs: Get<u32>;
+        /// Extra v4 structure to include in the registration of a job.
+        type RegistrationExtraV4: IsType<<Self as pallet_acurast::Config>::RegistrationExtraV4>;
         /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: IsType<<Self as pallet_acurast::Config>::RegistrationExtra>
+        type RegistrationExtraV5: IsType<<Self as pallet_acurast::Config>::RegistrationExtraV5>
             + Into<JobRequirementsFor<Self>>;
         /// The ID for this pallet
         #[pallet::constant]
@@ -203,6 +205,8 @@ pub mod pallet {
         Reported(JobId<T::AccountId>, T::AccountId, AssignmentFor<T>),
         /// A advertisement was successfully stored. [advertisement, who]
         AdvertisementStored(AdvertisementFor<T>, T::AccountId),
+        /// A source published it's location. [SourceLocation, who]
+        LocationPublished(SourceLocation, T::AccountId),
         /// A registration was successfully removed. [who]
         AdvertisementRemoved(T::AccountId),
         /// An execution is reported to be successful.
@@ -384,7 +388,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Advertise resources by providing a [AdvertisementFor].
+        /// Advertise resources by providing a [`AdvertisementFor`].
         ///
         /// If the source has another active advertisement, the advertisement is updated given the updates does not
         /// violate any system invariants. For example, if the ad is currently assigned, changes to pricing are prohibited
@@ -682,6 +686,28 @@ pub mod pallet {
                     .map(|job_id_seq| (MultiOrigin::Acurast(who.clone()), job_id_seq)),
             )
         }
+
+        /// Provide location by [`SourceLocation`].
+        #[pallet::call_index(7)]
+        #[pallet::weight(< T as Config >::WeightInfo::advertise())]
+        pub fn publish_location(
+            origin: OriginFor<T>,
+            source_location: SourceLocation,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            <StoredAdvertisementRestriction<T>>::try_mutate(&who, |s| -> Result<(), Error<T>> {
+                if let Some(ref mut a) = *s {
+                    (*a).source_location = source_location.clone();
+                } else {
+                    Err(Error::<T>::AdvertisementNotFound)?;
+                }
+                Ok(())
+            })?;
+
+            Self::deposit_event(Event::LocationPublished(source_location, who));
+            Ok(().into())
+        }
     }
 
     impl<T: Config> From<Error<T>> for pallet_acurast::Error<T> {
@@ -696,9 +722,9 @@ pub mod pallet {
         fn register_hook(
             _who: &MultiOrigin<T::AccountId>,
             job_id: &JobId<T::AccountId>,
-            registration: &JobRegistrationFor<T>,
+            registration: &JobRegistrationV5For<T>,
         ) -> DispatchResultWithPostInfo {
-            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+            let e: <T as Config>::RegistrationExtraV5 = registration.extra.clone().into();
             let requirements: JobRequirementsFor<T> = e.into();
 
             ensure!(
@@ -800,7 +826,8 @@ pub mod pallet {
                     // Get the job requirements
                     let registration = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                         .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
-                    let extra: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                    let extra: <T as Config>::RegistrationExtraV5 =
+                        registration.extra.clone().into();
                     let requirements: JobRequirementsFor<T> = extra.into();
 
                     // Compute the reward amount to be payed to each assigned processor
@@ -920,7 +947,7 @@ pub mod pallet {
 
                 let registration = <StoredJobRegistration<T>>::get(&m.job_id.0, &m.job_id.1)
                     .ok_or(pallet_acurast::Error::<T>::JobRegistrationNotFound)?;
-                let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+                let e: <T as Config>::RegistrationExtraV5 = registration.extra.clone().into();
                 let requirements: JobRequirementsFor<T> = e.into();
 
                 let now = Self::now()?;
@@ -1176,7 +1203,12 @@ pub mod pallet {
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
         pub fn filter_matching_sources(
-            registration: PartialJobRegistration<T::Balance, T::AccountId, T::MaxAllowedSources>,
+            registration: PartialJobRegistration<
+                T::Balance,
+                T::AccountId,
+                T::MaxAllowedSources,
+                T::MaxSlots,
+            >,
             sources: Vec<T::AccountId>,
             consumer: Option<MultiOrigin<T::AccountId>>,
             latest_seen_after: Option<u128>,
@@ -1383,9 +1415,9 @@ pub mod pallet {
 
         /// Calculates the total reward amount.
         fn total_reward_amount(
-            registration: &JobRegistrationFor<T>,
+            registration: &JobRegistrationV5For<T>,
         ) -> Result<T::Balance, Error<T>> {
-            let e: <T as Config>::RegistrationExtra = registration.extra.clone().into();
+            let e: <T as Config>::RegistrationExtraV5 = registration.extra.clone().into();
             let requirements: JobRequirementsFor<T> = e.into();
 
             Ok(requirements
@@ -1500,9 +1532,9 @@ pub mod pallet {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with Acurast marketplace pallet.
-    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>> {
+    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>, MaxSlots: Get<u32>> {
          fn filter_matching_sources(
-            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources>,
+            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources, MaxSlots>,
             sources: Vec<AccountId>,
             consumer: Option<MultiOrigin<AccountId>>,
             latest_seen_after: Option<u128>,

@@ -32,7 +32,7 @@ use pallet_acurast::{
     Schedule, CU32,
 };
 use pallet_acurast_marketplace::{
-    JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+    v4, CountryCode, JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
 
 use crate::types::{
@@ -40,16 +40,23 @@ use crate::types::{
 };
 use crate::{traits, CurrentTargetChainOwner, MessageIdentifier, ParsedAction};
 
-pub struct TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>(
-    PhantomData<(Balance, ParsableAccountId, AccountId, MaxSlots, Extra)>,
+pub struct TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, ExtraV4, ExtraV5>(
+    PhantomData<(
+        Balance,
+        ParsableAccountId,
+        AccountId,
+        MaxSlots,
+        ExtraV4,
+        ExtraV5,
+    )>,
 );
 
-impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    MessageParser<AccountId, MaxAllowedSources, Extra>
-    for TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>
+impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
+    MessageParser<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>
+    for TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, ExtraV4, ExtraV5>
 where
     ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV4: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
     MaxSlots: ParameterBound,
@@ -70,11 +77,12 @@ where
 
     fn parse_value(
         encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, TezosValidationError> {
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>, TezosValidationError>
+    {
         let (action, origin, payload) = parse_message(encoded)?;
 
         Ok(match action {
-            RawAction::RegisterJob => {
+            RawAction::RegisterJobV4 => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, registration) = parse_job_registration_payload::<
                     Balance,
@@ -82,10 +90,29 @@ where
                     AccountId,
                     MaxAllowedSources,
                     MaxSlots,
-                    Extra,
+                    ExtraV4,
                 >(payload.as_slice())?;
 
-                ParsedAction::RegisterJob(
+                ParsedAction::RegisterJobV4(
+                    (
+                        MultiOrigin::Tezos(bounded_address(&origin)?),
+                        job_id_sequence,
+                    ),
+                    registration,
+                )
+            }
+            RawAction::RegisterJobV5 => {
+                let payload: Vec<u8> = (&payload).into();
+                let (job_id_sequence, registration) = parse_job_registration_payload::<
+                    Balance,
+                    ParsableAccountId,
+                    AccountId,
+                    MaxAllowedSources,
+                    MaxSlots,
+                    ExtraV4,
+                >(payload.as_slice())?;
+
+                ParsedAction::RegisterJobV4(
                     (
                         MultiOrigin::Tezos(bounded_address(&origin)?),
                         job_id_sequence,
@@ -172,7 +199,7 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Tez
     Ok((action, origin, body))
 }
 
-/// The structure of a [`RawAction::RegisterJob`] action before flattening:
+/// The structure of a [`RawAction::RegisterJobV4`] action before flattening:
 ///
 /// ```txt
 /// sp.TRecord(
@@ -191,6 +218,8 @@ fn parse_message(encoded: &[u8]) -> Result<(RawAction, TezosAddress, Bytes), Tez
 ///             minReputation=sp.TOption(sp.TNat),
 ///             reward=sp.TNat,
 ///             slots=sp.TNat,
+///             countries=sp.TSet(sp.TBytes),
+///             distinct_ip=sp.TBool,
 ///         ).right_comb(),
 ///     ).right_comb(),
 ///     jobId=sp.TNat,
@@ -234,6 +263,10 @@ fn registration_payload_schema() -> &'static Micheline {
                 nat(),
                 // slots
                 nat(),
+                // countries
+                option(set(bytes())),
+                // distinct_ip
+                bool_type(),
             ]),
             // job_id
             nat(),
@@ -295,7 +328,347 @@ fn finalize_job_schema() -> &'static Micheline {
     })
 }
 
-/// Parses an encoded [`RawAction::RegisterJob`] action's payload into [`JobRegistration`].
+mod tezos_v4 {
+    use super::*;
+
+    /// The structure of a [`RawAction::RegisterJobV4`] action before flattening:
+    ///
+    /// ```txt
+    /// sp.TRecord(
+    ///     allowOnlyVerifiedSources=sp.TBool,
+    ///     allowedSources=sp.TOption(sp.TSet(sp.TString)),
+    ///     extra=sp.TRecord(
+    ///         requirements=sp.TRecord(
+    ///             instantMatch=sp.TOption(
+    ///                 sp.TSet(
+    ///                     sp.TRecord(
+    ///                         source=sp.TString,
+    ///                         startDelay=sp.TNat,
+    ///                     )
+    ///                 )
+    ///             ),
+    ///             minReputation=sp.TOption(sp.TNat),
+    ///             reward=sp.TNat,
+    ///             slots=sp.TNat,
+    ///             countries=sp.TSet(sp.TBytes),
+    ///             distinct_ip=sp.TBool,
+    ///         ).right_comb(),
+    ///     ).right_comb(),
+    ///     jobId=sp.TNat,
+    ///     memory=sp.TNat,
+    ///     networkRequests=sp.TNat,
+    ///     requiredModules = sp.TSet(sp.TNat),
+    ///     schedule=sp.TRecord(
+    ///         duration=sp.TNat,
+    ///         endTime=sp.TNat,
+    ///         interval=sp.TNat,
+    ///         maxStartDelay=sp.TNat,
+    ///         startTime=sp.TNat,
+    ///     ).right_comb(),
+    ///     script=sp.TBytes,
+    ///     storage=sp.TNat,
+    /// ).right_comb()
+    /// ```
+    #[cfg_attr(rustfmt, rustfmt::skip)]
+    fn registration_payload_schema() -> &'static Micheline {
+        static REGISTRATION_PAYLOAD_SCHEMA: OnceBox<Micheline> = OnceBox::new();
+        REGISTRATION_PAYLOAD_SCHEMA.get_or_init(|| {
+            let schema: Micheline = pair(vec![
+                // allow_only_verified_sources
+                bool_type(),
+                // allowed_sources
+                option(set(bytes())),
+                // RegistrationExtra
+                pair(vec![
+                    // instant_match
+                    option(
+                        // PlannedExecutions
+                        set(pair(vec![
+                            // source
+                            bytes(),
+                            // start_delay
+                            nat()
+                        ]))),
+                    // min_reputation
+                    option(nat()),
+                    // reward
+                    nat(),
+                    // slots
+                    nat(),
+                ]),
+                // job_id
+                nat(),
+                // memory
+                nat(),
+                // network_requests
+                nat(),
+                // required_modules
+                set(nat()),
+                // schedule
+                pair(
+                    // Schedules
+                    vec![
+                        // duration
+                        nat(),
+                        // end_time
+                        nat(),
+                        // interval
+                        nat(),
+                        // max_start_delay
+                        nat(),
+                        // start_time
+                        nat(),
+                    ]),
+                // script
+                bytes(),
+                // storage
+                nat(),
+            ]);
+            Box::new(schema)
+        })
+    }
+
+    /// Parses an encoded [`RawAction::RegisterJobV4`] action's payload into [`JobRegistration`].
+    pub fn parse_job_registration_payload<
+        Balance,
+        ParsableAccountId,
+        AccountId,
+        MaxAllowedSources,
+        MaxSlots,
+        Extra,
+    >(
+        encoded: &[u8],
+    ) -> Result<
+        (
+            JobIdSequence,
+            JobRegistration<AccountId, MaxAllowedSources, Extra>,
+        ),
+        TezosValidationError,
+    >
+    where
+        ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
+        Extra: From<v4::RegistrationExtra<Balance, AccountId, MaxSlots>>,
+        Balance: From<u128>,
+        MaxAllowedSources: ParameterBound,
+        MaxSlots: ParameterBound,
+    {
+        let unpacked: Micheline = Micheline::unpack(encoded, Some(registration_payload_schema()))
+            .map_err(|e| TezosValidationError::TezosMicheline(e))?;
+
+        let p: PrimitiveApplication = unpacked.try_into()?;
+        let pair: Pair = p.try_into()?;
+
+        let values = pair.flatten().values;
+        let mut iter = values.into_iter();
+
+        // !!! [IMPORTANT]: The values need to be decoded alphabetically !!!
+
+        let allow_only_verified_sources: bool = try_bool(iter.next().ok_or(
+            TezosValidationError::MissingField(FieldError::AllowOnlyVerifiedSources),
+        )?)?;
+        let allowed_sources = try_option(
+            iter.next().ok_or(TezosValidationError::MissingField(
+                FieldError::AllowedSources,
+            ))?,
+            |value| {
+                let seq = try_sequence(value, |source| {
+                    let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(source)?).into();
+                    let parsed: ParsableAccountId = s
+                        .try_into()
+                        .map_err(|_| TezosValidationError::AddressParsing)?;
+                    Ok(parsed.into())
+                })?;
+                Ok(AllowedSources::try_from(seq).map_err(|_| {
+                    TezosValidationError::LengthExceeded(LengthExceededError::AllowedSources)
+                })?)
+            },
+        )?;
+        let instant_match = try_option(
+            iter.next()
+                .ok_or(TezosValidationError::MissingField(FieldError::InstantMatch))?,
+            |value| {
+                let sources = try_sequence(value, |planned_execution| {
+                    let pair: Pair = planned_execution.try_into()?;
+                    let values = pair.flatten().values;
+                    if values.len() != 2 {
+                        Err(TezosValidationError::InvalidMessage)?;
+                    }
+                    let mut iter = values.into_iter();
+
+                    let source = {
+                        let s: Vec<u8> = (&try_bytes::<_, Bytes, _>(
+                            iter.next()
+                                .ok_or(TezosValidationError::MissingField(FieldError::Source))?,
+                        )?)
+                            .into();
+                        let parsed: ParsableAccountId = s
+                            .try_into()
+                            .map_err(|_| TezosValidationError::AddressParsing)?;
+                        Ok::<AccountId, TezosValidationError>(parsed.into())
+                    }?;
+
+                    let start_delay = {
+                        let v: Int =
+                            try_int(iter.next().ok_or(TezosValidationError::MissingField(
+                                FieldError::StartDelay,
+                            ))?)?;
+                        v.to_integer()?
+                    };
+
+                    Ok(PlannedExecution {
+                        source,
+                        start_delay,
+                    })
+                })?;
+
+                Ok(PlannedExecutions::<AccountId, MaxSlots>::try_from(sources)
+                    .map_err(|_| TezosValidationError::InstantMatchPlannedExecutionsOutOfBounds)?)
+            },
+        )?;
+        let min_reputation = try_option(
+            iter.next().ok_or(TezosValidationError::MissingField(
+                FieldError::MinReputation,
+            ))?,
+            |value| {
+                let v: Int = try_int(value)?;
+                Ok(v.to_integer()?)
+            },
+        )?;
+        let reward = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Reward))?,
+            )?;
+            let v: u128 = v.to_integer()?;
+            v.into()
+        };
+        let slots = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Slots))?,
+            )?;
+            v.to_integer()?
+        };
+        let job_id = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::JobId))?,
+            )?;
+            v.to_integer()?
+        };
+        let memory = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Memory))?,
+            )?;
+            v.to_integer()?
+        };
+        let network_requests = {
+            let v: Int = try_int(iter.next().ok_or(TezosValidationError::MissingField(
+                FieldError::NetworkRequests,
+            ))?)?;
+            v.to_integer()?
+        };
+
+        let required_modules_unparsed = iter.next().ok_or(TezosValidationError::MissingField(
+            FieldError::RequiredModules,
+        ))?;
+        let required_modules = try_sequence::<JobModule, _>(required_modules_unparsed, |module| {
+            let value: Int = module.try_into()?;
+            value
+                .to_integer::<u32>()?
+                .try_into()
+                .map_err(|_| TezosValidationError::RequiredModulesParsing)
+        })?
+        .try_into()
+        .map_err(|_| TezosValidationError::RequiredModulesParsing)?;
+
+        let duration = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Duration))?,
+            )?;
+            v.to_integer()?
+        };
+        let end_time = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::EndTime))?,
+            )?;
+            v.to_integer()?
+        };
+        let interval = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Interval))?,
+            )?;
+            v.to_integer()?
+        };
+        let max_start_delay = {
+            let v: Int = try_int(iter.next().ok_or(TezosValidationError::MissingField(
+                FieldError::MaxStartDelay,
+            ))?)?;
+            v.to_integer()?
+        };
+        let start_time = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::StartTime))?,
+            )?;
+            v.to_integer()?
+        };
+
+        let script = {
+            let script: Vec<u8> = (&try_bytes::<_, Bytes, _>(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Script))?,
+            )?)
+                .into();
+            script
+                .try_into()
+                .map_err(|_| TezosValidationError::ScriptOutOfBounds)?
+        };
+        let storage = {
+            let v: Int = try_int(
+                iter.next()
+                    .ok_or(TezosValidationError::MissingField(FieldError::Storage))?,
+            )?;
+            v.to_integer()?
+        };
+
+        let extra: Extra = v4::RegistrationExtra {
+            requirements: v4::JobRequirements {
+                slots,
+                reward,
+                min_reputation,
+                instant_match,
+            },
+        }
+        .into();
+        Ok((
+            job_id,
+            JobRegistration {
+                script,
+                allowed_sources,
+                allow_only_verified_sources,
+                schedule: Schedule {
+                    duration,
+                    start_time,
+                    end_time,
+                    interval,
+                    max_start_delay,
+                },
+                memory,
+                network_requests,
+                storage,
+                required_modules,
+                extra,
+            },
+        ))
+    }
+}
+
+/// Parses an encoded [`RawAction::RegisterJobV4`] action's payload into [`JobRegistration`].
 fn parse_job_registration_payload<
     Balance,
     ParsableAccountId,
@@ -416,6 +789,22 @@ where
         )?;
         v.to_integer()?
     };
+    let countries_unparsed = iter
+        .next()
+        .ok_or(TezosValidationError::MissingField(FieldError::Countries))?;
+    let countries = try_sequence::<CountryCode, _>(countries_unparsed, |country| {
+        let value: Int = country.try_into()?;
+        value
+            .to_bytes()?
+            .try_into()
+            .map_err(|_| TezosValidationError::CountriesParsing)
+    })?
+    .try_into()
+    .map_err(|_| TezosValidationError::CountriesParsing)?;
+    let distinct_ip: bool = try_bool(
+        iter.next()
+            .ok_or(TezosValidationError::MissingField(FieldError::DistinctIP))?,
+    )?;
     let job_id = {
         let v: Int = try_int(
             iter.next()
@@ -506,6 +895,8 @@ where
     let extra: Extra = RegistrationExtra {
         requirements: JobRequirements {
             slots,
+            countries,
+            distinct_ip,
             reward,
             min_reputation,
             instant_match,
@@ -593,6 +984,7 @@ pub enum TezosValidationError {
     InvalidOption,
     AddressParsing,
     RequiredModulesParsing,
+    CountriesParsing,
 }
 
 #[derive(RuntimeDebug, Display, From)]
@@ -610,6 +1002,8 @@ pub enum FieldError {
     MinReputation,
     Reward,
     Slots,
+    Countries,
+    DistinctIP,
     JobId,
     Memory,
     NetworkRequests,
@@ -691,15 +1085,16 @@ pub struct TezosProof<AccountConverter, AccountId> {
     marker: PhantomData<(AccountConverter, AccountId)>,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
+impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
+    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
     for TezosProof<AccountConverter, AccountId>
 where
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
     MaxSlots: ParameterBound,
     AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV4: From<v4::RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV5: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
 {
     type Error = TezosValidationError;
 
@@ -727,11 +1122,30 @@ where
 
     fn message(
         self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>, Self::Error> {
         let (action, origin, payload) = parse_message(&self.value)?;
 
         Ok(match action {
-            RawAction::RegisterJob => {
+            RawAction::RegisterJobV4 => {
+                let payload: Vec<u8> = (&payload).into();
+                let (job_id_sequence, registration) = tezos_v4::parse_job_registration_payload::<
+                    Balance,
+                    AccountConverter,
+                    AccountId,
+                    MaxAllowedSources,
+                    MaxSlots,
+                    ExtraV4,
+                >(payload.as_slice())?;
+
+                ParsedAction::RegisterJobV4(
+                    (
+                        MultiOrigin::Tezos(bounded_address(&origin)?),
+                        job_id_sequence,
+                    ),
+                    registration,
+                )
+            }
+            RawAction::RegisterJobV5 => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, registration) = parse_job_registration_payload::<
                     Balance,
@@ -739,10 +1153,10 @@ where
                     AccountId,
                     MaxAllowedSources,
                     MaxSlots,
-                    Extra,
+                    ExtraV5,
                 >(payload.as_slice())?;
 
-                ParsedAction::RegisterJob(
+                ParsedAction::RegisterJobV5(
                     (
                         MultiOrigin::Tezos(bounded_address(&origin)?),
                         job_id_sequence,
@@ -794,7 +1208,7 @@ mod tests {
     fn test_unpack_register_job() -> Result<(), TezosValidationError> {
         let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001601d1371b91fdbd07c8855659c84652230be0eaecd5000a000000e7050707030a0707050902000000250a000000200000000000000000000000000000000000000000000000000000000000000000070707070509020000002907070a000000201111111111111111111111111111111111111111111111111111111111111111000007070306070700a80f00010707000107070001070700010707020000000200000707070700b0d403070700bfe6d987d86107070098e4030707000000bf9a9f87d86107070a00000035697066733a2f2f516d64484c6942596174626e6150645573544d4d4746574534326353414a43485937426f374144583263644465610001");
         let (action, origin, payload) = parse_message(encoded)?;
-        assert_eq!(RawAction::RegisterJob, action);
+        assert_eq!(RawAction::RegisterJobV4, action);
         let exp: TezosAddress = "KT1TezoooozzSmartPyzzSTATiCzzzwwBFA1".try_into().unwrap();
         assert_eq!(exp, origin);
 
@@ -804,13 +1218,13 @@ mod tests {
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
                 MaxAllowedSources,
-                RegistrationExtra<
+                v4::RegistrationExtra<
                     Balance,
                     <Test as frame_system::Config>::AccountId,
                     <Test as Config<TezosInstance>>::MaxSlots,
                 >,
             >,
-        ) = parse_job_registration_payload::<
+        ) = tezos_v4::parse_job_registration_payload::<
             _,
             <Test as Config<TezosInstance>>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
@@ -845,8 +1259,8 @@ mod tests {
             network_requests: 1,
             storage: 1,
             required_modules: vec![JobModule::DataEncryption].try_into().unwrap(),
-            extra: RegistrationExtra {
-                requirements: JobRequirements {
+            extra: v4::RegistrationExtra {
+                requirements: v4::JobRequirements {
                     slots: 1,
                     reward: 1000,
                     min_reputation: None,
@@ -870,7 +1284,7 @@ mod tests {
     fn test_unpack_register_job2() -> Result<(), TezosValidationError> {
         let encoded = &hex!("050707010000000c52454749535445525f4a4f4207070a0000001600008a8584be3718453e78923713a6966202b05f99c60a000000ed050707030a0707050902000000250a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f070707070509020000002907070a00000020d80a8b0d800a3320528693947f7317871b2d51e5f3c8f3d0d4e4f7e6938ed68f000007070509000007070080c0a8ca9a3a000107070001070700a40107070001070702000000000707070700b40707070080da9ce59b62070700a0cf24070700909c010080bbd3e49b6207070a00000035697066733a2f2f516d536e317252737a444b354258634e516d4e367543767a4d376858636548555569426b61777758396b534d474b0000");
         let (action, origin, payload) = parse_message(encoded)?;
-        assert_eq!(RawAction::RegisterJob, action);
+        assert_eq!(RawAction::RegisterJobV4, action);
         let exp = TezosAddress::Implicit(ImplicitAddress::TZ1(
             "tz1YGTtd1hqGYTYKtcWSXYKSgCj5hvjaTPVd".try_into().unwrap(),
         ));
@@ -882,13 +1296,13 @@ mod tests {
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
                 <Test as Config<TezosInstance>>::MaxAllowedSources,
-                RegistrationExtra<
+                v4::RegistrationExtra<
                     Balance,
                     <Test as frame_system::Config>::AccountId,
                     <Test as Config<TezosInstance>>::MaxSlots,
                 >,
             >,
-        ) = parse_job_registration_payload::<
+        ) = tezos_v4::parse_job_registration_payload::<
             _,
             <Test as Config<TezosInstance>>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
@@ -926,8 +1340,8 @@ mod tests {
             network_requests: 1,
             storage: 0,
             required_modules: vec![].try_into().unwrap(),
-            extra: RegistrationExtra {
-                requirements: JobRequirements {
+            extra: v4::RegistrationExtra {
+                requirements: v4::JobRequirements {
                     slots: 1,
                     reward: 1000000000000,
                     min_reputation: Some(0),

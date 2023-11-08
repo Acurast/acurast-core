@@ -42,13 +42,14 @@ impl<T: Config> Pallet<T> {
         }
 
         <StoredAdvertisementRestriction<T>>::insert(
-            &processor,
+            processor,
             AdvertisementRestriction {
                 max_memory: advertisement.max_memory,
                 network_request_quota: advertisement.network_request_quota,
                 storage_capacity: advertisement.storage_capacity,
                 allowed_consumers: advertisement.allowed_consumers.clone(),
                 available_modules: advertisement.available_modules.clone(),
+                source_location: Default::default(),
             },
         );
         // update separate pricing index

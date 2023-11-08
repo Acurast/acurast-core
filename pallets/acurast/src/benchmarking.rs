@@ -25,7 +25,7 @@ pub const LEAF_CERT: [u8; 672] = hex!("3082029c30820241a003020102020101300c06082
 const SCRIPT_BYTES: [u8; 53] = hex!("697066733A2F2F00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
 pub trait BenchmarkHelper<T: Config> {
-    fn registration_extra(instant_match: bool) -> T::RegistrationExtra;
+    fn registration_extra(instant_match: bool) -> T::RegistrationExtraV5;
     fn funded_account(index: u32) -> T::AccountId;
 }
 
@@ -33,7 +33,7 @@ pub fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) 
     frame_system::Pallet::<T>::assert_last_event(generic_event.into());
 }
 
-pub fn job_registration<T: Config>(extra: T::RegistrationExtra) -> JobRegistrationFor<T> {
+pub fn job_registration<T: Config>(extra: T::RegistrationExtraV5) -> JobRegistrationV5For<T> {
     return JobRegistration {
         script: script(),
         allowed_sources: None,
@@ -80,7 +80,7 @@ pub fn attestation_chain() -> AttestationChain {
 fn register_job<T: Config>(
     submit: bool,
     instant_match: bool,
-) -> (T::AccountId, JobRegistrationFor<T>) {
+) -> (T::AccountId, JobRegistrationV5For<T>) {
     let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0);
     whitelist_account!(caller);
 
@@ -90,7 +90,7 @@ fn register_job<T: Config>(
 
     if submit {
         let register_call =
-            Acurast::<T>::register(RawOrigin::Signed(caller.clone()).into(), job.clone());
+            Acurast::<T>::register_v5(RawOrigin::Signed(caller.clone()).into(), job.clone());
         assert_ok!(register_call);
     }
 
@@ -104,7 +104,7 @@ benchmarks! {
         <T as pallet_timestamp::Config>::Moment: From<u64>,
     }
 
-    register {
+    register_v5 {
         let (caller, job) = register_job::<T>(false, true);
     }: _(RawOrigin::Signed(caller.clone()), job.clone())
     verify {

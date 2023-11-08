@@ -21,7 +21,7 @@ use sp_runtime::{
 };
 use sp_std::prelude::*;
 
-use pallet_acurast_marketplace::RegistrationExtra;
+use pallet_acurast_marketplace::{v4, RegistrationExtra};
 
 use crate::chain::tezos::TezosParser;
 use crate::instances::{EthereumInstance, TezosInstance};
@@ -87,7 +87,12 @@ impl crate::Config<TezosInstance> for Test {
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
-    type RegistrationExtra =
+    type RegistrationExtraV4 = v4::RegistrationExtra<
+        Self::Balance,
+        <Self as frame_system::Config>::AccountId,
+        Self::MaxSlots,
+    >;
+    type RegistrationExtraV5 =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
     type MaxSlots = CU32<64>;
@@ -110,7 +115,12 @@ impl crate::Config<EthereumInstance> for Test {
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
-    type RegistrationExtra =
+    type RegistrationExtraV4 = v4::RegistrationExtra<
+        Self::Balance,
+        <Self as frame_system::Config>::AccountId,
+        Self::MaxSlots,
+    >;
+    type RegistrationExtraV5 =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
     type MaxSlots = CU32<64>;
@@ -152,8 +162,12 @@ pub fn events() -> Vec<RuntimeEvent> {
 
 pub type Balance = u128;
 
-impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
-    fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
+impl<AccountId, ExtraV4, ExtraV5> ActionExecutor<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>
+    for ()
+{
+    fn execute(
+        _: ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>,
+    ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
 }

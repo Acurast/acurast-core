@@ -4,7 +4,7 @@ use frame_support::weights::Weight;
 use sp_std::prelude::*;
 
 use crate::{
-    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, JobRegistrationFor,
+    AllowedSourcesUpdate, CertificateRevocationListUpdate, Config, Error, JobRegistrationV5For,
 };
 
 /// Allows to customize who can perform an update to the certificate revocation list.
@@ -37,7 +37,7 @@ impl<T: Config> KeyAttestationBarrier<T> for () {
 
 /// Weight functions needed for pallet_acurast.
 pub trait WeightInfo {
-    fn register() -> Weight;
+    fn register_v5() -> Weight;
     fn deregister() -> Weight;
     fn update_allowed_sources(x: u32) -> Weight;
     fn submit_attestation() -> Weight;
@@ -51,7 +51,7 @@ pub trait JobHooks<T: Config> {
     fn register_hook(
         who: &MultiOrigin<T::AccountId>,
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
-        registration: &JobRegistrationFor<T>,
+        registration: &JobRegistrationV5For<T>,
     ) -> DispatchResultWithPostInfo;
     fn deregister_hook(
         job_id: &JobId<<T as frame_system::Config>::AccountId>,
@@ -67,7 +67,7 @@ impl<T: Config> JobHooks<T> for () {
     fn register_hook(
         _who: &MultiOrigin<T::AccountId>,
         _job_id: &JobId<<T as frame_system::Config>::AccountId>,
-        _registration: &JobRegistrationFor<T>,
+        _registration: &JobRegistrationV5For<T>,
     ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }

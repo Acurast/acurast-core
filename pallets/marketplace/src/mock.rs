@@ -175,7 +175,8 @@ impl parachain_info::Config for Test {}
 
 impl pallet_acurast::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtraV4 = JobRequirementsV4For<Self>;
+    type RegistrationExtraV5 = JobRequirementsFor<Self>;
     type MaxAllowedSources = CU32<4>;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type MaxSlots = CU32<64>;
@@ -198,10 +199,12 @@ pub struct TestBenchmarkHelper;
 impl pallet_acurast::BenchmarkHelper<Test> for TestBenchmarkHelper {
     fn registration_extra(
         _instant_match: bool,
-    ) -> <Test as pallet_acurast::Config>::RegistrationExtra {
+    ) -> <Test as pallet_acurast::Config>::RegistrationExtraV4 {
         JobRequirements {
             slots: 1,
             reward: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             min_reputation: None,
             instant_match: None,
         }
@@ -238,7 +241,8 @@ impl Config for Test {
     type MaxAllowedConsumers = pallet_acurast::CU32<4>;
     type MaxProposedMatches = frame_support::traits::ConstU32<10>;
     type MaxFinalizeJobs = frame_support::traits::ConstU32<10>;
-    type RegistrationExtra = JobRequirementsFor<Self>;
+    type RegistrationExtraV4 = JobRequirementsV4For<Self>;
+    type RegistrationExtraV5 = JobRequirementsFor<Self>;
     type PalletId = AcurastPalletId;
     type HyperdrivePalletId = HyperdrivePalletId;
     type ReportTolerance = ReportTolerance;
@@ -254,7 +258,7 @@ impl Config for Test {
 
 #[cfg(feature = "runtime-benchmarks")]
 impl crate::benchmarking::BenchmarkHelper<Test> for TestBenchmarkHelper {
-    fn registration_extra(r: JobRequirementsFor<Test>) -> <Test as Config>::RegistrationExtra {
+    fn registration_extra(r: JobRequirementsFor<Test>) -> <Test as Config>::RegistrationExtraV5 {
         r
     }
 

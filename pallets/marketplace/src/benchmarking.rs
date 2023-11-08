@@ -10,8 +10,8 @@ use sp_std::prelude::*;
 
 use crate::Config;
 use pallet_acurast::{
-    JobId, JobIdSequence, JobModules, JobRegistrationFor, MultiOrigin, Pallet as Acurast, Schedule,
-    Script,
+    JobId, JobIdSequence, JobModules, JobRegistrationV5For, MultiOrigin, Pallet as Acurast,
+    Schedule, Script,
 };
 
 pub use crate::stub::*;
@@ -21,7 +21,7 @@ use super::*;
 
 pub trait BenchmarkHelper<T: Config> {
     /// Extends the job requirements, defined by benchmarking code in this pallet, with the containing struct RegistrationExtra.
-    fn registration_extra(r: JobRequirementsFor<T>) -> <T as Config>::RegistrationExtra;
+    fn registration_extra(r: JobRequirementsFor<T>) -> <T as Config>::RegistrationExtraV5;
     fn funded_account(index: u32, amount: T::Balance) -> T::AccountId;
 }
 
@@ -54,17 +54,20 @@ pub fn job_registration_with_reward<T: Config>(
     duration: u64,
     reward_value: u128,
     instant_match_processor: Option<PlannedExecution<T::AccountId>>,
-) -> JobRegistrationFor<T> {
+) -> JobRegistrationV5For<T> {
     let reward: <T as Config>::Balance = reward_value.into();
     let r = JobRequirements {
         slots,
+        countries: bounded_vec![],
+        distinct_ip: false,
         reward,
         min_reputation: Some(0),
         instant_match: instant_match_processor.map(|m| vec![m].try_into().unwrap()),
     };
-    let r: <T as Config>::RegistrationExtra = <T as Config>::BenchmarkHelper::registration_extra(r);
-    let r: <T as pallet_acurast::Config>::RegistrationExtra = r.into();
-    JobRegistrationFor::<T> {
+    let r: <T as Config>::RegistrationExtraV5 =
+        <T as Config>::BenchmarkHelper::registration_extra(r);
+    let r: <T as pallet_acurast::Config>::RegistrationExtraV5 = r.into();
+    JobRegistrationV5For::<T> {
         script,
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -114,7 +117,7 @@ where
 fn register_helper<T: Config>(
     account_index: u32,
     slots: u8,
-) -> (T::AccountId, JobRegistrationFor<T>)
+) -> (T::AccountId, JobRegistrationV5For<T>)
 where
     T: pallet_balances::Config,
 {
@@ -130,15 +133,15 @@ where
 fn register_submit_helper<T: Config>(
     account_index: u32,
     slots: u8,
-) -> (T::AccountId, JobRegistrationFor<T>, JobIdSequence)
+) -> (T::AccountId, JobRegistrationV5For<T>, JobIdSequence)
 where
     T: pallet_balances::Config,
 {
-    let (caller, job): (T::AccountId, JobRegistrationFor<T>) =
+    let (caller, job): (T::AccountId, JobRegistrationV5For<T>) =
         register_helper::<T>(account_index, slots);
 
     let register_call =
-        Acurast::<T>::register(RawOrigin::Signed(caller.clone().into()).into(), job.clone());
+        Acurast::<T>::register_v5(RawOrigin::Signed(caller.clone().into()).into(), job.clone());
     assert_ok!(register_call);
     let job_id = Acurast::<T>::job_id_sequence();
 
@@ -148,7 +151,7 @@ where
 fn acknowledge_match_helper<T: Config>(
     consumer: Option<T::AccountId>,
     processor: Option<T::AccountId>,
-) -> Result<(T::AccountId, JobRegistrationFor<T>, JobId<T::AccountId>), DispatchError>
+) -> Result<(T::AccountId, JobRegistrationV5For<T>, JobId<T::AccountId>), DispatchError>
 where
     T: pallet_balances::Config,
 {
@@ -173,7 +176,7 @@ where
             start_delay: 0,
         }),
     );
-    assert_ok!(Acurast::<T>::register(
+    assert_ok!(Acurast::<T>::register_v5(
         RawOrigin::Signed(consumer.clone()).into(),
         job.clone()
     ));
@@ -189,7 +192,7 @@ where
 fn acknowledge_match_submit_helper<T: Config>(
     consumer: Option<T::AccountId>,
     processor: Option<T::AccountId>,
-) -> Result<(T::AccountId, JobRegistrationFor<T>, JobId<T::AccountId>), DispatchError>
+) -> Result<(T::AccountId, JobRegistrationV5For<T>, JobId<T::AccountId>), DispatchError>
 where
     T: pallet_balances::Config,
 {
@@ -247,7 +250,7 @@ benchmarks! {
         let x in 1 .. T::MaxProposedMatches::get();
         let caller: T::AccountId = <T as Config>::BenchmarkHelper::funded_account(0, 1_000_000_000_000u64.into());
         whitelist_account!(caller);
-        let mut registered_jobs: Vec<(T::AccountId, JobRegistrationFor<T>, JobIdSequence)> = vec![];
+        let mut registered_jobs: Vec<(T::AccountId, JobRegistrationV5For<T>, JobIdSequence)> = vec![];
         let max_slots = <T as pallet_acurast::Config>::MaxSlots::get();
         for i in 0..x {
             (&mut registered_jobs).push(register_submit_helper::<T>(i, max_slots as u8));
