@@ -145,6 +145,7 @@ pub mod acurast_runtime {
         pub const IsRelay: bool = false;
         pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
         pub const ReportTolerance: u64 = 12000;
+        pub const HeartbeatTolerance: u64 = 1200000;
     }
     parameter_types! {
         pub const BlockHashCount: u64 = 250;
@@ -335,6 +336,7 @@ pub mod acurast_runtime {
         type RegistrationExtra = JobRequirements<Balance, AccountId, Self::MaxSlots>;
         type PalletId = AcurastPalletId;
         type ReportTolerance = ReportTolerance;
+        type HeartbeatTolerance = HeartbeatTolerance;
         type Balance = Balance;
         type ManagerProvider = ManagerOf;
         type RewardManager = AssetRewardManager<FeeManagerImpl, Balances, AcurastMarketplace>;
