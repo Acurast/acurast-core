@@ -31,6 +31,9 @@ pub type PartialJobRegistrationForMarketplace<T> = PartialJobRegistration<
 pub type MatchFor<T> =
     Match<<T as frame_system::Config>::AccountId, <T as pallet_acurast::Config>::MaxSlots>;
 
+pub type ExecutionMatchFor<T> =
+    ExecutionMatch<<T as frame_system::Config>::AccountId, <T as pallet_acurast::Config>::MaxSlots>;
+
 /// Struct defining the extra fields for a `JobRegistration`.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
 pub struct RegistrationExtra<Reward, AccountId, MaxSlots: ParameterBound> {
