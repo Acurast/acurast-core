@@ -11,7 +11,7 @@ use pallet_acurast::{
     ParameterBound, Schedule, Script,
 };
 use pallet_acurast_marketplace::{
-    v4, JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+    v4, AssignmentStrategy, JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
 use rlp::Rlp;
 use scale_info::TypeInfo;
@@ -353,13 +353,13 @@ where
 
                 let extra: ExtraV5 = RegistrationExtra {
                     requirements: JobRequirements {
+                        assignment_strategy: AssignmentStrategy::Single(Some(executions)),
                         slots: job_registration.requirements.slots.into(),
                         countries: BoundedVec::try_from(job_registration.requirements.countries)
                             .map_err(|_| EthereumValidationError::IllFormattedCountries)?,
                         distinct_ip: job_registration.requirements.distinc_ip,
                         reward: Balance::from(job_registration.requirements.reward),
                         min_reputation: Some(job_registration.requirements.minReputation),
-                        instant_match: Some(executions),
                     },
                 }
                 .into();

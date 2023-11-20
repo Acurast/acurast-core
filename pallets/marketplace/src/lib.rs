@@ -69,6 +69,15 @@ pub mod pallet {
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedConsumers: Get<u32> + ParameterBound;
+        /// The maximum competing processors per slot.
+        #[pallet::constant]
+        type MaxCompeting: Get<u32>;
+        /// Maximum time delta in ms that a job can be matched before the job's start. Relevant for [`AssignmentStrategy::Single`].
+        #[pallet::constant]
+        type MatchingSingleDueDelta: Get<u64>;
+        /// Maximum time delta in ms that a each job execution can be matched before the execution's start. Relevant for [`AssignmentStrategy::Competitive`].
+        #[pallet::constant]
+        type MatchingCompetitveDueDelta: Get<u64>;
         /// The maximum matches that can be proposed with one extrinsic call.
         #[pallet::constant]
         type MaxProposedMatches: Get<u32>;
@@ -166,7 +175,7 @@ pub mod pallet {
     #[pallet::getter(fn average_reward)]
     pub type StoredAverageRewardV3<T> = StorageValue<_, u128>;
 
-    /// Job matches as a map [`AccountId`] `(source)` -> [`JobId`] -> [`AssignmentFor<T>`]
+    /// Job matches as a map `AccountId (source)` -> [`JobId`] -> [`AssignmentFor<T>`]
     #[pallet::storage]
     #[pallet::getter(fn stored_matches)]
     pub type StoredMatches<T: Config> = StorageDoubleMap<
@@ -273,6 +282,8 @@ pub mod pallet {
         CapacityNotFound,
         /// Match is invalid due to the start time already passed.
         OverdueMatch,
+        /// Match is invalid due to the start time being too much in future.
+        UnderdueMatch,
         /// Match is invalid due to incorrect source count.
         IncorrectSourceCountInMatch,
         /// Match is invalid due to a duplicate source for distinct slots.
@@ -328,6 +339,7 @@ pub mod pallet {
         fn is_matching_error(self: &Self) -> bool {
             match self {
                 Error::OverdueMatch => true,
+                Error::UnderdueMatch => true,
                 Error::IncorrectSourceCountInMatch => true,
                 Error::DuplicateSourceInMatch => true,
                 Error::UnverifiedSourceInMatch => true,
@@ -441,6 +453,23 @@ pub mod pallet {
         #[pallet::call_index(2)]
         #[pallet::weight(< T as Config >::WeightInfo::propose_matching(matches.len() as u32))]
         pub fn propose_matching(
+            origin: OriginFor<T>,
+            matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            let remaining_rewards = Self::process_matching(&matches)?;
+
+            // pay part of accumulated remaining reward (unspent to consumer) to matcher
+            T::RewardManager::pay_matcher_reward(remaining_rewards, &who)?;
+
+            Ok(().into())
+        }
+
+        /// Proposes processors to match with a job's execution.
+        #[pallet::call_index(8)]
+        #[pallet::weight(< T as Config >::WeightInfo::propose_matching(matches.len() as u32))]
+        pub fn propose_execution_matching(
             origin: OriginFor<T>,
             matches: BoundedVec<MatchFor<T>, <T as Config>::MaxProposedMatches>,
         ) -> DispatchResultWithPostInfo {
@@ -774,15 +803,14 @@ pub mod pallet {
                 <StoredJobStatus<T>>::insert(&job_id.0, &job_id.1, JobStatus::default());
             }
 
-            match requirements.instant_match {
-                Some(sources) => {
+            if let AssignmentStrategy::Single(instant_match) = requirements.assignment_strategy {
+                if let Some(sources) = instant_match {
                     // ignore remaining rewards; do not pay out the matcher which is the same as the one registering
                     let _ = Self::process_matching(once(&Match {
                         job_id: job_id.clone(),
                         sources,
                     }))?;
                 }
-                None => {}
             }
 
             // - lock only after all other steps succeeded without errors because locking reward is not revertable
@@ -959,8 +987,16 @@ pub mod pallet {
 
                 let now = Self::now()?;
                 ensure!(
+                    // no correction of now is needed since update delay of `now` can make this check being false in real time
+                    // but only if the propose_matching happens in same block as when time was still in range, which is acceptable
+                    // assuming the cases where the processor can no longer acknowledge in time are rare.
                     now < registration.schedule.start_time,
                     Error::<T>::OverdueMatch
+                );
+                ensure!(
+                    // no correction of now is needed since update delay of `now` only makes the delta more generous
+                    now >= registration.schedule.start_time.saturating_sub(<T as Config>::MatchingSingleDueDelta::get()),
+                    Error::<T>::UnderdueMatch
                 );
                 let l: u8 = m.sources.len().try_into().unwrap_or(0);
                 ensure!(
@@ -991,8 +1027,8 @@ pub mod pallet {
                         .ok_or(Error::<T>::CalculationOverflow)?;
                     ensure!(
                         T::ProcessorLastSeenProvider::last_seen(&planned_execution.source)
-                            .map(|last_seen| last_seen >= now_max
-                        .saturating_sub(T::HeartbeatTolerance::get()) as u128)
+                            .map(|last_seen| last_seen
+                                >= now_max.saturating_sub(T::HeartbeatTolerance::get()) as u128)
                             .unwrap_or(false),
                         Error::<T>::SourceInMatchDidNotHeartbeat
                     );
@@ -1101,6 +1137,7 @@ pub mod pallet {
                                 None => {
                                     *s = Some(Assignment {
                                         slot: slot as u8,
+                                        execution: ExecutionSpecifier::All,
                                         start_delay: planned_execution.start_delay,
                                         fee_per_execution,
                                         acknowledged: false,

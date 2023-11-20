@@ -32,7 +32,8 @@ use pallet_acurast::{
     Schedule, CU32,
 };
 use pallet_acurast_marketplace::{
-    v4, CountryCode, JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+    v4, AssignmentStrategy, CountryCode, JobRequirements, PlannedExecution, PlannedExecutions,
+    RegistrationExtra,
 };
 
 use crate::types::{
@@ -894,12 +895,12 @@ where
 
     let extra: Extra = RegistrationExtra {
         requirements: JobRequirements {
+            assignment_strategy: AssignmentStrategy::Single(instant_match),
             slots,
             countries,
             distinct_ip,
             reward,
             min_reputation,
-            instant_match,
         },
     }
     .into();

@@ -30,6 +30,23 @@ pub mod v4 {
         /// The modules available to the job on processor.
         pub available_modules: JobModules,
     }
+
+    /// A proposed [Match] becomes an [Assignment] once it's acknowledged.
+    #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+    pub struct Assignment<Reward> {
+        /// The 0-based slot index assigned to the source.
+        pub slot: u8,
+        /// The start delay for the first execution and all the following executions.
+        pub start_delay: u64,
+        /// The fee owed to source for each execution.
+        pub fee_per_execution: Reward,
+        /// If this assignment was acknowledged.
+        pub acknowledged: bool,
+        /// Keeps track of the SLA.
+        pub sla: SLA,
+        /// Processor Pub Keys
+        pub pub_keys: PubKeys,
+    }
 }
 
 pub fn migrate<T: Config>() -> Weight {
@@ -79,6 +96,19 @@ fn migrate_to_v5<T: Config>() -> Weight {
         Some(job_registration_into(job).into())
     });
     count += StoredJobRegistration::<T>::iter_values().count() as u64;
+
+    StoredMatches::<T>::translate_values::<v4::Assignment<<T as Config>::Balance>, _>(|m| {
+        Some(Assignment {
+            slot: m.slot,
+            execution: ExecutionSpecifier::All,
+            start_delay: m.start_delay,
+            fee_per_execution: m.fee_per_execution,
+            acknowledged: m.acknowledged,
+            sla: m.sla,
+            pub_keys: m.pub_keys,
+        })
+    });
+    count += StoredMatches::<T>::iter_values().count() as u64;
 
     StoredAdvertisementRestriction::<T>::translate_values::<
         v4::AdvertisementRestriction<T::AccountId, T::MaxAllowedConsumers>,
