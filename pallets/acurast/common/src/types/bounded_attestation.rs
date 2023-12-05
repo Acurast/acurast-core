@@ -247,7 +247,7 @@ impl TryFrom<asn::AuthorizationListV1<'_>> for BoundedAuthorizationList {
 
     fn try_from(data: asn::AuthorizationListV1) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
-            purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+            purpose: try_bound_set!(data.purpose.map(|v| v.to_vec().into_iter()), Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
             key_size: try_bound!(data.key_size, u16)?,
             digest: try_bound_set!(data.digest, Digest, u8)?,
@@ -303,7 +303,7 @@ impl TryFrom<asn::AuthorizationListV2<'_>> for BoundedAuthorizationList {
 
     fn try_from(data: asn::AuthorizationListV2) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
-            purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+            purpose: try_bound_set!(data.purpose.map(|v| v.to_vec().into_iter()), Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
             key_size: try_bound!(data.key_size, u16)?,
             digest: try_bound_set!(data.digest, Digest, u8)?,
@@ -399,7 +399,7 @@ impl TryFrom<asn::AuthorizationListV3<'_>> for BoundedAuthorizationList {
 
     fn try_from(data: asn::AuthorizationListV3) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
-            purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+            purpose: try_bound_set!(data.purpose.map(|v| v.to_vec().into_iter()), Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
             key_size: try_bound!(data.key_size, u16)?,
             digest: try_bound_set!(data.digest, Digest, u8)?,
@@ -495,7 +495,7 @@ impl TryFrom<asn::AuthorizationListV4<'_>> for BoundedAuthorizationList {
 
     fn try_from(data: asn::AuthorizationListV4) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
-            purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+            purpose: try_bound_set!(data.purpose.map(|v| v.to_vec().into_iter()), Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
             key_size: try_bound!(data.key_size, u16)?,
             digest: try_bound_set!(data.digest, Digest, u8)?,
@@ -591,7 +591,7 @@ impl TryFrom<asn::AuthorizationListKeyMint<'_>> for BoundedAuthorizationList {
 
     fn try_from(data: asn::AuthorizationListKeyMint) -> Result<Self, Self::Error> {
         Ok(BoundedAuthorizationList {
-            purpose: try_bound_set!(data.purpose, Purpose, u8)?,
+            purpose: try_bound_set!(data.purpose.map(|v| v.to_vec().into_iter()), Purpose, u8)?,
             algorithm: try_bound!(data.algorithm, u8)?,
             key_size: try_bound!(data.key_size, u16)?,
             digest: try_bound_set!(data.digest, Digest, u8)?,
