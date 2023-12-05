@@ -17,7 +17,7 @@ pub enum ValidationError {
     /// Generic decode error
     DecodeError,
     /// Generic parse error
-    ParseError,
+    ParseError(String),
     /// The root certificate is not trusted
     UntrustedRoot,
     /// Missing extension field in certificate

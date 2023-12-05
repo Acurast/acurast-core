@@ -1,9 +1,9 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std"), not(test)), no_std)]
 
-use core::convert::TryInto;
+use core::{convert::TryInto, hash::{Hasher, Hash}};
 
 use asn1::{
-    Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv,
+    Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv, Tag, ParseResult, parse, Asn1Readable, SimpleAsn1Readable, Asn1Writable, SimpleAsn1Writable, WriteBuf, WriteResult,
 };
 use sp_std::prelude::*;
 
@@ -200,7 +200,7 @@ pub type SecurityLevel = Enumerated;
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV1<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -254,7 +254,7 @@ pub struct AuthorizationListV1<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV2<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -326,7 +326,7 @@ pub struct AuthorizationListV2<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV3<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -403,7 +403,7 @@ pub struct RootOfTrustV1V2<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV4<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -483,7 +483,7 @@ pub struct AuthorizationListV4<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListKeyMint<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -597,3 +597,71 @@ pub struct AttestationPackageInfo<'a> {
 /// Unverified (2),
 /// Failed (3)
 pub type VerifiedBootState = Enumerated;
+
+
+/// Represents an ASN.1 `SET OF`. This is an `Iterator` over values that
+/// are decoded.
+pub struct UnorderedSetOf<T> {
+    elements: Vec<T>,
+}
+
+impl<T> UnorderedSetOf<T> {
+    fn new(elements: Vec<T>) -> Self {
+        Self {
+            elements
+        }
+    }
+
+    pub fn elements(&self) -> &[T] {
+        &self.elements
+    }
+
+    pub fn to_vec(self) -> Vec<T> {
+        self.elements
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Clone> Clone for UnorderedSetOf<T> {
+    fn clone(&self) -> UnorderedSetOf<T> {
+        UnorderedSetOf {
+            elements: self.elements.clone()
+        }
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + PartialEq> PartialEq for UnorderedSetOf<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.elements().eq(other.elements())
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Hash + Clone> Hash for UnorderedSetOf<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for val in self.elements() {
+            val.hash(state);
+        }
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + 'a> SimpleAsn1Readable<'a> for UnorderedSetOf<T> {
+    const TAG: Tag = <SetOf::<T> as SimpleAsn1Readable<'a>>::TAG;
+
+    #[inline]
+    fn parse_data(data: &'a [u8]) -> ParseResult<Self> {
+        parse(data, |parser| {
+            let mut elements = Vec::<T>::new();
+            while !parser.is_empty() {
+                let el = parser.read_element::<T>()?;
+                elements.push(el)
+            }
+            Ok(Self::new(elements))
+        })
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Asn1Writable + Clone> SimpleAsn1Writable for UnorderedSetOf<T> {
+    const TAG: Tag = <SetOf::<T> as SimpleAsn1Writable>::TAG;
+    fn write_data(&self, _dest: &mut WriteBuf) -> WriteResult {
+        unimplemented!();
+    }
+}
