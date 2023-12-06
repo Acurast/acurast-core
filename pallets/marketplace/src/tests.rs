@@ -4,7 +4,7 @@ use frame_support::{assert_err, assert_ok, traits::Hooks};
 use sp_runtime::{bounded_vec, MultiAddress, Permill};
 
 use pallet_acurast::{
-    utils::validate_and_extract_attestation, JobModules, JobRegistrationFor, Schedule,
+    utils::validate_and_extract_attestation, JobModules, JobRegistrationV5For, Schedule,
 };
 use pallet_acurast::{Attestation, MultiOrigin};
 use reputation::{BetaReputation, ReputationEngine};
@@ -12,7 +12,7 @@ use reputation::{BetaReputation, ReputationEngine};
 use crate::payments::JobBudget;
 use crate::{
     mock::*, AdvertisementRestriction, Assignment, Error, ExecutionResult, JobStatus, Match,
-    PlannedExecutions, SLA,
+    PlannedExecutions, SourceLocation, SLA,
 };
 use crate::{stub::*, PubKeys};
 use crate::{JobRequirements, PlannedExecution};
@@ -22,7 +22,7 @@ use crate::{JobRequirements, PlannedExecution};
 fn test_valid_deregister() {
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -39,6 +39,8 @@ fn test_valid_deregister() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
@@ -59,6 +61,12 @@ fn test_valid_deregister() {
                 storage_capacity: 100_000,
                 allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
+                source_location: SourceLocation {
+                    country_code: None,
+                    city: None,
+                    ipv4: None,
+                    ipv6: None,
+                }
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
@@ -69,7 +77,7 @@ fn test_valid_deregister() {
 
         let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
@@ -134,7 +142,7 @@ fn test_deregister_on_matched_job() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -151,6 +159,8 @@ fn test_deregister_on_matched_job() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 2,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: Some(bounded_vec![
@@ -187,6 +197,12 @@ fn test_deregister_on_matched_job() {
                 storage_capacity: 100_000,
                 allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
+                source_location: SourceLocation {
+                    country_code: None,
+                    city: None,
+                    ipv4: None,
+                    ipv6: None,
+                }
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
@@ -197,7 +213,7 @@ fn test_deregister_on_matched_job() {
 
         let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
@@ -281,7 +297,7 @@ fn test_deregister_on_assigned_job() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -298,6 +314,8 @@ fn test_deregister_on_assigned_job() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 2,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: Some(bounded_vec![
@@ -348,6 +366,12 @@ fn test_deregister_on_assigned_job() {
                 storage_capacity: 100_000,
                 allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
+                source_location: SourceLocation {
+                    country_code: None,
+                    city: None,
+                    ipv4: None,
+                    ipv6: None,
+                }
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
@@ -358,7 +382,7 @@ fn test_deregister_on_assigned_job() {
 
         let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
@@ -484,7 +508,7 @@ fn test_match() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -501,12 +525,14 @@ fn test_match() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
     };
-    let registration2 = JobRegistrationFor::<Test> {
+    let registration2 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -523,6 +549,8 @@ fn test_match() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
@@ -554,6 +582,12 @@ fn test_match() {
                 storage_capacity: 100_000,
                 allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
+                source_location: SourceLocation {
+                    country_code: None,
+                    city: None,
+                    ipv4: None,
+                    ipv6: None,
+                }
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
@@ -565,12 +599,12 @@ fn test_match() {
         let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
         let job_id2 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 2);
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
         assert_eq!(12_000_000, AcurastMarketplace::reserved(&job_id1));
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration2.clone(),
         ));
@@ -860,7 +894,7 @@ fn test_multi_assignments() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration = JobRegistrationFor::<Test> {
+    let registration = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -877,6 +911,8 @@ fn test_multi_assignments() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 4,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
@@ -924,6 +960,12 @@ fn test_multi_assignments() {
                         storage_capacity: 100_000,
                         allowed_consumers: ad.allowed_consumers.clone(),
                         available_modules: JobModules::default(),
+                        source_location: SourceLocation {
+                            country_code: None,
+                            city: None,
+                            ipv4: None,
+                            ipv6: None,
+                        }
                     }),
                     AcurastMarketplace::stored_advertisement(processor)
                 );
@@ -938,7 +980,7 @@ fn test_multi_assignments() {
 
         let job_id1 = (MultiOrigin::Acurast(alice_account_id()), initial_job_id + 1);
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration.clone(),
         ));
@@ -1089,7 +1131,7 @@ fn test_no_match_schedule_overlap() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -1106,13 +1148,15 @@ fn test_no_match_schedule_overlap() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
         },
     };
 
-    let registration2 = JobRegistrationFor::<Test> {
+    let registration2 = JobRegistrationV5For::<Test> {
         script: script_random_value(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -1129,6 +1173,8 @@ fn test_no_match_schedule_overlap() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
@@ -1148,7 +1194,7 @@ fn test_no_match_schedule_overlap() {
         ));
 
         // register first job
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
@@ -1158,7 +1204,7 @@ fn test_no_match_schedule_overlap() {
         );
 
         // register second job
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration2.clone(),
         ));
@@ -1244,7 +1290,7 @@ fn test_no_match_insufficient_reputation() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration1 = JobRegistrationFor::<Test> {
+    let registration1 = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -1261,6 +1307,8 @@ fn test_no_match_insufficient_reputation() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: Some(1_000_000),
             instant_match: None,
@@ -1279,7 +1327,7 @@ fn test_no_match_insufficient_reputation() {
         ));
 
         // register job
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration1.clone(),
         ));
@@ -1332,7 +1380,7 @@ fn test_more_reports_than_expected() {
 
     // 1000 is the smallest amount accepted by T::AssetTransactor::lock_asset for the asset used
     let ad = advertisement(1000, 1, 100_000, 50_000, 8);
-    let registration = JobRegistrationFor::<Test> {
+    let registration = JobRegistrationV5For::<Test> {
         script: script(),
         allowed_sources: None,
         allow_only_verified_sources: false,
@@ -1349,6 +1397,8 @@ fn test_more_reports_than_expected() {
         required_modules: JobModules::default(),
         extra: JobRequirements {
             slots: 1,
+            countries: bounded_vec![],
+            distinct_ip: false,
             reward: 3_000_000 * 2,
             min_reputation: None,
             instant_match: None,
@@ -1372,11 +1422,17 @@ fn test_more_reports_than_expected() {
                 storage_capacity: 100_000,
                 allowed_consumers: ad.allowed_consumers.clone(),
                 available_modules: JobModules::default(),
+                source_location: SourceLocation {
+                    country_code: None,
+                    city: None,
+                    ipv4: None,
+                    ipv6: None,
+                }
             }),
             AcurastMarketplace::stored_advertisement(processor_account_id())
         );
 
-        assert_ok!(Acurast::register(
+        assert_ok!(Acurast::register_v5(
             RuntimeOrigin::signed(alice_account_id()).into(),
             registration.clone(),
         ));

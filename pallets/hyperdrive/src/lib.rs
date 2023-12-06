@@ -46,7 +46,7 @@ pub mod pallet {
     use sp_std::prelude::*;
     use sp_std::vec;
 
-    use pallet_acurast_marketplace::types::RegistrationExtra;
+    use pallet_acurast_marketplace::types::{v4, RegistrationExtra};
 
     use super::*;
 
@@ -113,9 +113,13 @@ pub mod pallet {
                 Self::AccountId,
                 Self::MaxAllowedSources,
                 Self::MaxSlots,
-                Self::RegistrationExtra,
+                Self::RegistrationExtraV4,
+                Self::RegistrationExtraV5,
             >;
-        type RegistrationExtra: From<
+        type RegistrationExtraV4: From<
+            v4::RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
+        >;
+        type RegistrationExtraV5: From<
             RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
         >;
         /// The max length of the allowed sources list for a registration.
@@ -140,7 +144,8 @@ pub mod pallet {
         type ActionExecutor: ActionExecutor<
             Self::AccountId,
             Self::MaxAllowedSources,
-            Self::RegistrationExtra,
+            Self::RegistrationExtraV4,
+            Self::RegistrationExtraV5,
         >;
 
         type WeightInfo: WeightInfo;

@@ -96,6 +96,25 @@ pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     pub extra: Extra,
 }
 
+pub fn job_registration_into<AccountId, MaxAllowedSources: Get<u32>, ExtraA, ExtraB>(
+    job: JobRegistration<AccountId, MaxAllowedSources, ExtraA>,
+) -> JobRegistration<AccountId, MaxAllowedSources, ExtraB>
+where
+    ExtraA: Into<ExtraB>,
+{
+    JobRegistration {
+        script: job.script,
+        allowed_sources: job.allowed_sources,
+        allow_only_verified_sources: job.allow_only_verified_sources,
+        schedule: job.schedule,
+        memory: job.memory,
+        network_requests: job.network_requests,
+        storage: job.storage,
+        required_modules: job.required_modules,
+        extra: job.extra.into(),
+    }
+}
+
 pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
 pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
 

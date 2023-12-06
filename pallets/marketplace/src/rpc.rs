@@ -26,6 +26,7 @@ pub trait MarketplaceApi<
     Reward: MaybeSerializeDeserialize,
     AccountId: MaybeSerializeDeserialize,
     MaxAllowedSources: Get<u32>,
+    MaxSlots: Get<u32>,
 >
 {
     /// Filters the given `sources` by those recently seen and matching partially specified `registration`
@@ -33,7 +34,7 @@ pub trait MarketplaceApi<
     #[method(name = "filterMatchingSources")]
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources>,
+        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources, MaxSlots>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,
@@ -57,20 +58,21 @@ impl<C, B> Marketplace<C, B> {
 }
 
 #[async_trait]
-impl<Client, Block, Reward, AccountId, MaxAllowedSources>
-    MarketplaceApiServer<HashFor<Block>, Reward, AccountId, MaxAllowedSources>
+impl<Client, Block, Reward, AccountId, MaxAllowedSources, MaxSlots>
+    MarketplaceApiServer<HashFor<Block>, Reward, AccountId, MaxAllowedSources, MaxSlots>
     for Marketplace<Client, (Block, Reward, AccountId)>
 where
     Block: BlockT,
     Client: Send + Sync + 'static + ProvideRuntimeApi<Block> + HeaderBackend<Block>,
-    Client::Api: MarketplaceRuntimeApi<Block, Reward, AccountId, MaxAllowedSources>,
+    Client::Api: MarketplaceRuntimeApi<Block, Reward, AccountId, MaxAllowedSources, MaxSlots>,
     Reward: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     AccountId: MaybeSerializeDeserialize + Codec + Send + Sync + 'static,
     MaxAllowedSources: Get<u32>,
+    MaxSlots: Get<u32>,
 {
     fn filter_matching_sources(
         &self,
-        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources>,
+        registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources, MaxSlots>,
         sources: Vec<AccountId>,
         consumer: Option<MultiOrigin<AccountId>>,
         latest_seen_after: Option<u128>,

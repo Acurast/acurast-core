@@ -56,7 +56,7 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 	/// Proof: AcurastMarketplace AssignedProcessors (max_values: None, max_size: Some(118), added: 2593, mode: MaxEncodedLen)
 	/// Storage: Acurast StoredJobRegistration (r:0 w:1)
 	/// Proof: Acurast StoredJobRegistration (max_values: None, max_size: Some(34795), added: 37270, mode: MaxEncodedLen)
-	fn register() -> Weight {
+	fn register_v5() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `710`
 		//  Estimated: `35808`

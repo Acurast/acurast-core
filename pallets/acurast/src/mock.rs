@@ -160,7 +160,8 @@ pub type MaxAllowedSources = CU32<4>;
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type RegistrationExtra = ();
+    type RegistrationExtraV4 = ();
+    type RegistrationExtraV5 = ();
     type MaxAllowedSources = MaxAllowedSources;
     type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
     type MaxSlots = CU32<64>;
@@ -180,10 +181,10 @@ impl crate::Config for Test {
 #[cfg(feature = "runtime-benchmarks")]
 impl<T: crate::Config> BenchmarkHelper<T> for ()
 where
-    T::RegistrationExtra: Default,
+    T::RegistrationExtraV4: Default,
     T::AccountId: Into<AccountId32>,
 {
-    fn registration_extra(_instant_match: bool) -> T::RegistrationExtra {
+    fn registration_extra(_instant_match: bool) -> T::RegistrationExtraV4 {
         Default::default()
     }
 

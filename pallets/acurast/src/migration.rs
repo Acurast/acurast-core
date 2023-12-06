@@ -50,7 +50,7 @@ pub fn migrate<T: Config>() -> Weight {
 
 fn migrate_to_v2<T: Config>() -> Weight {
     StoredJobRegistration::<T>::translate::<
-        v1::JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
+        v1::JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtraV4>,
         _,
     >(|_k1, _k2, job| {
         Some(JobRegistration {
@@ -62,7 +62,7 @@ fn migrate_to_v2<T: Config>() -> Weight {
             network_requests: job.network_requests,
             storage: job.storage,
             required_modules: JobModules::default(),
-            extra: job.extra,
+            extra: job.extra.into(),
         })
     });
     let count = StoredJobRegistration::<T>::iter().count() as u64;

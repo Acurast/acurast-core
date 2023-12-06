@@ -10,8 +10,6 @@ use strum_macros::{EnumString, IntoStaticStr};
 
 use pallet_acurast::{JobId, JobRegistration};
 
-use crate::Config;
-
 pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
 pub type StateTransmitterUpdates<T> =
     BoundedVec<StateTransmitterUpdateFor<T>, ConstU32<STATE_TRANSMITTER_UPDATES_MAX_LENGTH>>;
@@ -122,7 +120,9 @@ pub type StateValue = BoundedVec<u8, ConstU32<VALUE_MAX_LENGTH>>;
 )]
 pub enum RawAction {
     #[strum(serialize = "REGISTER_JOB")]
-    RegisterJob,
+    RegisterJobV4,
+    #[strum(serialize = "REGISTER_JOB_V5")]
+    RegisterJobV5,
     #[strum(serialize = "DEREGISTER_JOB")]
     DeregisterJob,
     #[strum(serialize = "FINALIZE_JOB")]
@@ -137,7 +137,7 @@ impl TryFrom<u16> for RawAction {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(RawAction::RegisterJob),
+            0 => Ok(RawAction::RegisterJobV4),
             1 => Ok(RawAction::DeregisterJob),
             2 => Ok(RawAction::FinalizeJob),
             255 => Ok(RawAction::Noop),
@@ -146,12 +146,13 @@ impl TryFrom<u16> for RawAction {
     }
 }
 
-impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
-    From<&ParsedAction<AccountId, MaxAllowedSources, Extra>> for RawAction
+impl<AccountId, MaxAllowedSources: Get<u32>, ExtraV4, ExtraV5>
+    From<&ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>> for RawAction
 {
-    fn from(action: &ParsedAction<AccountId, MaxAllowedSources, Extra>) -> Self {
+    fn from(action: &ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>) -> Self {
         match action {
-            ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
+            ParsedAction::RegisterJobV4(_, _) => RawAction::RegisterJobV4,
+            ParsedAction::RegisterJobV5(_, _) => RawAction::RegisterJobV5,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
             ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
             ParsedAction::Noop => RawAction::Noop,
@@ -160,10 +161,14 @@ impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
-    RegisterJob(
+pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, ExtraV4, ExtraV5> {
+    RegisterJobV4(
         JobId<AccountId>,
-        JobRegistration<AccountId, MaxAllowedSources, Extra>,
+        JobRegistration<AccountId, MaxAllowedSources, ExtraV4>,
+    ),
+    RegisterJobV5(
+        JobId<AccountId>,
+        JobRegistration<AccountId, MaxAllowedSources, ExtraV5>,
     ),
     DeregisterJob(JobId<AccountId>),
     FinalizeJob(Vec<JobId<AccountId>>),
@@ -172,24 +177,18 @@ pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
 
 pub type MessageIdentifier = u128;
 
-pub type JobRegistrationFor<T> = JobRegistration<
-    <T as frame_system::Config>::AccountId,
-    <T as Config>::RegistrationExtra,
-    <T as Config>::MaxAllowedSources,
->;
-
-pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, ExtraV4, ExtraV5> {
     type Error;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
     fn parse_value(
         encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>, Self::Error>;
 }
 
-pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, ExtraV4, ExtraV5> {
     fn execute(
-        action: ParsedAction<AccountId, MaxAllowedSources, Extra>,
+        action: ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>,
     ) -> DispatchResultWithPostInfo;
 }
 

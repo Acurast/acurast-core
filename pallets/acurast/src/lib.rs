@@ -19,10 +19,16 @@ pub use benchmarking::BenchmarkHelper;
 pub use pallet::*;
 pub use traits::*;
 
-pub type JobRegistrationFor<T> = JobRegistration<
+pub type JobRegistrationV4For<T> = JobRegistration<
     <T as frame_system::Config>::AccountId,
     <T as Config>::MaxAllowedSources,
-    <T as Config>::RegistrationExtra,
+    <T as Config>::RegistrationExtraV4,
+>;
+
+pub type JobRegistrationV5For<T> = JobRegistration<
+    <T as frame_system::Config>::AccountId,
+    <T as Config>::MaxAllowedSources,
+    <T as Config>::RegistrationExtraV5,
 >;
 
 pub type EnvironmentFor<T> = Environment<
@@ -44,13 +50,18 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use sp_std::prelude::*;
 
-    use crate::{traits::*, utils::*, EnvironmentFor, JobRegistrationFor};
+    use crate::{traits::*, utils::*, EnvironmentFor, JobRegistrationV4For, JobRegistrationV5For};
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        /// Extra structure to include in the registration of a job.
-        type RegistrationExtra: Parameter + Member + MaxEncodedLen;
+        /// Extra (deprecated V4) structure to include in the registration of a job.
+        type RegistrationExtraV4: Parameter + Member + MaxEncodedLen;
+        /// Extra (current V5) structure to include in the registration of a job.
+        type RegistrationExtraV5: Parameter
+            + Member
+            + MaxEncodedLen
+            + From<Self::RegistrationExtraV4>;
         /// The max length of the allowed sources list for a registration.
         #[pallet::constant]
         type MaxAllowedSources: Get<u32> + ParameterBound;
@@ -228,7 +239,7 @@ pub mod pallet {
         MultiOrigin<T::AccountId>,
         Blake2_128Concat,
         JobIdSequence,
-        JobRegistrationFor<T>,
+        JobRegistrationV5For<T>,
     >;
 
     /// Env variables as a map [`JobId`] -> [`AccountId`] `(source)` -> [`EnvVars`].
@@ -259,13 +270,13 @@ pub mod pallet {
     #[pallet::generate_deposit(pub (super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A registration was successfully stored. [registration, job_id]
-        JobRegistrationStored(JobRegistrationFor<T>, JobId<T::AccountId>),
+        JobRegistrationStored(JobRegistrationV5For<T>, JobId<T::AccountId>),
         /// A registration was successfully removed. [job_id]
         JobRegistrationRemoved(JobId<T::AccountId>),
         /// The allowed sources have been updated. [who, old_registration, updates]
         AllowedSourcesUpdated(
             JobId<T::AccountId>,
-            JobRegistrationFor<T>,
+            JobRegistrationV5For<T>,
             BoundedVec<AllowedSourcesUpdate<T::AccountId>, <T as Config>::MaxAllowedSources>,
         ),
         /// An attestation was successfully stored. [attestation, who]
@@ -339,16 +350,30 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Registers a job by providing a [JobRegistration]. If a job for the same script was previously registered, it will be overwritten.
+        /// #[deprecated(since = "0.2.2", note = "use `register_v5` instead")]
         #[pallet::call_index(0)]
-        #[pallet::weight(< T as Config >::WeightInfo::register())]
+        #[pallet::weight(< T as Config >::WeightInfo::register_v5())]
         pub fn register(
             origin: OriginFor<T>,
-            registration: JobRegistrationFor<T>,
+            registration: JobRegistrationV4For<T>,
         ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let multi_origin = MultiOrigin::Acurast(who);
             let job_id = (multi_origin, Self::next_job_id());
             Self::register_for(job_id, registration)
+        }
+
+        /// Registers a job by providing a [JobRegistration]. If a job for the same script was previously registered, it will be overwritten.
+        #[pallet::call_index(9)]
+        #[pallet::weight(< T as Config >::WeightInfo::register_v5())]
+        pub fn register_v5(
+            origin: OriginFor<T>,
+            registration: JobRegistrationV5For<T>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            let multi_origin = MultiOrigin::Acurast(who);
+            let job_id = (multi_origin, Self::next_job_id());
+            Self::register_for_v5(job_id, registration)
         }
 
         /// Deregisters a job for the given script.
@@ -541,13 +566,22 @@ pub mod pallet {
         }
 
         /// Registers a job for the given [`multi_origin`].
+        /// #[deprecated(since = "0.2.2", note = "use `register_for_v5` instead")]
+        pub fn register_for(
+            job_id: JobId<T::AccountId>,
+            registration: JobRegistrationV4For<T>,
+        ) -> DispatchResultWithPostInfo {
+            Self::register_for_v5(job_id, job_registration_into(registration))
+        }
+
+        /// Registers a job for the given [`multi_origin`].
         ///
         /// It assumes the caller was already authorized and is intended to be used from
         /// * The [`Self::register`] extrinsic of this pallet
         /// * An inter-chain communication protocol like Hyperdrive
-        pub fn register_for(
+        pub fn register_for_v5(
             job_id: JobId<T::AccountId>,
-            registration: JobRegistrationFor<T>,
+            registration: JobRegistrationV5For<T>,
         ) -> DispatchResultWithPostInfo {
             ensure!(
                 is_valid_script(&registration.script),

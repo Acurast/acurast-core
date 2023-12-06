@@ -11,7 +11,7 @@ use pallet_acurast::{
     ParameterBound, Schedule, Script,
 };
 use pallet_acurast_marketplace::{
-    JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
+    v4, AssignmentStrategy, JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
 };
 use rlp::Rlp;
 use scale_info::TypeInfo;
@@ -43,6 +43,15 @@ sol! {
         EthJobMatch[] instantMatch;
     }
 
+    struct EthJobRequirementsV5 {
+        uint8 slots;
+        bytes2[] countries;
+        bool distinc_ip;
+        uint128 reward;
+        uint128 minReputation;
+        EthJobMatch[] instantMatch;
+    }
+
     struct EthJobSchedule {
         uint64 duration;
         uint64 startTime;
@@ -63,6 +72,19 @@ sol! {
         uint32 networkRequests;
         uint32 storageCapacity;
     }
+
+    struct AcurastJobRegistrationV5 {
+        uint128 jobId;
+        bytes32[] allowedSources;
+        bool allowOnlyVerifiedSources;
+        EthJobRequirementsV5 requirements;
+        uint16[] requiredModules;
+        bytes script;
+        EthJobSchedule schedule;
+        uint32 memoryCapacity;
+        uint32 networkRequests;
+        uint32 storageCapacity;
+    }
 }
 
 /// Errors specific to the Ethereum instance
@@ -75,6 +97,7 @@ pub enum EthereumValidationError {
     IllFormattedJobRegistration,
     InvalidOriginAddress,
     InvalidJobModule,
+    IllFormattedCountries,
     CouldNotParseAcurastAddress,
     CouldNotDecodeRegisterJobPayload,
     CouldNotDecodeDeregisterJobPayload,
@@ -102,15 +125,16 @@ pub struct EthereumProof<AccountConverter, AccountId> {
     marker: PhantomData<(AccountConverter, AccountId)>,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
+impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
+    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, ExtraV4, ExtraV5>
     for EthereumProof<AccountConverter, AccountId>
 where
     Balance: From<u128>,
     MaxAllowedSources: ParameterBound,
     MaxSlots: ParameterBound,
     AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV4: From<v4::RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    ExtraV5: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
 {
     type Error = EthereumValidationError;
 
@@ -169,7 +193,7 @@ where
 
     fn message(
         self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, ExtraV4, ExtraV5>, Self::Error> {
         // EVM storage is divided in slots of 32 bytes. If the data is longer than 32 bytes,
         // the first slot will contain the length of the data.
         let value = if self.value.len() > 32 {
@@ -190,7 +214,7 @@ where
         let origin = MultiOrigin::Ethereum(origin_address.clone());
 
         match action {
-            RawAction::RegisterJob => {
+            RawAction::RegisterJobV4 => {
                 fn convert_account_id<
                     Account,
                     AccountConverter: TryFrom<Vec<u8>> + Into<Account>,
@@ -233,8 +257,8 @@ where
                     )
                     .map_err(|_| EthereumValidationError::TooManyPlannedExecutions)?;
 
-                let extra: Extra = RegistrationExtra {
-                    requirements: JobRequirements {
+                let extra: ExtraV4 = v4::RegistrationExtra {
+                    requirements: v4::JobRequirements {
                         slots: job_registration.requirements.slots.into(),
                         reward: Balance::from(job_registration.requirements.reward),
                         min_reputation: Some(job_registration.requirements.minReputation),
@@ -282,7 +306,104 @@ where
                     extra,
                 };
 
-                Ok(ParsedAction::RegisterJob(job_id, registration))
+                Ok(ParsedAction::RegisterJobV4(job_id, registration))
+            }
+            RawAction::RegisterJobV5 => {
+                fn convert_account_id<
+                    Account,
+                    AccountConverter: TryFrom<Vec<u8>> + Into<Account>,
+                >(
+                    bytes: Vec<u8>,
+                ) -> Result<Account, EthereumValidationError> {
+                    let parsed: AccountConverter = bytes
+                        .try_into()
+                        .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
+                    Ok(parsed.into())
+                }
+
+                let job_registration: AcurastJobRegistrationV5 =
+                    AcurastJobRegistrationV5::decode_single(&decoded.payload, true)
+                        .map_err(|_| EthereumValidationError::IllFormattedJobRegistration)?;
+
+                let job_id = (origin, job_registration.jobId.clone());
+
+                fn convert_job_match<
+                    AccountId,
+                    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
+                >(
+                    m: EthJobMatch,
+                ) -> Result<PlannedExecution<AccountId>, EthereumValidationError> {
+                    Ok(PlannedExecution::<AccountId> {
+                        source: convert_account_id::<AccountId, AccountConverter>(
+                            m.source.to_vec(),
+                        )?,
+                        start_delay: m.startDelay,
+                    })
+                }
+                let executions: PlannedExecutions<AccountId, MaxSlots> =
+                    PlannedExecutions::try_from(
+                        job_registration
+                            .requirements
+                            .instantMatch
+                            .into_iter()
+                            .map(convert_job_match::<AccountId, AccountConverter>)
+                            .collect::<Result<Vec<_>, Self::Error>>()?,
+                    )
+                    .map_err(|_| EthereumValidationError::TooManyPlannedExecutions)?;
+
+                let extra: ExtraV5 = RegistrationExtra {
+                    requirements: JobRequirements {
+                        assignment_strategy: AssignmentStrategy::Single(Some(executions)),
+                        slots: job_registration.requirements.slots.into(),
+                        countries: BoundedVec::try_from(job_registration.requirements.countries)
+                            .map_err(|_| EthereumValidationError::IllFormattedCountries)?,
+                        distinct_ip: job_registration.requirements.distinc_ip,
+                        reward: Balance::from(job_registration.requirements.reward),
+                        min_reputation: Some(job_registration.requirements.minReputation),
+                    },
+                }
+                .into();
+                let allowed_sources: AllowedSources<AccountId, MaxAllowedSources> =
+                    AllowedSources::try_from(
+                        job_registration
+                            .allowedSources
+                            .into_iter()
+                            .map(|item| {
+                                convert_account_id::<AccountId, AccountConverter>(item.to_vec())
+                            })
+                            .collect::<Result<Vec<_>, Self::Error>>()?,
+                    )
+                    .map_err(|_| EthereumValidationError::TooManyAllowedSources)?;
+                let required_modules: JobModules = JobModules::try_from(
+                    job_registration
+                        .requiredModules
+                        .iter()
+                        .map(|item| {
+                            Ok(JobModule::try_from(*item as u32)
+                                .map_err(|_| EthereumValidationError::InvalidJobModule)?)
+                        })
+                        .collect::<Result<Vec<_>, Self::Error>>()?,
+                )
+                .map_err(|_| EthereumValidationError::TooManyJobModules)?;
+                let registration = JobRegistration {
+                    script: Script::truncate_from(job_registration.script),
+                    allowed_sources: Some(allowed_sources),
+                    allow_only_verified_sources: job_registration.allowOnlyVerifiedSources,
+                    schedule: Schedule {
+                        duration: job_registration.schedule.duration,
+                        start_time: job_registration.schedule.startTime,
+                        end_time: job_registration.schedule.endTime,
+                        interval: job_registration.schedule.interval,
+                        max_start_delay: job_registration.schedule.maxStartDelay,
+                    },
+                    memory: job_registration.memoryCapacity,
+                    network_requests: job_registration.networkRequests,
+                    storage: job_registration.storageCapacity,
+                    required_modules,
+                    extra,
+                };
+
+                Ok(ParsedAction::RegisterJobV5(job_id, registration))
             }
             RawAction::DeregisterJob => {
                 let job_id = JobId::decode_single(&decoded.payload, true)
