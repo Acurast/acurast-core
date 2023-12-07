@@ -1,9 +1,14 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std"), not(test)), no_std)]
 
-use core::{convert::TryInto, hash::{Hasher, Hash}};
+use core::{
+    convert::TryInto,
+    hash::{Hash, Hasher},
+};
 
 use asn1::{
-    Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv, Tag, ParseResult, parse, Asn1Readable, SimpleAsn1Readable, Asn1Writable, SimpleAsn1Writable, WriteBuf, WriteResult,
+    parse, Asn1Read, Asn1Readable, Asn1Writable, Asn1Write, BitString, Enumerated, Null,
+    ObjectIdentifier, ParseResult, SequenceOf, SetOf, SimpleAsn1Readable, SimpleAsn1Writable, Tag,
+    Tlv, WriteBuf, WriteResult,
 };
 use sp_std::prelude::*;
 
@@ -598,7 +603,6 @@ pub struct AttestationPackageInfo<'a> {
 /// Failed (3)
 pub type VerifiedBootState = Enumerated;
 
-
 /// Represents an ASN.1 `SET OF`. This is an `Iterator` over values that
 /// are decoded.
 pub struct UnorderedSetOf<T> {
@@ -607,9 +611,7 @@ pub struct UnorderedSetOf<T> {
 
 impl<T> UnorderedSetOf<T> {
     fn new(elements: Vec<T>) -> Self {
-        Self {
-            elements
-        }
+        Self { elements }
     }
 
     pub fn elements(&self) -> &[T] {
@@ -624,7 +626,7 @@ impl<T> UnorderedSetOf<T> {
 impl<'a, T: Asn1Readable<'a> + Clone> Clone for UnorderedSetOf<T> {
     fn clone(&self) -> UnorderedSetOf<T> {
         UnorderedSetOf {
-            elements: self.elements.clone()
+            elements: self.elements.clone(),
         }
     }
 }
@@ -644,7 +646,7 @@ impl<'a, T: Asn1Readable<'a> + Hash + Clone> Hash for UnorderedSetOf<T> {
 }
 
 impl<'a, T: Asn1Readable<'a> + 'a> SimpleAsn1Readable<'a> for UnorderedSetOf<T> {
-    const TAG: Tag = <SetOf::<T> as SimpleAsn1Readable<'a>>::TAG;
+    const TAG: Tag = <SetOf<T> as SimpleAsn1Readable<'a>>::TAG;
 
     #[inline]
     fn parse_data(data: &'a [u8]) -> ParseResult<Self> {
@@ -660,7 +662,7 @@ impl<'a, T: Asn1Readable<'a> + 'a> SimpleAsn1Readable<'a> for UnorderedSetOf<T> 
 }
 
 impl<'a, T: Asn1Readable<'a> + Asn1Writable + Clone> SimpleAsn1Writable for UnorderedSetOf<T> {
-    const TAG: Tag = <SetOf::<T> as SimpleAsn1Writable>::TAG;
+    const TAG: Tag = <SetOf<T> as SimpleAsn1Writable>::TAG;
     fn write_data(&self, _dest: &mut WriteBuf) -> WriteResult {
         unimplemented!();
     }
