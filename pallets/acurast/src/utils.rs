@@ -1,7 +1,4 @@
-use acurast_common::{
-    extract_attestation, validate_certificate_chain, ECDSACurve,
-    PublicKey,
-};
+use acurast_common::{extract_attestation, validate_certificate_chain, ECDSACurve, PublicKey};
 use codec::Encode;
 use frame_support::{ensure, traits::UnixTime};
 use sp_std::prelude::*;

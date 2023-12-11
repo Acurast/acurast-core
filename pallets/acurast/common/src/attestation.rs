@@ -287,7 +287,9 @@ pub fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
 pub fn validate_certificate_chain<'a>(
     chain: &'a CertificateChainInput,
 ) -> Result<(Vec<CertificateId>, TBSCertificate<'a>, PublicKey), ValidationError> {
-    let root_pub_key = PublicKey::parse(&asn1::parse_single::<SubjectPublicKeyInfo>(TRUSTED_ROOT_PUB_KEY)?)?;
+    let root_pub_key = PublicKey::parse(&asn1::parse_single::<SubjectPublicKeyInfo>(
+        TRUSTED_ROOT_PUB_KEY,
+    )?)?;
     let mut cert_ids = Vec::<CertificateId>::new();
     let fold_result = chain.iter().try_fold::<_, _, Result<_, ValidationError>>(
         (Option::<PublicKey>::None, Option::<Certificate>::None),
@@ -332,8 +334,7 @@ mod tests {
     };
 
     use super::{
-        asn::KeyDescription, validate_certificate_chain,
-        CertificateChainInput, CertificateInput,
+        asn::KeyDescription, validate_certificate_chain, CertificateChainInput, CertificateInput,
     };
 
     pub fn decode_certificate_chain(chain: &Vec<&str>) -> CertificateChainInput {
