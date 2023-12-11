@@ -105,19 +105,19 @@ const ECDSA_WITH_SHA384_ALGORITHM: ObjectIdentifier = oid!(1, 2, 840, 10045, 4, 
 const RSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 113549, 1, 1, 1);
 const ECDSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 10045, 2, 1);
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum PublicKey {
     RSA(RSAPbk),
     ECDSA(ECDSACurve),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct RSAPbk {
     exponent: BigUint,
     modulus: BigUint,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ECDSACurve {
     CurveP256(VerifyingKey),
     CurveP384(p384::AffinePoint),
@@ -279,16 +279,6 @@ pub fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
     result
 }
 
-pub fn validate_certificate_chain_root(
-    chain: &CertificateChainInput,
-) -> Result<(), ValidationError> {
-    let first = chain.first().ok_or(ValidationError::ChainTooShort)?;
-    if !TRUSTED_ROOT_CERTS.contains(&first.as_slice()) {
-        return Err(ValidationError::UntrustedRoot);
-    }
-    Ok(())
-}
-
 /// Validates the chain by ensuring that
 ///
 /// - the chain starts with a self-signed certificate at index 0 that matches one of the known [TRUSTED_ROOT_CERTS]
@@ -297,6 +287,7 @@ pub fn validate_certificate_chain_root(
 pub fn validate_certificate_chain<'a>(
     chain: &'a CertificateChainInput,
 ) -> Result<(Vec<CertificateId>, TBSCertificate<'a>, PublicKey), ValidationError> {
+    let root_pub_key = PublicKey::parse(&asn1::parse_single::<SubjectPublicKeyInfo>(TRUSTED_ROOT_PUB_KEY)?)?;
     let mut cert_ids = Vec::<CertificateId>::new();
     let fold_result = chain.iter().try_fold::<_, _, Result<_, ValidationError>>(
         (Option::<PublicKey>::None, Option::<Certificate>::None),
@@ -304,6 +295,9 @@ pub fn validate_certificate_chain<'a>(
             let cert = parse_cert(&cert_data)?;
             let payload = parse_cert_payload(&cert_data)?;
             let current_pbk = PublicKey::parse(&cert.tbs_certificate.subject_public_key_info)?;
+            if prev_pbk.is_none() && current_pbk != root_pub_key {
+                return Err(ValidationError::UntrustedRoot);
+            }
 
             validate(&cert, payload, prev_pbk.as_ref().unwrap_or(&current_pbk))?;
 
@@ -326,25 +320,7 @@ pub fn validate_certificate_chain<'a>(
     Ok((cert_ids, last_cert.tbs_certificate, last_cert_pbk))
 }
 
-/// The list of trusted root certificates, as decoded bytes arrays. [Source](https://developer.android.com/training/articles/security-key-attestation#root_certificate)
-///
-// Adding new root certificate:
-//
-//     use std::io::Write;
-//     let mut output = File::create("./__root_certs__/root_x.cer").unwrap();
-//     let line = base64::decode(r"<base64>").unwrap();
-//     output.write_all(&line);
-//
-const TRUSTED_ROOT_CERTS: &[&[u8]] = &[
-    // base64 equivalent: r"MIIFYDCCA0igAwIBAgIJAOj6GWMU0voYMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTYwNTI2MTYyODUyWhcNMjYwNTI0MTYyODUyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaOBpjCBozAdBgNVHQ4EFgQUNmHhAHyIBQlRi0RsR/8aTMnqTxIwHwYDVR0jBBgwFoAUNmHhAHyIBQlRi0RsR/8aTMnqTxIwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwQAYDVR0fBDkwNzA1oDOgMYYvaHR0cHM6Ly9hbmRyb2lkLmdvb2dsZWFwaXMuY29tL2F0dGVzdGF0aW9uL2NybC8wDQYJKoZIhvcNAQELBQADggIBACDIw41L3KlXG0aMiS//cqrG+EShHUGo8HNsw30W1kJtjn6UBwRM6jnmiwfBPb8VA91chb2vssAtX2zbTvqBJ9+LBPGCdw/E53Rbf86qhxKaiAHOjpvAy5Y3m00mqC0w/Zwvju1twb4vhLaJ5NkUJYsUS7rmJKHHBnETLi8GFqiEsqTWpG/6ibYCv7rYDBJDcR9W62BW9jfIoBQcxUCUJouMPH25lLNcDc1ssqvC2v7iUgI9LeoM1sNovqPmQUiG9rHli1vXxzCyaMTjwftkJLkf6724DFhuKug2jITV0QkXvaJWF4nUaHOTNA4uJU9WDvZLI1j83A+/xnAJUucIv/zGJ1AMH2boHqF8CY16LpsYgBt6tKxxWH00XcyDCdW2KlBCeqbQPcsFmWyWugxdcekhYsAWyoSf818NUsZdBWBaR/OukXrNLfkQ79IyZohZbvabO/X+MVT3rriAoKc8oE2Uws6DF+60PV7/WIPjNvXySdqspImSN78mflxDqwLqRBYkA3I75qppLGG9rp7UCdRjxMl8ZDBld+7yvHVgt1cVzJx9xnyGCC23UaicMDSXYrB4I4WHXPGjxhZuCuPBLTdOLU8YRvMYdEvYebWHMpvwGCF6bAx3JBpIeOQ1wDB5y0USicV3YgYGmi+NZfhA4URSh77Yd6uuJOJENRaNVTzk"
-    include_bytes!("./__root_certs__/00E8FA196314D2FA18.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJANUP8luj8tazMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTkxMTIyMjAzNzU4WhcNMzQxMTE4MjAzNzU4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQBOMaBc8oumXb2voc7XCWnuXKhBBK3e2KMGz39t7lA3XXRe2ZLLAkLM5y3J7tURkf5a1SutfdOyXAmeE6SRo83Uh6WszodmMkxK5GM4JGrnt4pBisu5igXEydaW7qq2CdC6DOGjG+mEkN8/TA6p3cnoL/sPyz6evdjLlSeJ8rFBH6xWyIZCbrcpYEJzXaUOEaxxXxgYz5/cTiVKN2M1G2okQBUIYSY6bjEL4aUN5cfo7ogP3UvliEo3Eo0YgwuzR2v0KR6C1cZqZJSTnghIC/vAD32KdNQ+c3N+vl2OTsUVMC1GiWkngNx1OO1+kXW+YTnnTUOtOIswUP/Vqd5SYgAImMAfY8U9/iIgkQj6T2W6FsScy94IN9fFhE1UtzmLoBIuUFsVXJMTz+Jucth+IqoWFua9v1R93/k98p41pjtFX+H8DslVgfP097vju4KDlqN64xV1grw3ZLl4CiOe/A91oeLm2UHOq6wn3esB4r2EIQKb6jTVGu5sYCcdWpXr0AUVqcABPdgL+H7qJguBw09ojm6xNIrw2OocrDKsudk/okr/AwqEyPKw9WnMlQgLIKw1rODG2NvU9oR3GVGdMkUBZutL8VuFkERQGt6vQ2OCw0sV47VMkuYbacK/xyZFiRcrPJPb41zgbQj9XAEyLKCHex0SdDrx+tWUDqG8At2JHA=="
-    include_bytes!("./__root_certs__/00D50FF25BA3F2D6B3.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJAMNrfES5rhgxMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMjExMTE3MjMxMDQyWhcNMzYxMTEzMjMxMDQyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQBTNNZe5cuf8oiq+jV0itTGzWVhSTjOBEk2FQvh11J3o3lna0o7rd8RFHnN00q4hi6TapFhh4qaw/iG6Xg+xOan63niLWIC5GOPFgPeYXM9+nBb3zZzC8ABypYuCusWCmt6Tn3+Pjbz3MTVhRGXuT/TQH4KGFY4PhvzAyXwdjTOCXID+aHud4RLcSySr0Fq/L+R8TWalvM1wJJPhyRjqRCJerGtfBagiALzvhnmY7U1qFcS0NCnKjoO7oFedKdWlZz0YAfu3aGCJd4KHT0MsGiLZez9WP81xYSrKMNEsDK+zK5fVzw6jA7cxmpXcARTnmAuGUeI7VVDhDzKeVOctf3a0qQLwC+d0+xrETZ4r2fRGNw2YEs2W8Qj6oDcfPvq9JySe7pJ6wcHnl5EZ0lwc4xH7Y4Dx9RA1JlfooLMw3tOdJZH0enxPXaydfAD3YifeZpFaUzicHeLzVJLt9dvGB0bHQLE4+EqKFgOZv2EoP686DQqbVS1u+9k0p2xbMA105TBIk7npraa8VM0fnrRKi7wlZKwdH+aNAyhbXRW9xsnODJ+g8eF452zvbiKKngEKirK5LGieoXBX7tZ9D1GNBH2Ob3bKOwwIWdEFle/YF/h6zWgdeoaNGDqVBrLr2+0DtWoiB1aDEjLWl9FmyIUyUm7mD/vFDkzF+wm7cyWpQpCVQ=="
-    include_bytes!("./__root_certs__/00C36B7C44B9AE1831.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJAPHBcqaZ6vUdMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMjIwMzIwMTgwNzQ4WhcNNDIwMzE1MTgwNzQ4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQB8cMqTllHc8U+qCrOlg3H7174lmaCsbo/bJ0C17JEgMLb4kvrqsXZs01U3mB/qABg/1t5Pd5AORHARs1hhqGICW/nKMav574f9rZN4PC2ZlufGXb7sIdJpGiO9ctRhiLuYuly10JccUZGEHpHSYM2GtkgYbZba6lsCPYAAP83cyDV+1aOkTf1RCp/lM0PKvmxYN10RYsK631jrleGdcdkxoSK//mSQbgcWnmAEZrzHoF1/0gso1HZgIn0YLzVhLSA/iXCX4QT2h3J5z3znluKG1nv8NQdxei2DIIhASWfu804CA96cQKTTlaae2fweqXjdN1/v2nqOhngNyz1361mFmr4XmaKH/ItTwOe72NI9ZcwS1lVaCvsIkTDCEXdm9rCNPAY10iTunIHFXRh+7KPzlHGewCq/8TOohBRn0/NNfh7uRslOSZ/xKbN9tMBtw37Z8d2vvnXq/YWdsm1+JLVwn6yYD/yacNJBlwpddla8eaVMjsF6nBnIgQOf9zKSe06nSTqvgwUHosgOECZJZ1EuzbH4yswbt02tKtKEFhx+v+OTge/06V+jGsqTWLsfrOCNLuA8H++z+pUENmpqnnHovaI47gC+TNpkgYGkkBT6B/m/U01BuOBBTzhIlMEZq9qkDWuM2cA5kW5V3FJUcfHnw1IdYIg2Wxg7yHcQZemFQg=="
-    include_bytes!("./__root_certs__/root_4.cer"),
-];
+const TRUSTED_ROOT_PUB_KEY: &'static [u8] = include_bytes!("./__root_key__/public.key");
 
 #[cfg(test)]
 mod tests {
@@ -356,7 +332,7 @@ mod tests {
     };
 
     use super::{
-        asn::KeyDescription, validate_certificate_chain, validate_certificate_chain_root,
+        asn::KeyDescription, validate_certificate_chain,
         CertificateChainInput, CertificateInput,
     };
 
@@ -402,7 +378,6 @@ mod tests {
             SAMSUNG_KEY_CERT,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        validate_certificate_chain_root(&decoded_chain)?;
         let (_, cert, _) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
         match &key_description {
@@ -423,7 +398,6 @@ mod tests {
             hex_literal::hex!("308201fe30820185a00302010202106fd912a55cb7563380ddfa2ac2d1eb8c300a06082a8648ce3d040302303f31123010060355040c0c095374726f6e67426f7831293027060355040513203138346464346137643861373133316539386161653465613761663531306461301e170d3231303931353232353831375a170d3331303931333232353831375a303f31123010060355040c0c095374726f6e67426f78312930270603550405132037386235656561343461313465353437373261363862653665623738313462343059301306072a8648ce3d020106082a8648ce3d03010703420004df1afbe9c0d1fb4d291a6573de2cdf95ca9f43e4bd2f33ded358ca8118dd42ea619a9cdbccd4cc32335f5db51774bb5e9ccf08a2d6d3259572a27fe064fd451da3633061301d0603551d0e04160414f40c71002bcb6425158db7b4b552d09820d9e4c9301f0603551d2304183016801448e9cf69260a89c4c584499c6dbad846e5a266b3300f0603551d130101ff040530030101ff300e0603551d0f0101ff040403020204300a06082a8648ce3d0403020367003064023044f91fe977e5ddba9c69a4f0b0d9b7c550e8e117216d6768b3477e4277fb88e9ed1dcae08c538b5452f30f4aabd473c10230312efaac05f998263283e0b718025eaa224ee8e386b6f143b9781c789f3a38abc8480731325893d6efc25b67c473ecf8").to_vec().try_into().unwrap(),
             hex_literal::hex!("308202ba30820260a003020102020101300a06082a8648ce3d040302303f31123010060355040c0c095374726f6e67426f7831293027060355040513203738623565656134346131346535343737326136386265366562373831346234301e170d3730303130313030303030305a170d3439313233313233353935395a301f311d301b06035504031314416e64726f6964204b657973746f7265204b65793059301306072a8648ce3d020106082a8648ce3d03010703420004e203b4ed148733aca6322978ffb9d72dc940919d489d87ae5242cf6eb39b6ae8ab9edf67310b5b88e8ab5e82f7ec6cb7778ad00c480e4846aa6dbbde55303b43a382016b30820167300c0603551d0f0405030307880030820155060a2b06010401d67902011104820145308201410201640a01020201640a0102042052331675bfbad8106ff561287fcb0397307dc4ed8cccc3f7e2ace4a7fe82f19c04003065bf853d080206018c1a85f13ebf85455504533051312b30290424636f6d2e616375726173742e61747465737465642e6578656375746f722e63616e61727902011031220420ec70c2a4e072a0f586552a68357b23697c9d45f1e1257a8c4d29a25ac49824333081a7a10b3109020106020103020102a203020103a30402020100a5053103020100aa03020101bf8377020500bf853e03020100bf85404c304a0420c276f9fcf895a8838c8d6e6ec441494822e69acfca3bb27715790b2951da33980101ff0a010004209b51df228d989cd600b59e307b0bbc1d92013f969d4cebcc0ca3e1556bff6e7bbf854105020301fbd0bf854205020303163fbf854e0602040134b09dbf854f0602040134b09d300a06082a8648ce3d040302034800304502200229006e3a528c45224739b7773731c99ca811fa3ee57121626bbc9279fad3af022100bf47d355feae07bb6a4528e8872a8775248d4960477ce807cf4ee7ce902d42b9").to_vec().try_into().unwrap(),
         ].to_vec().try_into().unwrap();
-        validate_certificate_chain_root(&decoded_chain)?;
         let (_, cert, _) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
         match &key_description {
@@ -469,7 +443,6 @@ mod tests {
 
         for chain in chains {
             let decoded_chain = decode_certificate_chain(&chain);
-            validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
             let (_, cert, _) =
                 validate_certificate_chain(&decoded_chain).expect("validating chain failed");
             let key_description = extract_attestation(cert.extensions).map_err(|err| {
@@ -507,7 +480,6 @@ mod tests {
             PIXEL_KEY_CERT_INVALID,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
         let res = validate_certificate_chain(&decoded_chain);
         match res {
             Err(e) => assert_eq!(e, ValidationError::InvalidSignature),
@@ -525,9 +497,9 @@ mod tests {
             PIXEL_KEY_CERT_INVALID,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        let res = validate_certificate_chain_root(&decoded_chain);
+        let res = validate_certificate_chain(&decoded_chain);
         match res {
-            Err(e) => assert_eq!(e, ValidationError::UntrustedRoot),
+            Err(e) => assert_eq!(e, ValidationError::InvalidSignature),
             _ => return Err(()),
         };
         Ok(())

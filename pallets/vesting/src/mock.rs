@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use frame_support::pallet_prelude::*;
 use frame_support::{
     parameter_types,
     sp_runtime::{
@@ -137,7 +136,7 @@ impl<T: Config + mock_pallet::Config> VestingBalance<T::AccountId, T::Balance>
         Ok(())
     }
 
-    fn adjust_lock(acc: &T::AccountId, stake: T::Balance) {}
+    fn adjust_lock(_acc: &T::AccountId, _stake: T::Balance) {}
 
     fn pay_accrued(
         target: &T::AccountId,
