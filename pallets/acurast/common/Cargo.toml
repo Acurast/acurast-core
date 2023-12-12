@@ -35,6 +35,7 @@ std = [
     "sp-std/std",
     "codec/std",
     "scale-info/std",
+    "asn1?/std",
     "serde",
 ]
 attestation = [
