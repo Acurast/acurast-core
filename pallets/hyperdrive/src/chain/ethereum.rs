@@ -64,6 +64,22 @@ sol! {
         uint32 networkRequests;
         uint32 storageCapacity;
     }
+
+    struct EthEnvironmentVariable {
+        bytes key;
+        bytes value;
+    }
+
+    struct EthProcessorEnvironmentVariables {
+        bytes32 source;
+        EthEnvironmentVariable[] variables;
+    }
+
+    struct EthEnvironmentVariablesPayload {
+        uint128 jobId;
+        bytes publicKey;
+        EthProcessorEnvironmentVariables[] processors;
+    }
 }
 
 /// Errors specific to the Ethereum instance
@@ -74,6 +90,7 @@ pub enum EthereumValidationError {
     UnknownAction(u16),
     IllFormattedMessage,
     IllFormattedJobRegistration,
+    IllFormattedEnvironmentVariablesPayload,
     InvalidOriginAddress,
     InvalidJobModule,
     CouldNotParseAcurastAddress,
@@ -168,9 +185,9 @@ where
         Ok(self.message_id)
     }
 
-    fn message(
+    fn message<T: crate::pallet::Config<I>, I: 'static>(
         self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error> {
         // EVM storage is divided in slots of 32 bytes. If the data is longer than 32 bytes,
         // the first slot will contain the length of the data.
         let value = if self.value.len() > 32 {
@@ -190,20 +207,17 @@ where
             .map_err(|_| EthereumValidationError::InvalidOriginAddress)?;
         let origin = MultiOrigin::Ethereum(origin_address.clone());
 
+        fn convert_account_id<Account, AccountConverter: TryFrom<Vec<u8>> + Into<Account>>(
+            bytes: Vec<u8>,
+        ) -> Result<Account, EthereumValidationError> {
+            let parsed: AccountConverter = bytes
+                .try_into()
+                .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
+            Ok(parsed.into())
+        }
+
         match action {
             RawAction::RegisterJob => {
-                fn convert_account_id<
-                    Account,
-                    AccountConverter: TryFrom<Vec<u8>> + Into<Account>,
-                >(
-                    bytes: Vec<u8>,
-                ) -> Result<Account, EthereumValidationError> {
-                    let parsed: AccountConverter = bytes
-                        .try_into()
-                        .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
-                    Ok(parsed.into())
-                }
-
                 let job_registration: AcurastJobRegistration =
                     AcurastJobRegistration::decode_single(&decoded.payload, true)
                         .map_err(|_| EthereumValidationError::IllFormattedJobRegistration)?;
@@ -299,6 +313,53 @@ where
                     .collect();
 
                 Ok(ParsedAction::FinalizeJob(jobs))
+            }
+            RawAction::SetJobEnvironment => {
+                let set_job_environments: EthEnvironmentVariablesPayload =
+                    EthEnvironmentVariablesPayload::decode_single(&decoded.payload, true).map_err(
+                        |_| EthereumValidationError::IllFormattedEnvironmentVariablesPayload,
+                    )?;
+
+                let job_id = (
+                    MultiOrigin::Ethereum(origin_address.clone()),
+                    set_job_environments.jobId,
+                );
+
+                let public_key = BoundedVec::truncate_from(set_job_environments.publicKey);
+
+                let variables = set_job_environments
+                    .processors
+                    .iter()
+                    .map(|entry| {
+                        let processor = convert_account_id::<AccountId, AccountConverter>(
+                            entry.source.to_vec(),
+                        )?;
+
+                        Ok((
+                            processor,
+                            pallet_acurast::Environment {
+                                public_key: public_key.clone(),
+                                variables: BoundedVec::truncate_from(
+                                    entry
+                                        .variables
+                                        .iter()
+                                        .map(|v| {
+                                            let key = BoundedVec::truncate_from(v.key.clone());
+                                            let value = BoundedVec::truncate_from(v.value.clone());
+
+                                            (key, value)
+                                        })
+                                        .collect(),
+                                ),
+                            },
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, Self::Error>>()?;
+
+                Ok(ParsedAction::SetJobEnvironment(
+                    job_id,
+                    BoundedVec::truncate_from(variables),
+                ))
             }
             RawAction::Noop => Ok(ParsedAction::Noop),
         }

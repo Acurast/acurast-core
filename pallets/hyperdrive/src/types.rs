@@ -9,7 +9,7 @@ use sp_std::prelude::*;
 use sp_std::vec;
 use strum_macros::{EnumString, IntoStaticStr};
 
-use pallet_acurast::{JobId, JobRegistration};
+use pallet_acurast::{Environment, JobId, JobRegistration};
 
 use crate::Config;
 
@@ -126,6 +126,8 @@ pub enum RawAction {
     DeregisterJob,
     #[strum(serialize = "FINALIZE_JOB")]
     FinalizeJob,
+    #[strum(serialize = "SET_JOB_ENVIRONMENT")]
+    SetJobEnvironment,
     #[strum(serialize = "NOOP")]
     Noop = 255,
 }
@@ -136,36 +138,54 @@ impl TryFrom<u16> for RawAction {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(RawAction::RegisterJob),
-            1 => Ok(RawAction::DeregisterJob),
-            2 => Ok(RawAction::FinalizeJob),
-            255 => Ok(RawAction::Noop),
+            o if o == RawAction::RegisterJob as u16 => Ok(RawAction::RegisterJob),
+            o if o == RawAction::DeregisterJob as u16 => Ok(RawAction::DeregisterJob),
+            o if o == RawAction::FinalizeJob as u16 => Ok(RawAction::FinalizeJob),
+            o if o == RawAction::SetJobEnvironment as u16 => Ok(RawAction::SetJobEnvironment),
+            o if o == RawAction::Noop as u16 => Ok(RawAction::Noop),
             _ => Err(b"Unknown action index".to_vec()),
         }
     }
 }
 
-impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
-    From<&ParsedAction<AccountId, MaxAllowedSources, Extra>> for RawAction
+impl<AccountId, T: crate::pallet::Config<I>, I: 'static, MaxAllowedSources: Get<u32>, Extra>
+    From<&ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>> for RawAction
 {
-    fn from(action: &ParsedAction<AccountId, MaxAllowedSources, Extra>) -> Self {
+    fn from(action: &ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>) -> Self {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
             ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
+            ParsedAction::SetJobEnvironment(_, _) => RawAction::SetJobEnvironment,
             ParsedAction::Noop => RawAction::Noop,
         }
     }
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+pub enum ParsedAction<
+    AccountId,
+    T: crate::pallet::Config<I>,
+    I: 'static,
+    MaxAllowedSources: Get<u32>,
+    Extra,
+> {
     RegisterJob(
         JobId<AccountId>,
         JobRegistration<AccountId, MaxAllowedSources, Extra>,
     ),
     DeregisterJob(JobId<AccountId>),
     FinalizeJob(Vec<JobId<AccountId>>),
+    SetJobEnvironment(
+        JobId<AccountId>,
+        BoundedVec<
+            (
+                AccountId,
+                Environment<T::MaxEnvVars, T::EnvKeyMaxSize, T::EnvValueMaxSize>,
+            ),
+            T::MaxSlots,
+        >,
+    ),
     Noop,
 }
 
@@ -181,14 +201,14 @@ pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     type Error;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
-    fn parse_value(
+    fn parse_value<T: crate::pallet::Config<I>, I: 'static>(
         encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
+    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error>;
 }
 
 pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
-    fn execute(
-        action: ParsedAction<AccountId, MaxAllowedSources, Extra>,
+    fn execute<T: crate::pallet::Config<I>, I: 'static>(
+        action: ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>,
     ) -> DispatchResultWithPostInfo;
 }
 

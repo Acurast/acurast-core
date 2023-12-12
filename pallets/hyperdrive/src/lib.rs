@@ -124,6 +124,17 @@ pub mod pallet {
         /// The maximum allowed slots and therefore maximum length of the planned executions per job.
         #[pallet::constant]
         type MaxSlots: Get<u32> + ParameterBound;
+
+        /// The maximum number of environment variables per processors each job can have
+        #[pallet::constant]
+        type MaxEnvVars: Get<u32> + ParameterBound;
+        /// The maximum size in bytes of each environment variable key
+        #[pallet::constant]
+        type EnvKeyMaxSize: Get<u32> + ParameterBound;
+        /// The maximum size in bytes of each environment variable value
+        #[pallet::constant]
+        type EnvValueMaxSize: Get<u32> + ParameterBound;
+
         /// The maximum transmitters accepted to submit a state root per snapshot.
         #[pallet::constant]
         type MaxTransmittersPerSnapshot: Get<u32> + ParameterBound;
@@ -468,7 +479,7 @@ pub mod pallet {
         #[transactional]
         fn process_action(proof: &T::Proof) -> Result<(), ProcessMessageResult> {
             let action = proof
-                .message()
+                .message::<T, I>()
                 .map_err(|_| ProcessMessageResult::ParsingValueFailed)?;
 
             let raw_action: RawAction = (&action).into();

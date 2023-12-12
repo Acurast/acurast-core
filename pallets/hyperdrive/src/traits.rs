@@ -17,9 +17,9 @@ where
         self: &Self,
     ) -> Result<[u8; 32], Self::Error>;
     fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error>;
-    fn message(
+    fn message<T: crate::pallet::Config<I>, I: 'static>(
         self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
+    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error>;
 }
 
 /// Weight functions needed for pallet_acurast_hyperdrive.

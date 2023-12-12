@@ -72,6 +72,7 @@ impl system::Config for Test {
 }
 
 pub type MaxAllowedSources = CU32<4>;
+pub type MaxSlots = CU32<64>;
 
 impl crate::Config<TezosInstance> for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -83,7 +84,10 @@ impl crate::Config<TezosInstance> for Test {
     type RegistrationExtra =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
-    type MaxSlots = CU32<64>;
+    type MaxSlots = MaxSlots;
+    type MaxEnvVars = CU32<10>;
+    type EnvKeyMaxSize = CU32<32>;
+    type EnvValueMaxSize = CU32<1024>;
     type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
@@ -106,7 +110,10 @@ impl crate::Config<EthereumInstance> for Test {
     type RegistrationExtra =
         RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
     type MaxAllowedSources = MaxAllowedSources;
-    type MaxSlots = CU32<64>;
+    type MaxSlots = MaxSlots;
+    type MaxEnvVars = CU32<10>;
+    type EnvKeyMaxSize = CU32<32>;
+    type EnvValueMaxSize = CU32<1024>;
     type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
@@ -146,7 +153,9 @@ pub fn events() -> Vec<RuntimeEvent> {
 pub type Balance = u128;
 
 impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
-    fn execute(_: ParsedAction<AccountId, MaxAllowedSources, Extra>) -> DispatchResultWithPostInfo {
+    fn execute<T: crate::pallet::Config<I>, I: 'static>(
+        _: ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>,
+    ) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
 }
