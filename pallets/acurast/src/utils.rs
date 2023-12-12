@@ -1,7 +1,4 @@
-use acurast_common::{
-    extract_attestation, validate_certificate_chain, validate_certificate_chain_root, ECDSACurve,
-    PublicKey,
-};
+use acurast_common::{extract_attestation, validate_certificate_chain, ECDSACurve, PublicKey};
 use codec::Encode;
 use frame_support::{ensure, traits::UnixTime};
 use sp_std::prelude::*;
@@ -16,9 +13,6 @@ pub fn validate_and_extract_attestation<T: Config>(
     source: &T::AccountId,
     attestation_chain: &AttestationChain,
 ) -> Result<Attestation, Error<T>> {
-    validate_certificate_chain_root(&attestation_chain.certificate_chain)
-        .map_err(|_| Error::<T>::RootCertificateValidationFailed)?;
-
     let (cert_ids, cert, public_key) =
         validate_certificate_chain(&attestation_chain.certificate_chain)
             .map_err(|_| Error::<T>::CertificateChainValidationFailed)?;

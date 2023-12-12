@@ -355,7 +355,7 @@ fn test_submit_attestation_failure_1() {
                 RuntimeOrigin::signed(processor_account_id()).into(),
                 chain.clone()
             ),
-            Error::<Test>::RootCertificateValidationFailed
+            Error::<Test>::CertificateChainValidationFailed
         );
 
         assert_eq!(None, Acurast::stored_attestation(processor_account_id()));
