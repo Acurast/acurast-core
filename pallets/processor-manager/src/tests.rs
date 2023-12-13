@@ -1,8 +1,32 @@
 #![cfg(test)]
 
-use crate::{mock::*, stub::*, Error, Event, ProcessorPairingFor, ProcessorPairingUpdateFor};
+use crate::{
+    mock::*, stub::*, BinaryLocation, Error, Event, ProcessorPairingFor, ProcessorPairingUpdateFor,
+    UpdateInfo, Version,
+};
 use acurast_common::ListUpdateOperation;
+use frame_support::dispatch::DispatchError;
+use frame_support::error::BadOrigin;
 use frame_support::{assert_err, assert_ok, traits::fungible::Inspect};
+
+fn paired_manager_processor() -> (AccountId, AccountId) {
+    let (signer, manager_account) = generate_pair_account();
+    let (_, processor_account) = generate_pair_account();
+    let initial_timestamp = 1657363915010u64;
+    if Timestamp::get() != initial_timestamp {
+        let _ = Timestamp::set_timestamp(initial_timestamp);
+    }
+    let timestamp = 1657363915002u128;
+    let signature = generate_signature(&signer, &manager_account, timestamp, 1);
+    let update =
+        ProcessorPairingFor::<Test>::new_with_proof(manager_account.clone(), timestamp, signature);
+    assert_ok!(AcurastProcessorManager::pair_with_manager(
+        RuntimeOrigin::signed(processor_account.clone()),
+        update,
+    ));
+
+    (manager_account, processor_account)
+}
 
 #[test]
 fn test_update_processor_pairings_succeed_1() {
@@ -232,22 +256,7 @@ fn test_update_processor_pairings_failure_3() {
 #[test]
 fn test_recover_funds_succeed_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
-        let updates = vec![ProcessorPairingUpdateFor::<Test> {
-            operation: ListUpdateOperation::Add,
-            item: ProcessorPairingFor::<Test>::new_with_proof(
-                processor_account.clone(),
-                timestamp,
-                signature.clone(),
-            ),
-        }];
-        assert_ok!(AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone().try_into().unwrap(),
-        ));
+        let (manager_account, processor_account) = paired_manager_processor();
         assert_ok!(Balances::transfer(
             RuntimeOrigin::signed(alice_account_id()),
             processor_account.clone().into(),
@@ -255,13 +264,11 @@ fn test_recover_funds_succeed_1() {
         ));
         assert_eq!(Balances::balance(&alice_account_id()), 90_000_000);
 
-        let call = AcurastProcessorManager::recover_funds(
-            RuntimeOrigin::signed(alice_account_id()),
+        assert_ok!(AcurastProcessorManager::recover_funds(
+            RuntimeOrigin::signed(manager_account),
             processor_account.clone().into(),
             alice_account_id().into(),
-        );
-
-        assert_ok!(call);
+        ));
         assert_eq!(Balances::balance(&alice_account_id()), 99_999_000); // 1_000 of existensial balance remains on the processor
 
         assert_eq!(
@@ -277,30 +284,13 @@ fn test_recover_funds_succeed_1() {
 #[test]
 fn test_recover_funds_succeed_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
-        let updates = vec![ProcessorPairingUpdateFor::<Test> {
-            operation: ListUpdateOperation::Add,
-            item: ProcessorPairingFor::<Test>::new_with_proof(
-                processor_account.clone(),
-                timestamp,
-                signature.clone(),
-            ),
-        }];
-        assert_ok!(AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone().try_into().unwrap(),
-        ));
+        let (manager_account, processor_account) = paired_manager_processor();
 
-        let call = AcurastProcessorManager::recover_funds(
-            RuntimeOrigin::signed(alice_account_id()),
+        assert_ok!(AcurastProcessorManager::recover_funds(
+            RuntimeOrigin::signed(manager_account),
             processor_account.clone().into(),
             alice_account_id().into(),
-        );
-
-        assert_ok!(call);
+        ));
 
         assert_eq!(
             events().last().unwrap(),
@@ -315,27 +305,12 @@ fn test_recover_funds_succeed_2() {
 #[test]
 fn test_recover_funds_failure_1() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
-        let updates = vec![ProcessorPairingUpdateFor::<Test> {
-            operation: ListUpdateOperation::Add,
-            item: ProcessorPairingFor::<Test>::new_with_proof(
-                processor_account.clone(),
-                timestamp,
-                signature.clone(),
-            ),
-        }];
-        assert_ok!(AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone().try_into().unwrap(),
-        ));
+        let (manager_account, _) = paired_manager_processor();
 
         let (_, processor_account) = generate_pair_account();
 
         let call = AcurastProcessorManager::recover_funds(
-            RuntimeOrigin::signed(alice_account_id()),
+            RuntimeOrigin::signed(manager_account),
             processor_account.clone().into(),
             alice_account_id().into(),
         );
@@ -347,30 +322,11 @@ fn test_recover_funds_failure_1() {
 #[test]
 fn test_recover_funds_failure_2() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &alice_account_id(), timestamp, 1);
-        let updates = vec![ProcessorPairingUpdateFor::<Test> {
-            operation: ListUpdateOperation::Add,
-            item: ProcessorPairingFor::<Test>::new_with_proof(
-                processor_account.clone(),
-                timestamp,
-                signature.clone(),
-            ),
-        }];
-        assert_ok!(AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(alice_account_id()),
-            updates.clone().try_into().unwrap(),
-        ));
-
-        assert_ok!(AcurastProcessorManager::update_processor_pairings(
-            RuntimeOrigin::signed(bob_account_id()),
-            Default::default(),
-        ));
+        let (manager_account, _) = paired_manager_processor();
+        let (_, processor_account) = paired_manager_processor();
 
         let call = AcurastProcessorManager::recover_funds(
-            RuntimeOrigin::signed(bob_account_id()),
+            RuntimeOrigin::signed(manager_account),
             processor_account.clone().into(),
             alice_account_id().into(),
         );
@@ -424,20 +380,7 @@ fn test_pair_with_manager() {
 #[test]
 fn test_advertise_for_success() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, manager_account) = generate_pair_account();
-        let (_, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &manager_account, timestamp, 1);
-        let update = ProcessorPairingFor::<Test>::new_with_proof(
-            manager_account.clone(),
-            timestamp,
-            signature,
-        );
-        assert_ok!(AcurastProcessorManager::pair_with_manager(
-            RuntimeOrigin::signed(processor_account.clone()),
-            update,
-        ));
+        let (manager_account, processor_account) = paired_manager_processor();
 
         assert_ok!(AcurastProcessorManager::advertise_for(
             RuntimeOrigin::signed(manager_account.clone()),
@@ -459,42 +402,332 @@ fn test_advertise_for_success() {
 #[test]
 fn test_advertise_for_failure() {
     ExtBuilder::default().build().execute_with(|| {
-        let (signer, manager_account) = generate_pair_account();
-        let (_, processor_account) = generate_pair_account();
-        let _ = Timestamp::set(RuntimeOrigin::none(), 1657363915010);
-        let timestamp = 1657363915002u128;
-        let signature = generate_signature(&signer, &manager_account, timestamp, 1);
-        let update = ProcessorPairingFor::<Test>::new_with_proof(
-            manager_account.clone(),
-            timestamp,
-            signature,
-        );
-        assert_ok!(AcurastProcessorManager::pair_with_manager(
-            RuntimeOrigin::signed(processor_account.clone()),
-            update,
-        ));
-
-        let (signer, manager_account_2) = generate_pair_account();
-        let (_, processor_account_2) = generate_pair_account();
-
-        let signature = generate_signature(&signer, &manager_account_2, timestamp, 1);
-        let update = ProcessorPairingFor::<Test>::new_with_proof(
-            manager_account_2.clone(),
-            timestamp,
-            signature,
-        );
-        assert_ok!(AcurastProcessorManager::pair_with_manager(
-            RuntimeOrigin::signed(processor_account_2.clone()),
-            update,
-        ));
+        let (_, processor_account) = paired_manager_processor();
+        let (manager_account, _) = paired_manager_processor();
 
         assert_err!(
             AcurastProcessorManager::advertise_for(
-                RuntimeOrigin::signed(manager_account_2),
+                RuntimeOrigin::signed(manager_account),
                 processor_account.clone().into(),
                 (),
             ),
             Error::<Test>::ProcessorPairedWithAnotherManager,
+        );
+    });
+}
+
+#[test]
+fn test_heartbeat_success() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (_, processor_account) = paired_manager_processor();
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+
+        assert_ok!(AcurastProcessorManager::heartbeat(RuntimeOrigin::signed(
+            processor_account.clone()
+        )));
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_some());
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::ProcessorHeartbeat(processor_account)
+            ))
+            .as_ref()
+        );
+    });
+}
+
+#[test]
+fn test_heartbeat_failure() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (_, processor_account) = generate_pair_account();
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+
+        assert_err!(
+            AcurastProcessorManager::heartbeat(RuntimeOrigin::signed(processor_account.clone())),
+            Error::<Test>::ProcessorHasNoManager,
+        );
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+    });
+}
+
+#[test]
+fn test_heartbeat_with_version_success() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (_, processor_account) = paired_manager_processor();
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+        assert!(AcurastProcessorManager::processor_version(&processor_account).is_none());
+
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+        assert_ok!(AcurastProcessorManager::heartbeat_with_version(
+            RuntimeOrigin::signed(processor_account.clone()),
+            version.clone()
+        ));
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_some());
+        assert!(AcurastProcessorManager::processor_version(&processor_account).is_some());
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::ProcessorHeartbeatWithVersion(processor_account, version)
+            ))
+            .as_ref()
+        );
+    });
+}
+
+#[test]
+fn test_heartbeat_with_version_failure() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (_, processor_account) = generate_pair_account();
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+        assert!(AcurastProcessorManager::processor_version(&processor_account).is_none());
+
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+        assert_err!(
+            AcurastProcessorManager::heartbeat_with_version(
+                RuntimeOrigin::signed(processor_account.clone()),
+                version.clone()
+            ),
+            Error::<Test>::ProcessorHasNoManager,
+        );
+
+        assert!(AcurastProcessorManager::processor_last_seen(&processor_account).is_none());
+        assert!(AcurastProcessorManager::processor_version(&processor_account).is_none());
+    });
+}
+
+#[test]
+fn insert_remove_binary_hash_success() {
+    ExtBuilder::default().build().execute_with(|| {
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(
+            RuntimeOrigin::root(),
+            version.clone(),
+            hash.clone().into()
+        ));
+
+        assert!(AcurastProcessorManager::known_binary_hash(&version).is_some());
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::BinaryHashInserted(version.clone(), hash.clone().into())
+            ))
+            .as_ref()
+        );
+
+        assert_ok!(AcurastProcessorManager::remove_binary_hash(
+            RuntimeOrigin::root(),
+            version.clone()
+        ));
+
+        assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::BinaryHashRemoved(version.clone(), hash.clone().into())
+            ))
+            .as_ref()
+        );
+    });
+}
+
+#[test]
+fn insert_remove_binary_hash_failure() {
+    ExtBuilder::default().build().execute_with(|| {
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
+
+        assert_err!(
+            AcurastProcessorManager::insert_binary_hash(
+                RuntimeOrigin::signed(alice_account_id()),
+                version.clone(),
+                hash.clone().into()
+            ),
+            BadOrigin
+        );
+
+        assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
+
+        assert_err!(
+            AcurastProcessorManager::remove_binary_hash(
+                RuntimeOrigin::signed(alice_account_id()),
+                version.clone()
+            ),
+            BadOrigin
+        );
+    });
+}
+
+#[test]
+fn set_processor_update_info_success() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (manager_account, processor_account) = paired_manager_processor();
+
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+
+        assert_ok!(AcurastProcessorManager::set_processor_update_info(RuntimeOrigin::signed(manager_account.clone()), update_info.clone(), vec![processor_account.clone()].try_into().unwrap()));
+
+        assert!(AcurastProcessorManager::processor_update_info(&processor_account).is_some());
+
+        let last_events = events();
+        assert_eq!(
+            last_events.last(),
+            Some(RuntimeEvent::AcurastProcessorManager(
+                Event::ProcessorUpdateInfoSet(manager_account, update_info)
+            )).as_ref()
+        );
+    });
+}
+
+#[test]
+fn set_processor_update_info_failure_1() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (manager_account, processor_account) = paired_manager_processor();
+
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let version = Version {
+            platform: 0,
+            build_number: 2,
+        };
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+
+        assert_err!(
+            AcurastProcessorManager::set_processor_update_info(RuntimeOrigin::signed(manager_account.clone()), update_info.clone(), vec![processor_account].try_into().unwrap()),
+            Error::<Test>::UnknownProcessorVersion,
+        );
+    });
+}
+
+#[test]
+fn set_processor_update_info_failure_2() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (manager_account, _) = paired_manager_processor();
+        let (_, processor_account) = paired_manager_processor();
+
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+
+        assert_err!(
+            AcurastProcessorManager::set_processor_update_info(RuntimeOrigin::signed(manager_account.clone()), update_info.clone(), vec![processor_account].try_into().unwrap()),
+            Error::<Test>::ProcessorPairedWithAnotherManager,
+        );
+    });
+}
+
+#[test]
+fn set_processor_update_info_failure_3() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (_, processor_account) = paired_manager_processor();
+
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+
+        assert_err!(
+            AcurastProcessorManager::set_processor_update_info(RuntimeOrigin::signed(alice_account_id()), update_info.clone(), vec![processor_account].try_into().unwrap()),
+            DispatchError::Other("Manager ID not found"),
+        );
+    });
+}
+
+#[test]
+fn set_processor_update_info_failure_4() {
+    ExtBuilder::default().build().execute_with(|| {
+        let (manager_account, _) = paired_manager_processor();
+
+        let hash = [1u8; 32];
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+
+        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+
+        assert_err!(
+            AcurastProcessorManager::set_processor_update_info(RuntimeOrigin::signed(manager_account.clone()), update_info.clone(), vec![alice_account_id()].try_into().unwrap()),
+            Error::<Test>::ProcessorHasNoManager,
         );
     });
 }

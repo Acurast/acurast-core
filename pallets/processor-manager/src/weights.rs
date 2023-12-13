@@ -128,6 +128,22 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
+	/// Storage: AcurastProcessorManager ProcessorToManagerIdIndex (r:1 w:0)
+	/// Proof: AcurastProcessorManager ProcessorToManagerIdIndex (max_values: None, max_size: Some(32), added: 2507, mode: MaxEncodedLen)
+	/// Storage: Timestamp Now (r:1 w:0)
+	/// Proof: Timestamp Now (max_values: Some(1), max_size: Some(8), added: 503, mode: MaxEncodedLen)
+	/// Storage: AcurastProcessorManager ProcessorHeartbeat (r:0 w:1)
+	/// Proof: AcurastProcessorManager ProcessorHeartbeat (max_values: None, max_size: Some(32), added: 2507, mode: MaxEncodedLen)
+	fn heartbeat_with_version() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `684`
+		//  Estimated: `4990`
+		// Minimum execution time: 18_000_000 picoseconds.
+		Weight::from_parts(18_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 4990))
+			.saturating_add(T::DbWeight::get().reads(2))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}
 	/// Storage: Uniques Account (r:1 w:0)
 	/// Proof: Uniques Account (max_values: None, max_size: Some(112), added: 2587, mode: MaxEncodedLen)
 	/// Storage: AcurastProcessorManager ProcessorToManagerIdIndex (r:1 w:0)
@@ -149,5 +165,31 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(Weight::from_parts(0, 17914))
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(4))
+	}
+
+	fn insert_binary_hash() -> Weight {
+		Weight::from_parts(18_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 4990))
+			.saturating_add(T::DbWeight::get().reads(2))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}
+
+	fn remove_binary_hash() -> Weight {
+		Weight::from_parts(18_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 4990))
+			.saturating_add(T::DbWeight::get().reads(2))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}
+
+	fn set_processor_update_info(x: u32, ) -> Weight {
+		Weight::from_parts(55_087_973, 0)
+			.saturating_add(Weight::from_parts(0, 21817))
+			// Standard Error: 10_940
+			.saturating_add(Weight::from_parts(9_526_349, 0).saturating_mul(x.into()))
+			.saturating_add(T::DbWeight::get().reads(7))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(x.into())))
+			.saturating_add(T::DbWeight::get().writes(5))
+			.saturating_add(T::DbWeight::get().writes((2_u64).saturating_mul(x.into())))
+			.saturating_add(Weight::from_parts(0, 2507).saturating_mul(x.into()))
 	}
 }

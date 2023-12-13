@@ -84,5 +84,56 @@ benchmarks! {
         let ad = T::BenchmarkHelper::advertisement();
     }: _(RawOrigin::Signed(caller), update.item.account.into().into(), ad)
 
+    heartbeat_with_version {
+        let caller: T::AccountId = alice_account_id().into();
+        whitelist_account!(caller);
+        let update = generate_pairing_update_add::<T>(0);
+        Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()].try_into().unwrap())?;
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+    }: _(RawOrigin::Signed(caller), version)
+
+    insert_binary_hash {
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+        let hash: BinaryHash = [1; 32].into();
+    }: _(RawOrigin::Root, version, hash)
+
+    remove_binary_hash {
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+        let hash: BinaryHash = [1; 32].into();
+        Pallet::<T>::insert_binary_hash(RawOrigin::Root.into(), version.clone(), hash.clone())?;
+    }: _(RawOrigin::Root, version)
+
+    set_processor_update_info {
+        let x in 1 .. T::MaxProcessorsInSetUpdateInfo::get();
+        let caller: T::AccountId = alice_account_id().into();
+        whitelist_account!(caller);
+        let mut processors = Vec::<T::AccountId>::new();
+        for i in 0..x {
+            let update = generate_pairing_update_add::<T>(i);
+            processors.push(update.item.account.clone());
+            Pallet::<T>::update_processor_pairings(RawOrigin::Signed(caller.clone()).into(), vec![update.clone()].try_into().unwrap())?;
+        }
+        let version = Version {
+            platform: 0,
+            build_number: 1,
+        };
+        let hash: BinaryHash = [1; 32].into();
+        Pallet::<T>::insert_binary_hash(RawOrigin::Root.into(), version.clone(), hash)?;
+        let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
+        let update_info = UpdateInfo {
+            version,
+            binary_location,
+        };
+    }: _(RawOrigin::Signed(caller), update_info, processors.try_into().unwrap())
+
     impl_benchmark_test_suite!(Pallet, mock::ExtBuilder::default().build(), mock::Test);
 }
