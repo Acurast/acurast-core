@@ -167,14 +167,7 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 			.saturating_add(T::DbWeight::get().writes(4))
 	}
 
-	fn insert_binary_hash() -> Weight {
-		Weight::from_parts(18_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 4990))
-			.saturating_add(T::DbWeight::get().reads(2))
-			.saturating_add(T::DbWeight::get().writes(1))
-	}
-
-	fn remove_binary_hash() -> Weight {
+	fn update_binary_hash() -> Weight {
 		Weight::from_parts(18_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 4990))
 			.saturating_add(T::DbWeight::get().reads(2))

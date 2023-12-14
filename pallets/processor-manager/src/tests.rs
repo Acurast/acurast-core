@@ -523,10 +523,10 @@ fn insert_remove_binary_hash_success() {
 
         assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(
+        assert_ok!(AcurastProcessorManager::update_binary_hash(
             RuntimeOrigin::root(),
             version.clone(),
-            hash.clone().into()
+            Some(hash.clone().into())
         ));
 
         assert!(AcurastProcessorManager::known_binary_hash(&version).is_some());
@@ -535,14 +535,15 @@ fn insert_remove_binary_hash_success() {
         assert_eq!(
             last_events.last(),
             Some(RuntimeEvent::AcurastProcessorManager(
-                Event::BinaryHashInserted(version.clone(), hash.clone().into())
+                Event::BinaryHashUpdated(version.clone(), Some(hash.clone().into()))
             ))
             .as_ref()
         );
 
-        assert_ok!(AcurastProcessorManager::remove_binary_hash(
+        assert_ok!(AcurastProcessorManager::update_binary_hash(
             RuntimeOrigin::root(),
-            version.clone()
+            version.clone(),
+            None,
         ));
 
         assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
@@ -551,7 +552,7 @@ fn insert_remove_binary_hash_success() {
         assert_eq!(
             last_events.last(),
             Some(RuntimeEvent::AcurastProcessorManager(
-                Event::BinaryHashRemoved(version.clone(), hash.clone().into())
+                Event::BinaryHashUpdated(version.clone(), None)
             ))
             .as_ref()
         );
@@ -570,10 +571,10 @@ fn insert_remove_binary_hash_failure() {
         assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
 
         assert_err!(
-            AcurastProcessorManager::insert_binary_hash(
+            AcurastProcessorManager::update_binary_hash(
                 RuntimeOrigin::signed(alice_account_id()),
                 version.clone(),
-                hash.clone().into()
+                Some(hash.clone().into())
             ),
             BadOrigin
         );
@@ -581,9 +582,10 @@ fn insert_remove_binary_hash_failure() {
         assert!(AcurastProcessorManager::known_binary_hash(&version).is_none());
 
         assert_err!(
-            AcurastProcessorManager::remove_binary_hash(
+            AcurastProcessorManager::update_binary_hash(
                 RuntimeOrigin::signed(alice_account_id()),
-                version.clone()
+                version.clone(),
+                None,
             ),
             BadOrigin
         );
@@ -601,7 +603,7 @@ fn set_processor_update_info_success() {
             build_number: 1,
         };
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+        assert_ok!(AcurastProcessorManager::update_binary_hash(RuntimeOrigin::root(), version.clone(), Some(hash.clone().into())));
 
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let update_info = UpdateInfo {
@@ -634,7 +636,7 @@ fn set_processor_update_info_failure_1() {
             build_number: 1,
         };
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+        assert_ok!(AcurastProcessorManager::update_binary_hash(RuntimeOrigin::root(), version.clone(), Some(hash.clone().into())));
 
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let version = Version {
@@ -665,7 +667,7 @@ fn set_processor_update_info_failure_2() {
             build_number: 1,
         };
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+        assert_ok!(AcurastProcessorManager::update_binary_hash(RuntimeOrigin::root(), version.clone(), Some(hash.clone().into())));
 
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let update_info = UpdateInfo {
@@ -691,7 +693,7 @@ fn set_processor_update_info_failure_3() {
             build_number: 1,
         };
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+        assert_ok!(AcurastProcessorManager::update_binary_hash(RuntimeOrigin::root(), version.clone(), Some(hash.clone().into())));
 
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let update_info = UpdateInfo {
@@ -717,7 +719,7 @@ fn set_processor_update_info_failure_4() {
             build_number: 1,
         };
 
-        assert_ok!(AcurastProcessorManager::insert_binary_hash(RuntimeOrigin::root(), version.clone(), hash.clone().into()));
+        assert_ok!(AcurastProcessorManager::update_binary_hash(RuntimeOrigin::root(), version.clone(), Some(hash.clone().into())));
 
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let update_info = UpdateInfo {

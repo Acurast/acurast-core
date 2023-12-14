@@ -182,10 +182,8 @@ pub mod pallet {
         ProcessorAdvertisement(T::AccountId, T::AccountId, T::Advertisement),
         /// Heartbeat with version information. [processor_account_id, version]
         ProcessorHeartbeatWithVersion(T::AccountId, Version),
-        /// Binary hash inserted. [version, binary_hash]
-        BinaryHashInserted(Version, BinaryHash),
-        /// Binary hash removed. [version, binary_hash]
-        BinaryHashRemoved(Version, BinaryHash),
+        /// Binary hash updated. [version, binary_hash]
+        BinaryHashUpdated(Version, Option<BinaryHash>),
         /// Set update info for processor. [manager_account_id, update_info]
         ProcessorUpdateInfoSet(T::AccountId, UpdateInfo),
     }
@@ -383,34 +381,21 @@ pub mod pallet {
         }
 
         #[pallet::call_index(6)]
-        #[pallet::weight(T::WeightInfo::insert_binary_hash())]
-        pub fn insert_binary_hash(
+        #[pallet::weight(T::WeightInfo::update_binary_hash())]
+        pub fn update_binary_hash(
             origin: OriginFor<T>,
             version: Version,
-            hash: BinaryHash,
+            hash: Option<BinaryHash>,
         ) -> DispatchResultWithPostInfo {
             ensure_root(origin)?;
 
-            <KnownBinaryHash<T>>::insert(&version, hash.clone());
-
-            Self::deposit_event(Event::<T>::BinaryHashInserted(version, hash));
-
-            Ok(().into())
-        }
-
-        #[pallet::call_index(7)]
-        #[pallet::weight(T::WeightInfo::remove_binary_hash())]
-        pub fn remove_binary_hash(
-            origin: OriginFor<T>,
-            version: Version,
-        ) -> DispatchResultWithPostInfo {
-            ensure_root(origin)?;
-
-            let hash = <KnownBinaryHash<T>>::take(&version);
-
-            if let Some(hash) = hash {
-                Self::deposit_event(Event::<T>::BinaryHashRemoved(version, hash));
+            if let Some(hash) = &hash {
+                <KnownBinaryHash<T>>::insert(&version, hash.clone());
+            } else {
+                <KnownBinaryHash<T>>::remove(&version)
             }
+
+            Self::deposit_event(Event::<T>::BinaryHashUpdated(version, hash));
 
             Ok(().into())
         }
