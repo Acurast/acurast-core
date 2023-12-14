@@ -10,6 +10,8 @@ use asn1::{
     ObjectIdentifier, ParseResult, SequenceOf, SetOf, SimpleAsn1Readable, SimpleAsn1Writable, Tag,
     Tlv, WriteBuf, WriteResult,
 };
+use chrono;
+use chrono::{Datelike, Timelike};
 use sp_std::prelude::*;
 
 #[derive(Asn1Read, Asn1Write, Clone)]
@@ -94,10 +96,35 @@ pub enum Time {
 
 impl Time {
     pub fn timestamp_millis(&self) -> u64 {
-        match self {
-            Time::UTCTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
-            Time::GeneralizedTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
-        }
+        let date_time = match self {
+            Time::UTCTime(time) => time.as_datetime(), //time.as_chrono().timestamp_millis().try_into().unwrap(),
+            Time::GeneralizedTime(time) => time.as_datetime(), //time.as_chrono().timestamp_millis().try_into().unwrap(),
+        };
+        let initial = chrono::NaiveDateTime::default();
+        let milliseconds = initial
+            .with_second(date_time.second().into())
+            .map(|t| {
+                t.with_minute(date_time.minute().into())
+                    .map(|t| {
+                        t.with_hour(date_time.hour().into())
+                            .map(|t| {
+                                t.with_day(date_time.day().into())
+                                    .map(|t| {
+                                        t.with_month(date_time.month().into())
+                                            .map(|t| t.with_year(date_time.year().into()))
+                                            .flatten()
+                                    })
+                                    .flatten()
+                            })
+                            .flatten()
+                    })
+                    .flatten()
+            })
+            .flatten()
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0);
+
+        milliseconds.try_into().unwrap()
     }
 }
 

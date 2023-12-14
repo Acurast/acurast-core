@@ -34,5 +34,8 @@ pub trait WeightInfo {
     fn pair_with_manager() -> Weight;
     fn recover_funds() -> Weight;
     fn heartbeat() -> Weight;
+    fn heartbeat_with_version() -> Weight;
     fn advertise_for() -> Weight;
+    fn update_binary_hash() -> Weight;
+    fn set_processor_update_info(x: u32) -> Weight;
 }
