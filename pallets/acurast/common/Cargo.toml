@@ -36,6 +36,10 @@ std = [
     "codec/std",
     "scale-info/std",
     "asn1?/std",
+    "p256?/std",
+    "p384?/std",
+    "sha2?/std",
+    "num-bigint?/std",
     "serde",
 ]
 attestation = [
