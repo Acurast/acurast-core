@@ -95,22 +95,13 @@ benchmarks! {
         };
     }: _(RawOrigin::Signed(caller), version)
 
-    insert_binary_hash {
+    update_binary_hash {
         let version = Version {
             platform: 0,
             build_number: 1,
         };
         let hash: BinaryHash = [1; 32].into();
-    }: _(RawOrigin::Root, version, hash)
-
-    remove_binary_hash {
-        let version = Version {
-            platform: 0,
-            build_number: 1,
-        };
-        let hash: BinaryHash = [1; 32].into();
-        Pallet::<T>::insert_binary_hash(RawOrigin::Root.into(), version.clone(), hash.clone())?;
-    }: _(RawOrigin::Root, version)
+    }: _(RawOrigin::Root, version, Some(hash))
 
     set_processor_update_info {
         let x in 1 .. T::MaxProcessorsInSetUpdateInfo::get();
@@ -127,7 +118,7 @@ benchmarks! {
             build_number: 1,
         };
         let hash: BinaryHash = [1; 32].into();
-        Pallet::<T>::insert_binary_hash(RawOrigin::Root.into(), version.clone(), hash)?;
+        Pallet::<T>::update_binary_hash(RawOrigin::Root.into(), version.clone(), Some(hash))?;
         let binary_location: BinaryLocation = b"https://github.com/Acurast/acurast-processor-update/releases/download/processor-1.3.31/processor-1.3.31-devnet.apk".to_vec().try_into().unwrap();
         let update_info = UpdateInfo {
             version,
