@@ -60,38 +60,31 @@ pub fn extract_attestation<'a>(
 
     match version {
         1 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV1>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionV1>(extension.extn_value)?;
             Ok(KeyDescription::V1(parsed))
         }
         2 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV2>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionV2>(extension.extn_value)?;
             Ok(KeyDescription::V2(parsed))
         }
         3 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV3>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionV3>(extension.extn_value)?;
             Ok(KeyDescription::V3(parsed))
         }
         4 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)?;
             Ok(KeyDescription::V4(parsed))
         }
         100 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V100(parsed))
         }
         200 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V200(parsed))
         }
         300 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|error| ValidationError::ParseError(error.to_string()))?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V300(parsed))
         }
         _ => Err(ValidationError::UnsupportedAttestationVersion(version)),

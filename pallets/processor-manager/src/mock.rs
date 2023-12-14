@@ -145,6 +145,7 @@ impl Config for Test {
     type ManagerIdProvider = AcurastManagerIdProvider;
     type ProcessorAssetRecovery = AcurastProcessorAssetRecovery;
     type MaxPairingUpdates = ConstU32<5>;
+    type MaxProcessorsInSetUpdateInfo = ConstU32<100>;
     type Counter = u64;
     type PairingProofExpirationTime = ConstU128<600000>;
     type UnixTime = pallet_timestamp::Pallet<Test>;
