@@ -18,6 +18,7 @@ mod benchmarking;
 
 #[cfg(feature = "runtime-benchmarks")]
 pub use benchmarking::BenchmarkHelper;
+use frame_support::BoundedVec;
 pub use functions::*;
 pub use pallet::*;
 pub use traits::*;
@@ -29,7 +30,9 @@ pub type ProcessorPairingUpdateFor<T> =
     ProcessorPairingUpdate<<T as frame_system::Config>::AccountId, <T as Config>::Proof>;
 
 pub type ProcessorUpdatesFor<T> =
-    frame_support::BoundedVec<ProcessorPairingUpdateFor<T>, <T as Config>::MaxPairingUpdates>;
+    BoundedVec<ProcessorPairingUpdateFor<T>, <T as Config>::MaxPairingUpdates>;
+pub type ProcessorList<T> =
+    BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxProcessorsInSetUpdateInfo>;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -44,10 +47,13 @@ pub mod pallet {
         traits::{Get, UnixTime},
         Blake2_128, Parameter,
     };
-    use frame_system::{ensure_signed, pallet_prelude::OriginFor};
+    use frame_system::{ensure_root, ensure_signed, pallet_prelude::OriginFor};
     use sp_std::prelude::*;
 
-    use crate::{traits::*, ProcessorPairingFor, ProcessorUpdatesFor};
+    use crate::{
+        traits::*, BinaryHash, ProcessorList, ProcessorPairingFor, ProcessorUpdatesFor, UpdateInfo,
+        Version,
+    };
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -59,6 +65,7 @@ pub mod pallet {
         type ManagerIdProvider: ManagerIdProvider<Self>;
         type ProcessorAssetRecovery: ProcessorAssetRecovery<Self>;
         type MaxPairingUpdates: Get<u32>;
+        type MaxProcessorsInSetUpdateInfo: Get<u32>;
         type Counter: Parameter + Member + MaxEncodedLen + Copy + CheckedAdd + Ord + From<u8>;
         type PairingProofExpirationTime: Get<u128>;
         type Advertisement: Parameter + Member;
@@ -140,6 +147,21 @@ pub mod pallet {
     #[pallet::getter(fn processor_last_seen)]
     pub(super) type ProcessorHeartbeat<T: Config> = StorageMap<_, Blake2_128, T::AccountId, u128>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn processor_version)]
+    pub(super) type ProcessorVersion<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, Version>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn known_binary_hash)]
+    pub(super) type KnownBinaryHash<T: Config> =
+        StorageMap<_, Blake2_128Concat, Version, BinaryHash>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn processor_update_info)]
+    pub(super) type ProcessorUpdateInfo<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, UpdateInfo>;
+
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
@@ -158,6 +180,12 @@ pub mod pallet {
         ProcessorHeartbeat(T::AccountId),
         /// Processor advertisement. [manager_account_id, processor_account_id, advertisement]
         ProcessorAdvertisement(T::AccountId, T::AccountId, T::Advertisement),
+        /// Heartbeat with version information. [processor_account_id, version]
+        ProcessorHeartbeatWithVersion(T::AccountId, Version),
+        /// Binary hash updated. [version, binary_hash]
+        BinaryHashUpdated(Version, Option<BinaryHash>),
+        /// Set update info for processor. [manager_account_id, update_info]
+        ProcessorUpdateInfoSet(T::AccountId, UpdateInfo),
     }
 
     // Errors inform users that something went wrong.
@@ -170,6 +198,7 @@ pub mod pallet {
         ProcessorHasNoManager,
         CounterOverflow,
         PairingProofExpired,
+        UnknownProcessorVersion,
     }
 
     impl<T: Config> Pallet<T> {
@@ -330,6 +359,65 @@ pub mod pallet {
                 processor_account_id,
                 advertisement,
             ));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(5)]
+        #[pallet::weight(T::WeightInfo::heartbeat_with_version())]
+        pub fn heartbeat_with_version(
+            origin: OriginFor<T>,
+            version: Version,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+            _ = Self::manager_id_for_processor(&who).ok_or(Error::<T>::ProcessorHasNoManager)?;
+
+            <ProcessorHeartbeat<T>>::insert(&who, T::UnixTime::now().as_millis());
+            <ProcessorVersion<T>>::insert(&who, version.clone());
+
+            Self::deposit_event(Event::<T>::ProcessorHeartbeatWithVersion(who, version));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(6)]
+        #[pallet::weight(T::WeightInfo::update_binary_hash())]
+        pub fn update_binary_hash(
+            origin: OriginFor<T>,
+            version: Version,
+            hash: Option<BinaryHash>,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            if let Some(hash) = &hash {
+                <KnownBinaryHash<T>>::insert(&version, hash.clone());
+            } else {
+                <KnownBinaryHash<T>>::remove(&version)
+            }
+
+            Self::deposit_event(Event::<T>::BinaryHashUpdated(version, hash));
+
+            Ok(().into())
+        }
+
+        #[pallet::call_index(8)]
+        #[pallet::weight(T::WeightInfo::set_processor_update_info(processors.len() as u32))]
+        pub fn set_processor_update_info(
+            origin: OriginFor<T>,
+            update_info: UpdateInfo,
+            processors: ProcessorList<T>,
+        ) -> DispatchResultWithPostInfo {
+            let who = ensure_signed(origin)?;
+
+            _ = Self::known_binary_hash(&update_info.version)
+                .ok_or(Error::<T>::UnknownProcessorVersion)?;
+
+            for processor in processors {
+                _ = Self::ensure_managed(&who, &processor)?;
+                <ProcessorUpdateInfo<T>>::insert(&processor, update_info.clone());
+            }
+
+            Self::deposit_event(Event::<T>::ProcessorUpdateInfoSet(who, update_info));
 
             Ok(().into())
         }

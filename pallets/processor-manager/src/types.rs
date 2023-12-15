@@ -3,6 +3,7 @@ use frame_support::{
     sp_runtime::traits::{IdentifyAccount, MaybeDisplay, Verify},
     traits::{IsType, UnixTime},
 };
+use sp_core::H256;
 
 use acurast_common::ListUpdate;
 
@@ -91,3 +92,20 @@ where
 
 pub type ProcessorPairingUpdate<AccountId, Signature> =
     ListUpdate<ProcessorPairing<AccountId, Signature>>;
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct Version {
+    /// Number representing the device's platform:
+    /// 0: Android
+    pub platform: u32,
+    pub build_number: u32,
+}
+
+pub type BinaryHash = H256;
+pub(crate) const MAX_LOCATION_LENGTH: u32 = 200;
+pub type BinaryLocation = BoundedVec<u8, ConstU32<MAX_LOCATION_LENGTH>>;
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+pub struct UpdateInfo {
+    pub version: Version,
+    pub binary_location: BinaryLocation,
+}

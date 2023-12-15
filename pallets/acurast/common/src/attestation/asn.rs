@@ -1,10 +1,17 @@
 #![cfg_attr(all(feature = "alloc", not(feature = "std"), not(test)), no_std)]
 
-use core::convert::TryInto;
+use core::{
+    convert::TryInto,
+    hash::{Hash, Hasher},
+};
 
 use asn1::{
-    Asn1Read, Asn1Write, BitString, Enumerated, Null, ObjectIdentifier, SequenceOf, SetOf, Tlv,
+    parse, Asn1Read, Asn1Readable, Asn1Writable, Asn1Write, BitString, Enumerated, Null,
+    ObjectIdentifier, ParseResult, SequenceOf, SetOf, SimpleAsn1Readable, SimpleAsn1Writable, Tag,
+    Tlv, WriteBuf, WriteResult,
 };
+use chrono;
+use chrono::{Datelike, Timelike};
 use sp_std::prelude::*;
 
 #[derive(Asn1Read, Asn1Write, Clone)]
@@ -89,10 +96,35 @@ pub enum Time {
 
 impl Time {
     pub fn timestamp_millis(&self) -> u64 {
-        match self {
-            Time::UTCTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
-            Time::GeneralizedTime(time) => time.as_chrono().timestamp_millis().try_into().unwrap(),
-        }
+        let date_time = match self {
+            Time::UTCTime(time) => time.as_datetime(), //time.as_chrono().timestamp_millis().try_into().unwrap(),
+            Time::GeneralizedTime(time) => time.as_datetime(), //time.as_chrono().timestamp_millis().try_into().unwrap(),
+        };
+        let initial = chrono::NaiveDateTime::default();
+        let milliseconds = initial
+            .with_second(date_time.second().into())
+            .map(|t| {
+                t.with_minute(date_time.minute().into())
+                    .map(|t| {
+                        t.with_hour(date_time.hour().into())
+                            .map(|t| {
+                                t.with_day(date_time.day().into())
+                                    .map(|t| {
+                                        t.with_month(date_time.month().into())
+                                            .map(|t| t.with_year(date_time.year().into()))
+                                            .flatten()
+                                    })
+                                    .flatten()
+                            })
+                            .flatten()
+                    })
+                    .flatten()
+            })
+            .flatten()
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0);
+
+        milliseconds.try_into().unwrap()
     }
 }
 
@@ -200,7 +232,7 @@ pub type SecurityLevel = Enumerated;
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV1<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -254,7 +286,7 @@ pub struct AuthorizationListV1<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV2<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -326,7 +358,7 @@ pub struct AuthorizationListV2<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV3<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -403,7 +435,7 @@ pub struct RootOfTrustV1V2<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListV4<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -483,7 +515,7 @@ pub struct AuthorizationListV4<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct AuthorizationListKeyMint<'a> {
     #[explicit(1)]
-    pub purpose: Option<SetOf<'a, i64>>,
+    pub purpose: Option<UnorderedSetOf<i64>>,
     #[explicit(2)]
     pub algorithm: Option<i64>,
     #[explicit(3)]
@@ -597,3 +629,68 @@ pub struct AttestationPackageInfo<'a> {
 /// Unverified (2),
 /// Failed (3)
 pub type VerifiedBootState = Enumerated;
+
+/// Represents an ASN.1 `SET OF`. This is an `Iterator` over values that
+/// are decoded.
+pub struct UnorderedSetOf<T> {
+    elements: Vec<T>,
+}
+
+impl<T> UnorderedSetOf<T> {
+    fn new(elements: Vec<T>) -> Self {
+        Self { elements }
+    }
+
+    pub fn elements(&self) -> &[T] {
+        &self.elements
+    }
+
+    pub fn to_vec(self) -> Vec<T> {
+        self.elements
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Clone> Clone for UnorderedSetOf<T> {
+    fn clone(&self) -> UnorderedSetOf<T> {
+        UnorderedSetOf {
+            elements: self.elements.clone(),
+        }
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + PartialEq> PartialEq for UnorderedSetOf<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.elements().eq(other.elements())
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Hash + Clone> Hash for UnorderedSetOf<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for val in self.elements() {
+            val.hash(state);
+        }
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + 'a> SimpleAsn1Readable<'a> for UnorderedSetOf<T> {
+    const TAG: Tag = <SetOf<T> as SimpleAsn1Readable<'a>>::TAG;
+
+    #[inline]
+    fn parse_data(data: &'a [u8]) -> ParseResult<Self> {
+        parse(data, |parser| {
+            let mut elements = Vec::<T>::new();
+            while !parser.is_empty() {
+                let el = parser.read_element::<T>()?;
+                elements.push(el)
+            }
+            Ok(Self::new(elements))
+        })
+    }
+}
+
+impl<'a, T: Asn1Readable<'a> + Asn1Writable + Clone> SimpleAsn1Writable for UnorderedSetOf<T> {
+    const TAG: Tag = <SetOf<T> as SimpleAsn1Writable>::TAG;
+    fn write_data(&self, _dest: &mut WriteBuf) -> WriteResult {
+        unimplemented!();
+    }
+}

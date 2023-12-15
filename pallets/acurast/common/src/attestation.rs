@@ -60,38 +60,31 @@ pub fn extract_attestation<'a>(
 
     match version {
         1 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV1>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionV1>(extension.extn_value)?;
             Ok(KeyDescription::V1(parsed))
         }
         2 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV2>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionV2>(extension.extn_value)?;
             Ok(KeyDescription::V2(parsed))
         }
         3 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV3>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionV3>(extension.extn_value)?;
             Ok(KeyDescription::V3(parsed))
         }
         4 => {
-            let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionV4>(extension.extn_value)?;
             Ok(KeyDescription::V4(parsed))
         }
         100 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V100(parsed))
         }
         200 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V200(parsed))
         }
         300 => {
-            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)
-                .map_err(|_| ValidationError::ParseError)?;
+            let parsed = asn1::parse_single::<KeyDescriptionKeyMint>(extension.extn_value)?;
             Ok(KeyDescription::V300(parsed))
         }
         _ => Err(ValidationError::UnsupportedAttestationVersion(version)),
@@ -105,19 +98,19 @@ const ECDSA_WITH_SHA384_ALGORITHM: ObjectIdentifier = oid!(1, 2, 840, 10045, 4, 
 const RSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 113549, 1, 1, 1);
 const ECDSA_PBK: ObjectIdentifier = oid!(1, 2, 840, 10045, 2, 1);
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum PublicKey {
     RSA(RSAPbk),
     ECDSA(ECDSACurve),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct RSAPbk {
     exponent: BigUint,
     modulus: BigUint,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ECDSACurve {
     CurveP256(VerifyingKey),
     CurveP384(p384::AffinePoint),
@@ -279,16 +272,6 @@ pub fn peek_attestation_version(data: &[u8]) -> Result<i64, ParseError> {
     result
 }
 
-pub fn validate_certificate_chain_root(
-    chain: &CertificateChainInput,
-) -> Result<(), ValidationError> {
-    let first = chain.first().ok_or(ValidationError::ChainTooShort)?;
-    if !TRUSTED_ROOT_CERTS.contains(&first.as_slice()) {
-        return Err(ValidationError::UntrustedRoot);
-    }
-    Ok(())
-}
-
 /// Validates the chain by ensuring that
 ///
 /// - the chain starts with a self-signed certificate at index 0 that matches one of the known [TRUSTED_ROOT_CERTS]
@@ -297,6 +280,9 @@ pub fn validate_certificate_chain_root(
 pub fn validate_certificate_chain<'a>(
     chain: &'a CertificateChainInput,
 ) -> Result<(Vec<CertificateId>, TBSCertificate<'a>, PublicKey), ValidationError> {
+    let root_pub_key = PublicKey::parse(&asn1::parse_single::<SubjectPublicKeyInfo>(
+        TRUSTED_ROOT_PUB_KEY,
+    )?)?;
     let mut cert_ids = Vec::<CertificateId>::new();
     let fold_result = chain.iter().try_fold::<_, _, Result<_, ValidationError>>(
         (Option::<PublicKey>::None, Option::<Certificate>::None),
@@ -304,6 +290,9 @@ pub fn validate_certificate_chain<'a>(
             let cert = parse_cert(&cert_data)?;
             let payload = parse_cert_payload(&cert_data)?;
             let current_pbk = PublicKey::parse(&cert.tbs_certificate.subject_public_key_info)?;
+            if prev_pbk.is_none() && current_pbk != root_pub_key {
+                return Err(ValidationError::UntrustedRoot);
+            }
 
             validate(&cert, payload, prev_pbk.as_ref().unwrap_or(&current_pbk))?;
 
@@ -326,25 +315,7 @@ pub fn validate_certificate_chain<'a>(
     Ok((cert_ids, last_cert.tbs_certificate, last_cert_pbk))
 }
 
-/// The list of trusted root certificates, as decoded bytes arrays. [Source](https://developer.android.com/training/articles/security-key-attestation#root_certificate)
-///
-// Adding new root certificate:
-//
-//     use std::io::Write;
-//     let mut output = File::create("./__root_certs__/root_x.cer").unwrap();
-//     let line = base64::decode(r"<base64>").unwrap();
-//     output.write_all(&line);
-//
-const TRUSTED_ROOT_CERTS: &[&[u8]] = &[
-    // base64 equivalent: r"MIIFYDCCA0igAwIBAgIJAOj6GWMU0voYMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTYwNTI2MTYyODUyWhcNMjYwNTI0MTYyODUyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaOBpjCBozAdBgNVHQ4EFgQUNmHhAHyIBQlRi0RsR/8aTMnqTxIwHwYDVR0jBBgwFoAUNmHhAHyIBQlRi0RsR/8aTMnqTxIwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAYYwQAYDVR0fBDkwNzA1oDOgMYYvaHR0cHM6Ly9hbmRyb2lkLmdvb2dsZWFwaXMuY29tL2F0dGVzdGF0aW9uL2NybC8wDQYJKoZIhvcNAQELBQADggIBACDIw41L3KlXG0aMiS//cqrG+EShHUGo8HNsw30W1kJtjn6UBwRM6jnmiwfBPb8VA91chb2vssAtX2zbTvqBJ9+LBPGCdw/E53Rbf86qhxKaiAHOjpvAy5Y3m00mqC0w/Zwvju1twb4vhLaJ5NkUJYsUS7rmJKHHBnETLi8GFqiEsqTWpG/6ibYCv7rYDBJDcR9W62BW9jfIoBQcxUCUJouMPH25lLNcDc1ssqvC2v7iUgI9LeoM1sNovqPmQUiG9rHli1vXxzCyaMTjwftkJLkf6724DFhuKug2jITV0QkXvaJWF4nUaHOTNA4uJU9WDvZLI1j83A+/xnAJUucIv/zGJ1AMH2boHqF8CY16LpsYgBt6tKxxWH00XcyDCdW2KlBCeqbQPcsFmWyWugxdcekhYsAWyoSf818NUsZdBWBaR/OukXrNLfkQ79IyZohZbvabO/X+MVT3rriAoKc8oE2Uws6DF+60PV7/WIPjNvXySdqspImSN78mflxDqwLqRBYkA3I75qppLGG9rp7UCdRjxMl8ZDBld+7yvHVgt1cVzJx9xnyGCC23UaicMDSXYrB4I4WHXPGjxhZuCuPBLTdOLU8YRvMYdEvYebWHMpvwGCF6bAx3JBpIeOQ1wDB5y0USicV3YgYGmi+NZfhA4URSh77Yd6uuJOJENRaNVTzk"
-    include_bytes!("./__root_certs__/00E8FA196314D2FA18.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJANUP8luj8tazMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTkxMTIyMjAzNzU4WhcNMzQxMTE4MjAzNzU4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQBOMaBc8oumXb2voc7XCWnuXKhBBK3e2KMGz39t7lA3XXRe2ZLLAkLM5y3J7tURkf5a1SutfdOyXAmeE6SRo83Uh6WszodmMkxK5GM4JGrnt4pBisu5igXEydaW7qq2CdC6DOGjG+mEkN8/TA6p3cnoL/sPyz6evdjLlSeJ8rFBH6xWyIZCbrcpYEJzXaUOEaxxXxgYz5/cTiVKN2M1G2okQBUIYSY6bjEL4aUN5cfo7ogP3UvliEo3Eo0YgwuzR2v0KR6C1cZqZJSTnghIC/vAD32KdNQ+c3N+vl2OTsUVMC1GiWkngNx1OO1+kXW+YTnnTUOtOIswUP/Vqd5SYgAImMAfY8U9/iIgkQj6T2W6FsScy94IN9fFhE1UtzmLoBIuUFsVXJMTz+Jucth+IqoWFua9v1R93/k98p41pjtFX+H8DslVgfP097vju4KDlqN64xV1grw3ZLl4CiOe/A91oeLm2UHOq6wn3esB4r2EIQKb6jTVGu5sYCcdWpXr0AUVqcABPdgL+H7qJguBw09ojm6xNIrw2OocrDKsudk/okr/AwqEyPKw9WnMlQgLIKw1rODG2NvU9oR3GVGdMkUBZutL8VuFkERQGt6vQ2OCw0sV47VMkuYbacK/xyZFiRcrPJPb41zgbQj9XAEyLKCHex0SdDrx+tWUDqG8At2JHA=="
-    include_bytes!("./__root_certs__/00D50FF25BA3F2D6B3.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJAMNrfES5rhgxMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMjExMTE3MjMxMDQyWhcNMzYxMTEzMjMxMDQyWjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQBTNNZe5cuf8oiq+jV0itTGzWVhSTjOBEk2FQvh11J3o3lna0o7rd8RFHnN00q4hi6TapFhh4qaw/iG6Xg+xOan63niLWIC5GOPFgPeYXM9+nBb3zZzC8ABypYuCusWCmt6Tn3+Pjbz3MTVhRGXuT/TQH4KGFY4PhvzAyXwdjTOCXID+aHud4RLcSySr0Fq/L+R8TWalvM1wJJPhyRjqRCJerGtfBagiALzvhnmY7U1qFcS0NCnKjoO7oFedKdWlZz0YAfu3aGCJd4KHT0MsGiLZez9WP81xYSrKMNEsDK+zK5fVzw6jA7cxmpXcARTnmAuGUeI7VVDhDzKeVOctf3a0qQLwC+d0+xrETZ4r2fRGNw2YEs2W8Qj6oDcfPvq9JySe7pJ6wcHnl5EZ0lwc4xH7Y4Dx9RA1JlfooLMw3tOdJZH0enxPXaydfAD3YifeZpFaUzicHeLzVJLt9dvGB0bHQLE4+EqKFgOZv2EoP686DQqbVS1u+9k0p2xbMA105TBIk7npraa8VM0fnrRKi7wlZKwdH+aNAyhbXRW9xsnODJ+g8eF452zvbiKKngEKirK5LGieoXBX7tZ9D1GNBH2Ob3bKOwwIWdEFle/YF/h6zWgdeoaNGDqVBrLr2+0DtWoiB1aDEjLWl9FmyIUyUm7mD/vFDkzF+wm7cyWpQpCVQ=="
-    include_bytes!("./__root_certs__/00C36B7C44B9AE1831.cer"),
-    // base64 equivalent: r"MIIFHDCCAwSgAwIBAgIJAPHBcqaZ6vUdMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNVBAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMjIwMzIwMTgwNzQ4WhcNNDIwMzE1MTgwNzQ4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdSSxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggjnar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGqC4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQoVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+OJtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/EgsTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRiigHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+MRPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9EaDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5UmAGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1UdIwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQB8cMqTllHc8U+qCrOlg3H7174lmaCsbo/bJ0C17JEgMLb4kvrqsXZs01U3mB/qABg/1t5Pd5AORHARs1hhqGICW/nKMav574f9rZN4PC2ZlufGXb7sIdJpGiO9ctRhiLuYuly10JccUZGEHpHSYM2GtkgYbZba6lsCPYAAP83cyDV+1aOkTf1RCp/lM0PKvmxYN10RYsK631jrleGdcdkxoSK//mSQbgcWnmAEZrzHoF1/0gso1HZgIn0YLzVhLSA/iXCX4QT2h3J5z3znluKG1nv8NQdxei2DIIhASWfu804CA96cQKTTlaae2fweqXjdN1/v2nqOhngNyz1361mFmr4XmaKH/ItTwOe72NI9ZcwS1lVaCvsIkTDCEXdm9rCNPAY10iTunIHFXRh+7KPzlHGewCq/8TOohBRn0/NNfh7uRslOSZ/xKbN9tMBtw37Z8d2vvnXq/YWdsm1+JLVwn6yYD/yacNJBlwpddla8eaVMjsF6nBnIgQOf9zKSe06nSTqvgwUHosgOECZJZ1EuzbH4yswbt02tKtKEFhx+v+OTge/06V+jGsqTWLsfrOCNLuA8H++z+pUENmpqnnHovaI47gC+TNpkgYGkkBT6B/m/U01BuOBBTzhIlMEZq9qkDWuM2cA5kW5V3FJUcfHnw1IdYIg2Wxg7yHcQZemFQg=="
-    include_bytes!("./__root_certs__/root_4.cer"),
-];
+const TRUSTED_ROOT_PUB_KEY: &'static [u8] = include_bytes!("./__root_key__/public.key");
 
 #[cfg(test)]
 mod tests {
@@ -356,8 +327,7 @@ mod tests {
     };
 
     use super::{
-        asn::KeyDescription, validate_certificate_chain, validate_certificate_chain_root,
-        CertificateChainInput, CertificateInput,
+        asn::KeyDescription, validate_certificate_chain, CertificateChainInput, CertificateInput,
     };
 
     pub fn decode_certificate_chain(chain: &Vec<&str>) -> CertificateChainInput {
@@ -402,7 +372,26 @@ mod tests {
             SAMSUNG_KEY_CERT,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        validate_certificate_chain_root(&decoded_chain)?;
+        let (_, cert, _) = validate_certificate_chain(&decoded_chain)?;
+        let key_description = extract_attestation(cert.extensions)?;
+        match &key_description {
+            KeyDescription::V100(key_description) => {
+                assert_eq!(key_description.attestation_version, 100)
+            }
+            _ => return Err(()),
+        }
+        let _: BoundedKeyDescription = key_description.try_into()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_validate_samsung_chain_2() -> Result<(), Error> {
+        let decoded_chain = [
+            hex_literal::hex!("3082051c30820304a003020102020900d50ff25ba3f2d6b3300d06092a864886f70d01010b0500301b311930170603550405131066393230303965383533623662303435301e170d3139313132323230333735385a170d3334313131383230333735385a301b31193017060355040513106639323030396538353362366230343530820222300d06092a864886f70d01010105000382020f003082020a0282020100afb6c7822bb1a701ec2bb42e8bcc541663abef982f32c77f7531030c97524b1b5fe809fbc72aa9451f743cbd9a6f1335744aa55e77f6b6ac3535ee17c25e639517dd9c92e6374a53cbfe258f8ffbb6fd129378a22a4ca99c452d47a59f3201f44197ca1ccd7e762fb2f53151b6feb2fffd2b6fe4fe5bc6bd9ec34bfe08239daafceb8eb5a8ed2b3acd9c5e3a7790e1b51442793159859811ad9eb2a96bbdd7a57c93a91c41fccd27d67fd6f671aa0b815261ad384fa37944864604ddb3d8c4f920a19b1656c2f14ad6d03c56ec060899041c1ed1a5fe6d3440b556bad1d0a152589c53e55d370762f0122eef91861b1b0e6c4c80927499c0e9bec0b83e3bc1f93c72c049604bbd2f1345e62c3f8e26dbec06c94766f3c128239d4f4312fad8123887e06becf567583bf8355a81feeabaf99a83c8df3e2a322afc672bf120b135158b6821ceaf309b6eee77f98833b018daa10e451f06a374d50781f359082966bb778b9308942698e74e0bcd24628a01c2cc03e51f0b3e5b4ac1e4df9eaf9ff6a492a77c1483882885015b422ce67b80b88c9b48e13b607ab545c723ff8c44f8f2d368b9f6520d31145ebf9e862ad71df6a3bfd2450959d653740d97a12f368b13ef66d5d0a54a6e2f5d9a6fef446832bc67844725861f093dd0e6f3405da89643ef0f4d69b6420051fdb93049673e36950580d3cdf4fbd08bc58483952600630203010001a3633061301d0603551d0e041604143661e1007c880509518b446c47ff1a4cc9ea4f12301f0603551d230418301680143661e1007c880509518b446c47ff1a4cc9ea4f12300f0603551d130101ff040530030101ff300e0603551d0f0101ff040403020204300d06092a864886f70d01010b050003820201004e31a05cf28ba65dbdafa1ced70969ee5ca84104added8a306cf7f6dee50375d745ed992cb0242cce72dc9eed51191fe5ad52bad7dd3b25c099e13a491a3cdd487a5acce8766324c4ae46338246ae7b78a418acbb98a05c4c9d696eeaab609d0ba0ce1a31be98490df3f4c0ea9ddc9e82ffb0fcb3e9ebdd8cb952789f2b1411fac56c886426eb7296042735da50e11ac715f1818cf9fdc4e254a3763351b6a2440150861263a6e310be1a50de5c7e8ee880fdd4be5884a37128d18830bb3476bf4291e82d5c66a6494939e08480bfbc00f7d8a74d43e73737ebe5d8e4ec515302d4689692780dc7538ed7e9175be6139e74d43ad388b3050ffd5a9de5262000898c01f63c53dfe22209108fa4f65ba16c49ccbde0837d7c5844d54b7398ba0122e505b155c9313cfe26e72d87e22aa1616e6bdbf547ddff93df29e35a63b455fe1fc0ec95581f3f4f7bbe3bb828396a37ae3157582bc3764b9780a239efc0f75a1e2e6d941ceabac27ddeb01e2bd8421029bea34d51aee6c60271d5a95ebd00515a9c0013dd80bf87eea260b81c34f688e6eb1348af0d8ea1cac32acb9d93fa24aff030a84c8f2b0f569cc95080b20ac35ace0c6d8dbd4f6847719519d32450166eb4bf15b859044501adeaf436382c34b15e3b54c92e61b69c2bfc7264589172b3c93dbe35ce06d08fd5c01322ca0877b1d12743af1fad5940ea1bc02dd891c").to_vec().try_into().unwrap(),
+            hex_literal::hex!("3082039930820181a00302010202105f641897b6861d5994a20e80ba2a7b08300d06092a864886f70d01010b0500301b311930170603550405131066393230303965383533623662303435301e170d3231303931353232353733305a170d3331303931333232353733305a303f31123010060355040c0c095374726f6e67426f78312930270603550405132031383464643461376438613731333165393861616534656137616635313064613076301006072a8648ce3d020106052b8104002203620004e242634c3b59ae131662e099fec272ec720d7642cdcc042f5f605cffddbe73b36822d2181fd27684afc25ba59983efa91a60f901a0097545163a7654c662f62e9059d97cc14e592d5efc69ec25cac3ccbda903fd511b1c4b13825d2f19e92a59a3633061301d0603551d0e0416041448e9cf69260a89c4c584499c6dbad846e5a266b3301f0603551d230418301680143661e1007c880509518b446c47ff1a4cc9ea4f12300f0603551d130101ff040530030101ff300e0603551d0f0101ff040403020204300d06092a864886f70d01010b050003820201004931dd12fbf627e89b0cce272e83b0071ca0538b42d8001e34f8ddc710fba237c7040361520769fda10a17501db710dc1894ccbf1fff6f4bcedff0a7708fe6b40fa456b9f528d46dcc04a2167b7c130f649ac1f1756794438b315d15877fe790253f13e4023979bb0688bc44af9f09eeee1a4d9f0339f3508f689ba24026c7e59e5b527740762fa87e76d70b6ab24ad4fb2f2d7dd4ac4d0b69226a9a8a124a3bfe5319f16c530aec2508537dec72ea7bc9d0b75eb4cccc70844912d8089a56b21d6d64a1ae55c3ae6c5f9a3a8bbed5d0c64501071082f1df33997bbc5bdb1461fcf5eeb3ffc39f47d15b24d3bdd3904963b37197b6773cfe314b94a653f691ba5294cf6df110b627100d1579f7b6ef8b3b643d0606e072869de7ce6d5d6fde1ff7ee60c251b0f633cb20203fe8243857b0fbcecfcd92f8dd6db31aa5022c695fa912f4de1782e2c42c32aa8e7bf4f8d2626cc151336871fde59f85ce66a193a7a2d8e3529ef03a21ee4bdbc2880772831cf0fa53a301f11efa1951eaaca5c5a7740d1ab5e206b411b27f23cd93fab10e0ee40c08ef61fb8d18e521eb867fc169e64af8be6e79fb5923c706541bfe44cf76bf7a6774f3b4b9e8b9876eca4a1bd896490856f61f1678d06c176dafc228eeb797052b4b24d320879e1ee5181f763a4061cf77f9b5034a8ce317ea7ce1b8d10061d14d39acf8fdb463dbcd44ac5524").to_vec().try_into().unwrap(),
+            hex_literal::hex!("308201fe30820185a00302010202106fd912a55cb7563380ddfa2ac2d1eb8c300a06082a8648ce3d040302303f31123010060355040c0c095374726f6e67426f7831293027060355040513203138346464346137643861373133316539386161653465613761663531306461301e170d3231303931353232353831375a170d3331303931333232353831375a303f31123010060355040c0c095374726f6e67426f78312930270603550405132037386235656561343461313465353437373261363862653665623738313462343059301306072a8648ce3d020106082a8648ce3d03010703420004df1afbe9c0d1fb4d291a6573de2cdf95ca9f43e4bd2f33ded358ca8118dd42ea619a9cdbccd4cc32335f5db51774bb5e9ccf08a2d6d3259572a27fe064fd451da3633061301d0603551d0e04160414f40c71002bcb6425158db7b4b552d09820d9e4c9301f0603551d2304183016801448e9cf69260a89c4c584499c6dbad846e5a266b3300f0603551d130101ff040530030101ff300e0603551d0f0101ff040403020204300a06082a8648ce3d0403020367003064023044f91fe977e5ddba9c69a4f0b0d9b7c550e8e117216d6768b3477e4277fb88e9ed1dcae08c538b5452f30f4aabd473c10230312efaac05f998263283e0b718025eaa224ee8e386b6f143b9781c789f3a38abc8480731325893d6efc25b67c473ecf8").to_vec().try_into().unwrap(),
+            hex_literal::hex!("308202ba30820260a003020102020101300a06082a8648ce3d040302303f31123010060355040c0c095374726f6e67426f7831293027060355040513203738623565656134346131346535343737326136386265366562373831346234301e170d3730303130313030303030305a170d3439313233313233353935395a301f311d301b06035504031314416e64726f6964204b657973746f7265204b65793059301306072a8648ce3d020106082a8648ce3d03010703420004e203b4ed148733aca6322978ffb9d72dc940919d489d87ae5242cf6eb39b6ae8ab9edf67310b5b88e8ab5e82f7ec6cb7778ad00c480e4846aa6dbbde55303b43a382016b30820167300c0603551d0f0405030307880030820155060a2b06010401d67902011104820145308201410201640a01020201640a0102042052331675bfbad8106ff561287fcb0397307dc4ed8cccc3f7e2ace4a7fe82f19c04003065bf853d080206018c1a85f13ebf85455504533051312b30290424636f6d2e616375726173742e61747465737465642e6578656375746f722e63616e61727902011031220420ec70c2a4e072a0f586552a68357b23697c9d45f1e1257a8c4d29a25ac49824333081a7a10b3109020106020103020102a203020103a30402020100a5053103020100aa03020101bf8377020500bf853e03020100bf85404c304a0420c276f9fcf895a8838c8d6e6ec441494822e69acfca3bb27715790b2951da33980101ff0a010004209b51df228d989cd600b59e307b0bbc1d92013f969d4cebcc0ca3e1556bff6e7bbf854105020301fbd0bf854205020303163fbf854e0602040134b09dbf854f0602040134b09d300a06082a8648ce3d040302034800304502200229006e3a528c45224739b7773731c99ca811fa3ee57121626bbc9279fad3af022100bf47d355feae07bb6a4528e8872a8775248d4960477ce807cf4ee7ce902d42b9").to_vec().try_into().unwrap(),
+        ].to_vec().try_into().unwrap();
         let (_, cert, _) = validate_certificate_chain(&decoded_chain)?;
         let key_description = extract_attestation(cert.extensions)?;
         match &key_description {
@@ -448,7 +437,6 @@ mod tests {
 
         for chain in chains {
             let decoded_chain = decode_certificate_chain(&chain);
-            validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
             let (_, cert, _) =
                 validate_certificate_chain(&decoded_chain).expect("validating chain failed");
             let key_description = extract_attestation(cert.extensions).map_err(|err| {
@@ -486,7 +474,6 @@ mod tests {
             PIXEL_KEY_CERT_INVALID,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        validate_certificate_chain_root(&decoded_chain).expect("validating root failed");
         let res = validate_certificate_chain(&decoded_chain);
         match res {
             Err(e) => assert_eq!(e, ValidationError::InvalidSignature),
@@ -504,9 +491,9 @@ mod tests {
             PIXEL_KEY_CERT_INVALID,
         ];
         let decoded_chain = decode_certificate_chain(&chain);
-        let res = validate_certificate_chain_root(&decoded_chain);
+        let res = validate_certificate_chain(&decoded_chain);
         match res {
-            Err(e) => assert_eq!(e, ValidationError::UntrustedRoot),
+            Err(e) => assert_eq!(e, ValidationError::InvalidSignature),
             _ => return Err(()),
         };
         Ok(())
