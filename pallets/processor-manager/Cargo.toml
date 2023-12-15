@@ -21,7 +21,6 @@ acurast-common = { path = "../acurast/common", default-features = false }
 frame-benchmarking = { git = "https://github.com/paritytech/substrate", optional = true, default-features = false, branch = "polkadot-v0.9.43" }
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 pallet-uniques = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3", optional = true }
@@ -36,7 +35,6 @@ sp-std = { git = "https://github.com/paritytech/substrate", default-features = f
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-uniques = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3" }
@@ -50,13 +48,14 @@ std = [
 	"frame-system/std",
 	"frame-benchmarking/std",
 	"acurast-common/std",
+	"pallet-uniques?/std",
 	"sp-core/std",
+	"sp-std/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"sp-io",
 	"pallet-balances/runtime-benchmarks",
-	"pallet-assets/runtime-benchmarks",
 	"pallet-uniques/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"hex-literal",

@@ -1,4 +1,6 @@
-use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
+use frame_support::{
+    pallet_prelude::GenesisBuild, parameter_types, traits::fungible, traits::Everything, PalletId,
+};
 use sp_core::*;
 use sp_io;
 use sp_runtime::traits::{AccountIdConversion, AccountIdLookup, BlakeTwo256};

@@ -1,4 +1,4 @@
-use frame_support::traits::ConstU32;
+use frame_support::traits::{fungible, ConstU32};
 use frame_support::{pallet_prelude::GenesisBuild, parameter_types, traits::Everything, PalletId};
 use hex_literal::hex;
 use sp_io;

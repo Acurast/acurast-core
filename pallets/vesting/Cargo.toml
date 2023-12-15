@@ -20,8 +20,6 @@ frame-benchmarking = { git = "https://github.com/paritytech/substrate", optional
 sp-io = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
-pallet-uniques = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, optional = true, branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3", optional = true }
 
@@ -39,8 +37,6 @@ serde = { version = "1.0.136", features = ["derive"], optional = true }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
-pallet-assets = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
-pallet-uniques = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43" }
 hex-literal = { version = "0.3" }
 
@@ -55,14 +51,13 @@ std = [
 	"sp-runtime/std",
 	"acurast-common/std",
 	"serde",
+	"sp-std/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"sp-io",
 	"sp-core",
 	"pallet-balances/runtime-benchmarks",
-	"pallet-assets/runtime-benchmarks",
-	"pallet-uniques/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"hex-literal",
 ]
