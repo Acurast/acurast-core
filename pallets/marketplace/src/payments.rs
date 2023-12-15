@@ -12,7 +12,6 @@ use frame_support::{
 };
 use sp_runtime::SaturatedConversion;
 use sp_std::prelude::*;
-use xcm::prelude::AssetId;
 
 use pallet_acurast::{JobId, MultiOrigin};
 
@@ -69,19 +68,6 @@ pub trait FeeManager {
     fn get_fee_percentage() -> Percent;
     fn get_matcher_percentage() -> Percent;
     fn pallet_id() -> PalletId;
-}
-
-trait IsNativeAsset {
-    fn is_native_asset(&self) -> bool;
-}
-
-impl IsNativeAsset for AssetId {
-    fn is_native_asset(&self) -> bool {
-        match self {
-            AssetId::Concrete(multi_location) => multi_location.is_here(),
-            _ => false,
-        }
-    }
 }
 
 pub struct AssetRewardManager<AssetSplit, Currency, JobBudget>(

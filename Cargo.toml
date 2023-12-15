@@ -9,7 +9,7 @@ members = [
 	"pallets/marketplace/reputation",
 	"p256-crypto",
 ]
-exclude = ["pallets/proxy"]
+exclude = ["pallets/proxy", "pallets/assets-manager"]
 
 [workspace.package]
 authors = [ "Papers AG" ]

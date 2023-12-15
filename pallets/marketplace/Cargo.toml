@@ -30,7 +30,6 @@ sp-io = { git = "https://github.com/paritytech/substrate", default-features = fa
 sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 jsonrpsee = { version = "0.16.2", features = ["client-core", "server", "macros"], optional = true }
 sp-blockchain = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43", optional = true }
-pallet-assets = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 
 # for RPC
@@ -39,14 +38,8 @@ serde = { version = "1.0.136", features = ["derive"], optional = true }
 thiserror = "1.0"
 log = { version = "0.4.17", default-features = false }
 
-# Polkadot
-xcm = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.43" }
-xcm-executor = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.43" }
-xcm-builder = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.43" }
-
 # Acurast
 pallet-acurast = { path = "../acurast", default-features = false}
-pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
 acurast-reputation = { path = "./reputation", default-features = false }
 
 # benchmarks
@@ -76,9 +69,7 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"parachains-common",
 	"pallet-acurast/runtime-benchmarks",
-	"pallet-acurast-assets-manager/runtime-benchmarks",
 	"pallet-acurast-processor-manager/runtime-benchmarks",
-	"xcm-builder/runtime-benchmarks",
 ]
 
 std = [
@@ -87,7 +78,6 @@ std = [
 	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
-	"pallet-assets/std",
 	"pallet-timestamp/std",
 	"parachain-info/std",
 	"parachains-common/std",
@@ -97,11 +87,7 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-version/std",
-	"xcm-builder/std",
-	"xcm-executor/std",
-	"xcm/std",
 	"pallet-acurast/std",
-	"pallet-acurast-assets-manager/std",
 	"acurast-reputation/std",
 	"serde",
 	"jsonrpsee",
