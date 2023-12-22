@@ -25,6 +25,9 @@ hex-literal = { version = "0.3", default-features = false }
 pallet-acurast = { path = "../acurast", default-features = false }
 pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 
+acurast-proxy-ink = { path = "../../ink/proxy", default-features = false }
+ckb-merkle-mountain-range = { version = "0.6.0", default-features = false }
+
 # SDKs
 tezos-core = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
 tezos-michelson = { git = "https://github.com/airgap-it/tezos-rust-sdk", default-features = false, branch = "feat/nostd" }
@@ -76,7 +79,8 @@ std = [
 	"sp-std/std",
 	"strum/std",
 	"tezos-core/std",
-	"tezos-michelson/std"
+	"tezos-michelson/std",
+	"acurast-proxy-ink/std"
 ]
 
 runtime-benchmarks = [

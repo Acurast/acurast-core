@@ -13,6 +13,8 @@ mod mock;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
 mod stub;
 #[cfg(test)]
+mod substrate_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -454,7 +456,7 @@ pub mod pallet {
             <CurrentTargetChainOwner<T, I>>::set(owner);
         }
 
-        /// Processes a message with `key and `payload`.
+        /// Processes a message with `key` and `payload`.
         ///
         /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
         /// See [`Self::process_action()`].

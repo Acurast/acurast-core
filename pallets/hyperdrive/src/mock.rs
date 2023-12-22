@@ -23,7 +23,7 @@ use sp_std::prelude::*;
 use pallet_acurast_marketplace::RegistrationExtra;
 
 use crate::chain::tezos::TezosParser;
-use crate::instances::{EthereumInstance, TezosInstance};
+use crate::instances::{AlephZeroInstance, EthereumInstance, TezosInstance};
 use crate::stub::AcurastAccountId;
 use crate::types::RawAction;
 use crate::{weights, ActionExecutor, ParsedAction, StateOwner, StateProof, StateProofNode};
@@ -41,7 +41,8 @@ frame_support::construct_runtime!(
     pub enum Test {
         System: frame_system,
         TezosHyperdrive: crate::<Instance1>,
-        EthereumHyperdrive: crate::<Instance2>
+        EthereumHyperdrive: crate::<Instance2>,
+        AlephZeroHyperdrive: crate::<Instance3>,
     }
 );
 
@@ -121,6 +122,32 @@ impl crate::Config<EthereumInstance> for Test {
     type ActionExecutor = ();
     type Proof = crate::chain::ethereum::EthereumProof<
         AcurastAccountId,
+        <Self as frame_system::Config>::AccountId,
+    >;
+    type WeightInfo = weights::WeightInfo<Test>;
+}
+
+impl crate::Config<AlephZeroInstance> for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type ParsableAccountId = AcurastAccountId;
+    type TargetChainOwner = TargetChainStateOwner;
+    type TargetChainHash = H256;
+    type TargetChainBlockNumber = u64;
+    type Balance = Balance;
+    type RegistrationExtra =
+        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
+    type MaxAllowedSources = MaxAllowedSources;
+    type MaxSlots = MaxSlots;
+    type MaxEnvVars = CU32<10>;
+    type EnvKeyMaxSize = CU32<32>;
+    type EnvValueMaxSize = CU32<1024>;
+    type MaxTransmittersPerSnapshot = CU32<64>;
+    type TargetChainHashing = Keccak256;
+    type TransmissionRate = TransmissionRate;
+    type TransmissionQuorum = TransmissionQuorum;
+    type ActionExecutor = ();
+    type Proof = crate::chain::substrate::SubstrateProof<
+        Self::ParsableAccountId,
         <Self as frame_system::Config>::AccountId,
     >;
     type WeightInfo = weights::WeightInfo<Test>;
