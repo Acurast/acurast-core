@@ -22,9 +22,6 @@ acurast-state-ink = { path = "../state", default-features = false, features = ["
 acurast-validator-ink = { path = "../validator", default-features = false, features = ["ink-as-dependency"] }
 acurast-consumer-ink = { path = "../consumer", default-features = false, features = ["ink-as-dependency"] }
 
-[dev-dependencies]
-ink_e2e = "4.2.0"
-
 [lib]
 path = "lib.rs"
 
@@ -40,4 +37,3 @@ std = [
     "acurast-consumer-ink/std"
 ]
 ink-as-dependency = []
-e2e-tests = []

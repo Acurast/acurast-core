@@ -12,9 +12,6 @@ scale-info = { version = "2.6", default-features = false, features = ["derive"],
 
 ckb-merkle-mountain-range = { version = "0.6.0", default-features = false }
 
-[dev-dependencies]
-ink_e2e = "4.2.0"
-
 [lib]
 path = "lib.rs"
 
@@ -27,4 +24,3 @@ std = [
     "ckb-merkle-mountain-range/std"
 ]
 ink-as-dependency = []
-e2e-tests = []
