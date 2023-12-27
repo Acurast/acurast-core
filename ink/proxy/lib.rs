@@ -1,14 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-use ink::env::{ContractEnv, Environment};
-pub use proxy::{
-    AssignProcessorPayload, FinalizeJobPayload, IncomingAction, IncomingActionPayloadV1,
-    OutgoingAction, OutgoingActionPayloadV1, Version, VersionedIncomingActionPayload,
-    VersionedOutgoingActionPayload,
-};
-
-pub type InkAccountId = <<proxy::Proxy as ContractEnv>::Env as Environment>::AccountId;
-
 #[ink::contract]
 mod proxy {
     use ink::{
@@ -22,10 +13,16 @@ mod proxy {
         LangError,
     };
     use scale::{Decode, Encode};
-    use scale_info::prelude::cmp::Ordering;
 
-    use acurast_helpers_ink::OuterError;
+    use acurast_core_ink::{
+        types::{
+            IncomingAction, IncomingActionPayloadV1, OutgoingActionPayloadV1,
+            Version, VersionedIncomingActionPayload, RegisterJobPayloadV1, SetJobEnvironmentPayloadV1, SetProcessorJobEnvironmentV1, RegisterJobMatchV1
+        },
+    };
     use acurast_validator_ink::validator::{LeafProof, MerkleProof};
+
+    pub type OuterError<T> = Result<Result<T, ink::LangError>, ink::env::Error>;
 
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -41,8 +38,6 @@ mod proxy {
         pub public_key: Vec<u8>,
         pub processors: Vec<SetJobEnvironmentProcessor>,
     }
-
-    pub type SetJobEnvironmentAction = UserPayloadSetJobEnvironmentAction;
 
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -77,31 +72,6 @@ mod proxy {
 
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct RegisterJobAction {
-        pub job_id: u128,
-        pub allowed_sources: Vec<AccountId>,
-        pub allow_only_verified_sources: bool,
-        pub destination: AccountId,
-        pub required_modules: Vec<u16>,
-        pub script: Vec<u8>,
-        pub duration: u64,
-        pub start_time: u64,
-        pub end_time: u64,
-        pub interval: u64,
-        pub max_start_delay: u64,
-        pub memory: u32,
-        pub network_requests: u32,
-        pub storage: u32,
-        // Extra,
-        pub slots: u8,
-        pub reward: u128,
-        pub min_reputation: Option<u128>,
-        pub instant_match: Vec<RegisterJobMatch>,
-        pub expected_fulfillment_fee: u128,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum UserAction {
         RegisterJob(UserPayloadRegisterJob),
         DeregisterJob(u128),
@@ -119,136 +89,36 @@ mod proxy {
     }
 
     #[derive(Clone, Eq, PartialEq, Decode)]
-    pub struct OutgoingAction {
-        pub id: u64,
-        pub origin: AccountId,
-        pub payload: VersionedOutgoingActionPayload,
-    }
-
-    impl OutgoingAction {
-        pub fn decode(payload: &Vec<u8>) -> Result<Self, Error> {
-            match RawOutgoingAction::decode(&mut payload.as_slice()) {
-                Err(err) => Err(Error::InvalidOutgoingAction(format!("{:?}", err))),
-                Ok(action) => Ok(Self {
-                    id: action.id,
-                    origin: action.origin,
-                    payload: VersionedOutgoingActionPayload::decode(action)?,
-                }),
-            }
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Decode)]
-    pub enum VersionedOutgoingActionPayload {
-        V1(OutgoingActionPayloadV1),
-    }
-
-    impl VersionedOutgoingActionPayload {
-        fn decode(action: RawOutgoingAction) -> Result<Self, Error> {
-            match action.payload_version {
-                v if v == Version::V1 as u16 => {
-                    let action = OutgoingActionPayloadV1::decode(&mut action.payload.as_slice())
-                        .map_err(|err| {
-                            Error::Verbose(format!("Cannot decode incoming action V1 {:?}", err))
-                        })?;
-
-                    Ok(Self::V1(action))
-                }
-                v => Err(Error::UnknownIncomingActionVersion(v)),
-            }
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub enum OutgoingActionPayloadV1 {
-        RegisterJob(RegisterJobAction),
-        DeregisterJob(u128),
-        FinalizeJob(Vec<u128>),
-        SetJobEnvironment(SetJobEnvironmentAction),
-        Noop,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Decode)]
     pub struct RawIncomingAction {
         id: u64,
         payload_version: u16,
         payload: Vec<u8>,
     }
 
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub struct IncomingAction {
-        pub id: u64,
-        pub payload: VersionedIncomingActionPayload,
+    fn decode_incoming_action(payload: &Vec<u8>) -> Result<IncomingAction, Error> {
+        match RawIncomingAction::decode(&mut payload.as_slice()) {
+            Err(err) => Err(Error::InvalidIncomingAction(format!("{:?}", err))),
+            Ok(action) => Ok(IncomingAction {
+                id: action.id,
+                payload: decode_versioned_incoming_action_payload(action)?,
+            }),
+        }
     }
 
-    impl IncomingAction {
-        fn decode(payload: &Vec<u8>) -> Result<Self, Error> {
-            match RawIncomingAction::decode(&mut payload.as_slice()) {
-                Err(err) => Err(Error::InvalidIncomingAction(format!("{:?}", err))),
-                Ok(action) => Ok(Self {
-                    id: action.id,
-                    payload: VersionedIncomingActionPayload::decode(action)?,
-                }),
+    fn decode_versioned_incoming_action_payload(
+        action: RawIncomingAction,
+    ) -> Result<VersionedIncomingActionPayload, Error> {
+        match action.payload_version {
+            v if v == Version::V1 as u16 => {
+                let action = IncomingActionPayloadV1::decode(&mut action.payload.as_slice())
+                    .map_err(|err| {
+                        Error::Verbose(format!("Cannot decode incoming action V1 {:?}", err))
+                    })?;
+
+                Ok(VersionedIncomingActionPayload::V1(action))
             }
+            v => Err(Error::UnknownIncomingActionVersion(v)),
         }
-    }
-
-    impl Ord for IncomingAction {
-        fn cmp(&self, other: &Self) -> Ordering {
-            if self.id < other.id {
-                Ordering::Less
-            } else if self.id > other.id {
-                Ordering::Greater
-            } else {
-                Ordering::Equal
-            }
-        }
-    }
-
-    impl PartialOrd for IncomingAction {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub enum VersionedIncomingActionPayload {
-        V1(IncomingActionPayloadV1),
-    }
-
-    impl VersionedIncomingActionPayload {
-        fn decode(action: RawIncomingAction) -> Result<Self, Error> {
-            match action.payload_version {
-                v if v == Version::V1 as u16 => {
-                    let action = IncomingActionPayloadV1::decode(&mut action.payload.as_slice())
-                        .map_err(|err| {
-                            Error::Verbose(format!("Cannot decode incoming action V1 {:?}", err))
-                        })?;
-
-                    Ok(Self::V1(action))
-                }
-                v => Err(Error::UnknownIncomingActionVersion(v)),
-            }
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub struct AssignProcessorPayload {
-        pub job_id: u128,
-        pub processor: AccountId,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub struct FinalizeJobPayload {
-        pub job_id: u128,
-        pub unused_reward: u128,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
-    pub enum IncomingActionPayloadV1 {
-        AssignJobProcessor(AssignProcessorPayload),
-        FinalizeJob(FinalizeJobPayload),
-        Noop,
     }
 
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -261,11 +131,6 @@ mod proxy {
         Assigned = 2,
         /// Status when a job has been finalized or cancelled
         FinalizedOrCancelled = 3,
-    }
-
-    #[derive(Clone, Eq, PartialEq)]
-    pub enum Version {
-        V1 = 1,
     }
 
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -581,11 +446,11 @@ mod proxy {
                         self.job_info
                             .insert(self.next_job_id, &(Version::V1 as u16, info.encode()));
 
-                        OutgoingActionPayloadV1::RegisterJob(RegisterJobAction {
+                        OutgoingActionPayloadV1::RegisterJob(RegisterJobPayloadV1 {
                             job_id,
-                            allowed_sources: payload.allowed_sources,
+                            allowed_sources: payload.allowed_sources.iter().map(|source| *source.as_ref()).collect(),
                             allow_only_verified_sources: payload.allow_only_verified_sources,
-                            destination: payload.destination,
+                            destination: *payload.destination.as_ref(),
                             required_modules: payload.required_modules,
                             script: payload.script,
                             duration: payload.duration,
@@ -600,7 +465,10 @@ mod proxy {
                             slots: payload.slots,
                             reward: payload.reward,
                             min_reputation: payload.min_reputation,
-                            instant_match: payload.instant_match,
+                            instant_match: payload.instant_match.iter().map(|m| RegisterJobMatchV1 {
+                                source: *m.source.as_ref(),
+                                start_delay: m.start_delay
+                            }).collect(),
                             expected_fulfillment_fee: payload.expected_fulfillment_fee,
                         })
                     }
@@ -645,7 +513,14 @@ mod proxy {
                                 }
                             }
                         }
-                        OutgoingActionPayloadV1::SetJobEnvironment(payload)
+                        OutgoingActionPayloadV1::SetJobEnvironment(SetJobEnvironmentPayloadV1 {
+                            job_id:  payload.job_id,
+                            public_key: payload.public_key,
+                            processors: payload.processors.iter().map(|processor| SetProcessorJobEnvironmentV1 {
+                                address: *processor.address.as_ref(),
+                                variables: processor.variables.clone(),
+                            }).collect(),
+                        })
                     }
                     UserAction::Noop => OutgoingActionPayloadV1::Noop,
                 };
@@ -714,7 +589,7 @@ mod proxy {
             let mut actions: Vec<IncomingAction> = proof
                 .leaves
                 .iter()
-                .map(|leaf| IncomingAction::decode(&leaf.data))
+                .map(|leaf| decode_incoming_action(&leaf.data))
                 .collect::<Result<Vec<IncomingAction>, Error>>()?;
 
             // Sort actions
@@ -760,15 +635,16 @@ mod proxy {
                             ) => {
                                 match JobInformation::decode(self, payload.job_id)? {
                                     JobInformation::V1(mut job) => {
+                                        let processor_address = AccountId::from(payload.processor);
                                         // Update the processor list for the given job
-                                        job.processors.push(payload.processor);
+                                        job.processors.push(processor_address);
 
                                         // Send initial fees to the processor (the processor may need a reveal)
                                         let initial_fee = job.expected_fulfillment_fee;
                                         job.remaining_fee = job.remaining_fee - initial_fee;
                                         // Transfer
                                         self.env()
-                                            .transfer(payload.processor, initial_fee)
+                                            .transfer(processor_address, initial_fee)
                                             .expect("COULD_NOT_TRANSFER");
 
                                         if job.processors.len() == (job.slots as usize) {

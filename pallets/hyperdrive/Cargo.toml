@@ -25,7 +25,7 @@ hex-literal = { version = "0.3", default-features = false }
 pallet-acurast = { path = "../acurast", default-features = false }
 pallet-acurast-marketplace = { path = "../marketplace", default-features = false}
 
-acurast-proxy-ink = { path = "../../ink/proxy", default-features = false }
+acurast-core-ink = { path = "../../ink/core", default-features = false }
 ckb-merkle-mountain-range = { version = "0.6.0", default-features = false }
 
 # SDKs
@@ -80,7 +80,7 @@ std = [
 	"strum/std",
 	"tezos-core/std",
 	"tezos-michelson/std",
-	"acurast-proxy-ink/std"
+	"acurast-core-ink/std"
 ]
 
 runtime-benchmarks = [

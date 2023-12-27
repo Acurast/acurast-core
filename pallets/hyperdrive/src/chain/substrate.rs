@@ -3,14 +3,18 @@
 use core::marker::PhantomData;
 
 use codec::{Decode, Encode};
-#[cfg(feature = "std")]
 use derive_more::Display;
-use scale_info::TypeInfo;
+use scale_info::{
+    prelude::{format, string::String},
+    TypeInfo,
+};
 use sp_core::bounded::BoundedVec;
 use sp_core::{RuntimeDebug, H256};
 use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
 use sp_std::vec;
+
+use ckb_merkle_mountain_range::{Error as MMRError, Merge, MerkleProof as MMRMerkleProof};
 
 use pallet_acurast::{
     AllowedSources, Environment, JobModule, JobModules, JobRegistration, MultiOrigin,
@@ -21,12 +25,11 @@ use pallet_acurast_marketplace::{
 };
 
 use crate::{traits, MessageIdentifier, ParsedAction};
-
-use acurast_proxy_ink::{
+use acurast_core_ink::types::{
     OutgoingAction as HyperdriveAction, OutgoingActionPayloadV1 as ActionPayloadV1,
     VersionedOutgoingActionPayload as HyperdriveVersionedActionPauload,
 };
-use ckb_merkle_mountain_range::{Error as MMRError, Merge, MerkleProof as MMRMerkleProof};
+
 struct MergeKeccak;
 
 impl Merge for MergeKeccak {
@@ -111,13 +114,6 @@ where
             })
             .collect::<Result<Vec<(u64, [u8; 32])>, Self::Error>>()?;
 
-        // TODO: Remove debug log
-        let a = mmr_proof
-            .calculate_root(hashed_leaves.clone())
-            .map_err(|err| Self::Error::ProofInvalid(format!("{:?}", err)))
-            .unwrap();
-        dbg!(a);
-
         mmr_proof
             .calculate_root(hashed_leaves)
             .map_err(|err| Self::Error::ProofInvalid(format!("{:?}", err)))
@@ -145,7 +141,7 @@ where
             .map_err(|err| Self::Error::CouldNotDecodeAction(format!("{:?}", err)))?;
 
         let origin = MultiOrigin::AlephZero(convert_account_id::<AccountId, AccountConverter>(
-            action.origin.as_ref() as &[u8; 32],
+            &action.origin,
         )?);
 
         fn convert_account_id<Account, AccountConverter: TryFrom<Vec<u8>> + Into<Account>>(
@@ -171,7 +167,7 @@ where
                                 .map(|m| {
                                     Ok(PlannedExecution {
                                         source: convert_account_id::<AccountId, AccountConverter>(
-                                            m.source.as_ref() as &[u8; 32],
+                                            &m.source,
                                         )?,
                                         start_delay: m.start_delay,
                                     })
@@ -199,7 +195,7 @@ where
                                     .iter()
                                     .map(|s| {
                                         convert_account_id::<AccountId, AccountConverter>(
-                                            s.as_ref() as &[u8; 32],
+                                            &s,
                                         )
                                     })
                                     .collect::<Result<Vec<AccountId>, Self::Error>>()?,
@@ -253,7 +249,7 @@ where
                         .map(|processor| {
                             let processor_address =
                                 convert_account_id::<AccountId, AccountConverter>(
-                                    processor.address.as_ref() as &[u8; 32],
+                                    &processor.address,
                                 )?;
                             let env = Environment {
                                 public_key: BoundedVec::truncate_from(payload.public_key.clone()),

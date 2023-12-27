@@ -1,14 +1,14 @@
 use crate::{Action, Leaf, LeafEncoder};
-use acurast_proxy_ink::{
-    AssignProcessorPayload, FinalizeJobPayload, IncomingAction, IncomingActionPayloadV1,
-    InkAccountId, VersionedIncomingActionPayload,
-};
 use codec::Encode;
 use frame_support::inherent::Vec;
 use sp_io::hashing::blake2_256;
 
 use frame_support::RuntimeDebug;
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
+
+use acurast_core_ink::types::{
+    AssignProcessorPayloadV1, FinalizeJobPayloadV1, IncomingAction, IncomingActionPayloadV1, VersionedIncomingActionPayload,
+};
 
 #[derive(RuntimeDebug)]
 pub enum SubstrateValidationError {
@@ -43,16 +43,14 @@ impl LeafEncoder for SubstrateEncoder {
                     _ => Err(Self::Error::UnexpectedPublicKey)?,
                 };
 
-                let processor_address: InkAccountId = InkAccountId::from(address_bytes);
-
-                let payload = AssignProcessorPayload {
+                let payload = AssignProcessorPayloadV1 {
                     job_id: *job_id,
-                    processor: processor_address,
+                    processor: address_bytes,
                 };
                 IncomingActionPayloadV1::AssignJobProcessor(payload)
             }
             Action::FinalizeJob(job_id, refund_amount) => {
-                let payload = FinalizeJobPayload {
+                let payload = FinalizeJobPayloadV1 {
                     job_id: *job_id,
                     unused_reward: *refund_amount,
                 };
