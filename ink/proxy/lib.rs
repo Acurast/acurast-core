@@ -1,6 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-pub use proxy::{OutgoingAction, OutgoingActionPayloadV1, Version, VersionedOutgoingActionPayload};
+use ink::env::{ContractEnv, Environment};
+pub use proxy::{
+    AssignProcessorPayload, FinalizeJobPayload, IncomingAction, IncomingActionPayloadV1,
+    OutgoingAction, OutgoingActionPayloadV1, Version, VersionedIncomingActionPayload,
+    VersionedOutgoingActionPayload,
+};
+
+pub type InkAccountId = <<proxy::Proxy as ContractEnv>::Env as Environment>::AccountId;
 
 #[ink::contract]
 mod proxy {
@@ -30,7 +37,7 @@ mod proxy {
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct UserPayloadSetJobEnvironmentAction {
-        pub job_id: u64,
+        pub job_id: u128,
         pub public_key: Vec<u8>,
         pub processors: Vec<SetJobEnvironmentProcessor>,
     }
@@ -71,7 +78,7 @@ mod proxy {
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct RegisterJobAction {
-        pub job_id: u64,
+        pub job_id: u128,
         pub allowed_sources: Vec<AccountId>,
         pub allow_only_verified_sources: bool,
         pub destination: AccountId,
@@ -97,8 +104,8 @@ mod proxy {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum UserAction {
         RegisterJob(UserPayloadRegisterJob),
-        DeregisterJob(u64),
-        FinalizeJob(Vec<u64>),
+        DeregisterJob(u128),
+        FinalizeJob(Vec<u128>),
         SetJobEnvironment(UserPayloadSetJobEnvironmentAction),
         Noop,
     }
@@ -155,8 +162,8 @@ mod proxy {
     #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub enum OutgoingActionPayloadV1 {
         RegisterJob(RegisterJobAction),
-        DeregisterJob(u64),
-        FinalizeJob(Vec<u64>),
+        DeregisterJob(u128),
+        FinalizeJob(Vec<u128>),
         SetJobEnvironment(SetJobEnvironmentAction),
         Noop,
     }
@@ -168,10 +175,10 @@ mod proxy {
         payload: Vec<u8>,
     }
 
-    #[derive(Clone, Eq, PartialEq, Decode)]
+    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub struct IncomingAction {
-        id: u64,
-        payload: VersionedIncomingActionPayload,
+        pub id: u64,
+        pub payload: VersionedIncomingActionPayload,
     }
 
     impl IncomingAction {
@@ -204,7 +211,7 @@ mod proxy {
         }
     }
 
-    #[derive(Clone, Eq, PartialEq, Decode)]
+    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub enum VersionedIncomingActionPayload {
         V1(IncomingActionPayloadV1),
     }
@@ -225,19 +232,19 @@ mod proxy {
         }
     }
 
-    #[derive(Clone, Eq, PartialEq, Decode)]
+    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub struct AssignProcessorPayload {
-        job_id: u64,
-        processor: AccountId,
+        pub job_id: u128,
+        pub processor: AccountId,
     }
 
-    #[derive(Clone, Eq, PartialEq, Decode)]
+    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub struct FinalizeJobPayload {
-        job_id: u64,
-        unused_reward: u128,
+        pub job_id: u128,
+        pub unused_reward: u128,
     }
 
-    #[derive(Clone, Eq, PartialEq, Decode)]
+    #[derive(Clone, Eq, PartialEq, Encode, Decode)]
     pub enum IncomingActionPayloadV1 {
         AssignJobProcessor(AssignProcessorPayload),
         FinalizeJob(FinalizeJobPayload),
@@ -283,7 +290,7 @@ mod proxy {
     }
 
     impl JobInformation {
-        fn decode(instance: &Proxy, job_id: u64) -> Result<Self, Error> {
+        fn decode(instance: &Proxy, job_id: u128) -> Result<Self, Error> {
             match instance.get_job(job_id)? {
                 (Version::V1, job_bytes) => {
                     let job =
@@ -392,9 +399,9 @@ mod proxy {
         config: Config,
         next_outgoing_action_id: u64,
         processed_incoming_actions: Mapping<u64, ()>,
-        next_job_id: u64,
+        next_job_id: u128,
         actions: Mapping<u64, (u128, Vec<u8>)>,
-        job_info: Mapping<u64, (u16, Vec<u8>)>,
+        job_info: Mapping<u128, (u16, Vec<u8>)>,
     }
 
     impl Proxy {
@@ -455,7 +462,7 @@ mod proxy {
             output
         }
 
-        fn get_job(&self, job_id: u64) -> Result<(Version, Vec<u8>), Error> {
+        fn get_job(&self, job_id: u128) -> Result<(Version, Vec<u8>), Error> {
             if let Some((version, job_bytes)) = self.job_info.get(job_id) {
                 match version {
                     o if o == Version::V1 as u16 => Ok((Version::V1, job_bytes)),
@@ -829,7 +836,7 @@ mod proxy {
         }
 
         #[ink(message)]
-        pub fn fulfill(&mut self, job_id: u64, payload: Vec<u8>) -> Result<(), Error> {
+        pub fn fulfill(&mut self, job_id: u128, payload: Vec<u8>) -> Result<(), Error> {
             self.fail_if_paused()?;
 
             match JobInformation::decode(self, job_id)? {

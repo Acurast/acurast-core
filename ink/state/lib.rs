@@ -556,7 +556,7 @@ pub mod state_aggregator {
             // Insert data (First message)
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(data_provider);
             let data_hash = [0; 32];
-            state_aggregator.insert(data_hash);
+            let _ = state_aggregator.insert(data_hash);
             assert_eq!(state_aggregator.mmr_size, 1);
             assert_eq!(state_aggregator.snapshot_root(), data_hash);
             assert_eq!(state_aggregator.snapshot_start_level, 1);
@@ -565,7 +565,7 @@ pub mod state_aggregator {
             ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
 
             let data_hash = [1; 32];
-            state_aggregator.insert(data_hash);
+            let _ = state_aggregator.insert(data_hash);
             assert_eq!(state_aggregator.mmr_size, 3);
             assert_eq!(
                 state_aggregator.snapshot_root(),
@@ -587,7 +587,7 @@ pub mod state_aggregator {
             ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
 
             let data_hash = [2; 32];
-            state_aggregator.insert(data_hash);
+            let _ = state_aggregator.insert(data_hash);
             assert_eq!(state_aggregator.mmr_size, 4);
             assert_eq!(
                 state_aggregator.snapshot_root(),
