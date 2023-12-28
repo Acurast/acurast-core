@@ -57,6 +57,7 @@ sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk", tag = "pol
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.43" }
 log = "0.4.20"
 
 

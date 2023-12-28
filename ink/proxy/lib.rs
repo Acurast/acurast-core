@@ -14,11 +14,10 @@ mod proxy {
     };
     use scale::{Decode, Encode};
 
-    use acurast_core_ink::{
-        types::{
-            IncomingAction, IncomingActionPayloadV1, OutgoingActionPayloadV1,
-            Version, VersionedIncomingActionPayload, RegisterJobPayloadV1, SetJobEnvironmentPayloadV1, SetProcessorJobEnvironmentV1, RegisterJobMatchV1
-        },
+    use acurast_core_ink::types::{
+        IncomingAction, IncomingActionPayloadV1, OutgoingActionPayloadV1, RegisterJobMatchV1,
+        RegisterJobPayloadV1, SetJobEnvironmentPayloadV1, SetProcessorJobEnvironmentV1, Version,
+        VersionedIncomingActionPayload,
     };
     use acurast_validator_ink::validator::{LeafProof, MerkleProof};
 
@@ -448,7 +447,11 @@ mod proxy {
 
                         OutgoingActionPayloadV1::RegisterJob(RegisterJobPayloadV1 {
                             job_id,
-                            allowed_sources: payload.allowed_sources.iter().map(|source| *source.as_ref()).collect(),
+                            allowed_sources: payload
+                                .allowed_sources
+                                .iter()
+                                .map(|source| *source.as_ref())
+                                .collect(),
                             allow_only_verified_sources: payload.allow_only_verified_sources,
                             destination: *payload.destination.as_ref(),
                             required_modules: payload.required_modules,
@@ -465,10 +468,14 @@ mod proxy {
                             slots: payload.slots,
                             reward: payload.reward,
                             min_reputation: payload.min_reputation,
-                            instant_match: payload.instant_match.iter().map(|m| RegisterJobMatchV1 {
-                                source: *m.source.as_ref(),
-                                start_delay: m.start_delay
-                            }).collect(),
+                            instant_match: payload
+                                .instant_match
+                                .iter()
+                                .map(|m| RegisterJobMatchV1 {
+                                    source: *m.source.as_ref(),
+                                    start_delay: m.start_delay,
+                                })
+                                .collect(),
                             expected_fulfillment_fee: payload.expected_fulfillment_fee,
                         })
                     }
@@ -514,12 +521,16 @@ mod proxy {
                             }
                         }
                         OutgoingActionPayloadV1::SetJobEnvironment(SetJobEnvironmentPayloadV1 {
-                            job_id:  payload.job_id,
+                            job_id: payload.job_id,
                             public_key: payload.public_key,
-                            processors: payload.processors.iter().map(|processor| SetProcessorJobEnvironmentV1 {
-                                address: *processor.address.as_ref(),
-                                variables: processor.variables.clone(),
-                            }).collect(),
+                            processors: payload
+                                .processors
+                                .iter()
+                                .map(|processor| SetProcessorJobEnvironmentV1 {
+                                    address: *processor.address.as_ref(),
+                                    variables: processor.variables.clone(),
+                                })
+                                .collect(),
                         })
                     }
                     UserAction::Noop => OutgoingActionPayloadV1::Noop,

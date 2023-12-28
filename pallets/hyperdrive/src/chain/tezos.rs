@@ -28,8 +28,8 @@ use tezos_michelson::{
 };
 
 use pallet_acurast::{
-    AllowedSources, Environment, JobIdSequence, JobModule, JobRegistration, MultiOrigin,
-    ParameterBound, Schedule, CU32,
+    AllowedSources, Environment, EnvironmentFor, JobIdSequence, JobModule, JobRegistration,
+    MultiOrigin, ParameterBound, Schedule, CU32,
 };
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
@@ -40,20 +40,13 @@ use crate::types::{
 };
 use crate::{traits, CurrentTargetChainOwner, MessageIdentifier, ParsedAction};
 
-pub struct TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>(
-    PhantomData<(Balance, ParsableAccountId, AccountId, MaxSlots, Extra)>,
-);
+pub struct TezosParser<T, I, ParsableAccountId>(PhantomData<(T, I, ParsableAccountId)>);
 
-impl<Balance, ParsableAccountId, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    MessageParser<AccountId, MaxAllowedSources, Extra>
-    for TezosParser<Balance, ParsableAccountId, AccountId, MaxSlots, Extra>
+impl<T, I: 'static, ParsableAccountId> MessageParser<T> for TezosParser<T, I, ParsableAccountId>
 where
-    AccountId: Ord + Clone,
-    ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
-    Balance: From<u128>,
-    MaxAllowedSources: ParameterBound,
-    MaxSlots: ParameterBound,
+    T: crate::pallet::Config<I>,
+    T::RegistrationExtra: From<RegistrationExtra<T::Balance, T::AccountId, T::MaxSlots>>,
+    ParsableAccountId: TryFrom<Vec<u8>> + Into<T::AccountId>,
 {
     type Error = TezosValidationError;
 
@@ -69,21 +62,19 @@ where
             .map_err(|_| TezosValidationError::ParsingFailure)
     }
 
-    fn parse_value<T: crate::pallet::Config<I>, I: 'static>(
-        encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, TezosValidationError> {
+    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<T>, TezosValidationError> {
         let (action, origin, payload) = parse_message(encoded)?;
 
         Ok(match action {
             RawAction::RegisterJob => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, registration) = parse_job_registration_payload::<
-                    Balance,
+                    T::Balance,
                     ParsableAccountId,
-                    AccountId,
-                    MaxAllowedSources,
-                    MaxSlots,
-                    Extra,
+                    T::AccountId,
+                    T::MaxAllowedSources,
+                    T::MaxSlots,
+                    T::RegistrationExtra,
                 >(payload.as_slice())?;
 
                 ParsedAction::RegisterJob(
@@ -118,9 +109,7 @@ where
             RawAction::SetJobEnvironment => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, set_job_environment) =
-                    parse_set_job_environment_payload::<T, I, AccountId, ParsableAccountId>(
-                        payload.as_slice(),
-                    )?;
+                    parse_set_job_environment_payload::<T, ParsableAccountId>(payload.as_slice())?;
 
                 let job_id = (
                     MultiOrigin::Tezos(bounded_address(&origin)?),
@@ -570,29 +559,17 @@ where
 }
 
 /// Parses an encoded [`RawAction::SetJobEnvironment`] action's payload into [`SetJobEnvironment`].
-fn parse_set_job_environment_payload<
-    T: crate::pallet::Config<I>,
-    I: 'static,
-    AccountId,
-    ParsableAccountId,
->(
+fn parse_set_job_environment_payload<T: pallet_acurast::Config, ParsableAccountId>(
     encoded: &[u8],
 ) -> Result<
     (
         JobIdSequence,
-        BoundedVec<
-            (
-                AccountId,
-                Environment<T::MaxEnvVars, T::EnvKeyMaxSize, T::EnvValueMaxSize>,
-            ),
-            T::MaxSlots,
-        >,
+        BoundedVec<(T::AccountId, EnvironmentFor<T>), T::MaxSlots>,
     ),
     TezosValidationError,
 >
 where
-    ParsableAccountId: TryFrom<Vec<u8>> + Into<AccountId>,
-    AccountId: Ord + Clone,
+    ParsableAccountId: TryFrom<Vec<u8>> + Into<T::AccountId>,
 {
     let unpacked: Micheline =
         Micheline::unpack(encoded, Some(&set_job_environment_payload_schema()))
@@ -613,14 +590,14 @@ where
     };
 
     let processors: Vec<(
-        AccountId,
+        T::AccountId,
         Vec<(
             BoundedVec<u8, T::EnvKeyMaxSize>,
             BoundedVec<u8, T::EnvValueMaxSize>,
         )>,
     )> = try_sequence::<
         (
-            AccountId,
+            T::AccountId,
             Vec<(
                 BoundedVec<u8, T::EnvKeyMaxSize>,
                 BoundedVec<u8, T::EnvValueMaxSize>,
@@ -639,7 +616,7 @@ where
                 let parsed: ParsableAccountId = source
                     .try_into()
                     .map_err(|_| TezosValidationError::AddressParsing)?;
-                Ok::<AccountId, TezosValidationError>(parsed.into())
+                Ok::<T::AccountId, TezosValidationError>(parsed.into())
             }?;
 
             let variables: Vec<(
@@ -679,10 +656,7 @@ where
     )?;
     let public_key: Vec<u8> = (&public_key_bytes).into();
 
-    let env: Vec<(
-        AccountId,
-        Environment<T::MaxEnvVars, T::EnvKeyMaxSize, T::EnvValueMaxSize>,
-    )> = processors
+    let env: Vec<(T::AccountId, EnvironmentFor<T>)> = processors
         .iter()
         .map(|el| {
             (
@@ -858,22 +832,16 @@ pub struct TezosProof<AccountConverter, AccountId> {
     marker: PhantomData<(AccountConverter, AccountId)>,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    for TezosProof<AccountConverter, AccountId>
+impl<T, I: 'static, AccountConverter> traits::Proof<T, I>
+    for TezosProof<AccountConverter, T::AccountId>
 where
-    AccountId: Ord + Clone,
-    Balance: From<u128>,
-    MaxAllowedSources: ParameterBound,
-    MaxSlots: ParameterBound,
-    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    T: crate::pallet::Config<I>,
+    T::RegistrationExtra: From<RegistrationExtra<T::Balance, T::AccountId, T::MaxSlots>>,
+    AccountConverter: TryFrom<Vec<u8>> + Into<T::AccountId>,
 {
     type Error = TezosValidationError;
 
-    fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
-        self: &Self,
-    ) -> Result<[u8; 32], Self::Error> {
+    fn calculate_root(self: &Self) -> Result<[u8; 32], Self::Error> {
         let leaf_hash = leaf_hash::<T, I>(
             <CurrentTargetChainOwner<T, I>>::get(),
             self.path.clone(),
@@ -893,21 +861,19 @@ where
             .map_err(|_| TezosValidationError::ParsingFailure)
     }
 
-    fn message<T: crate::pallet::Config<I>, I: 'static>(
-        self: &Self,
-    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error> {
+    fn message(self: &Self) -> Result<ParsedAction<T>, Self::Error> {
         let (action, origin, payload) = parse_message(&self.value)?;
 
         Ok(match action {
             RawAction::RegisterJob => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, registration) = parse_job_registration_payload::<
-                    Balance,
+                    T::Balance,
                     AccountConverter,
-                    AccountId,
-                    MaxAllowedSources,
-                    MaxSlots,
-                    Extra,
+                    T::AccountId,
+                    T::MaxAllowedSources,
+                    T::MaxSlots,
+                    T::RegistrationExtra,
                 >(payload.as_slice())?;
 
                 ParsedAction::RegisterJob(
@@ -942,9 +908,7 @@ where
             RawAction::SetJobEnvironment => {
                 let payload: Vec<u8> = (&payload).into();
                 let (job_id_sequence, set_job_environment) =
-                    parse_set_job_environment_payload::<T, I, AccountId, AccountConverter>(
-                        payload.as_slice(),
-                    )?;
+                    parse_set_job_environment_payload::<T, AccountConverter>(payload.as_slice())?;
 
                 ParsedAction::SetJobEnvironment(
                     (
@@ -990,20 +954,20 @@ mod tests {
                 RegistrationExtra<
                     Balance,
                     <Test as frame_system::Config>::AccountId,
-                    <Test as Config<TezosInstance>>::MaxSlots,
+                    <Test as pallet_acurast::Config>::MaxSlots,
                 >,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config<TezosInstance>>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
-            <Test as Config<TezosInstance>>::MaxAllowedSources,
-            <Test as Config<TezosInstance>>::MaxSlots,
+            <Test as pallet_acurast::Config>::MaxAllowedSources,
+            <Test as pallet_acurast::Config>::MaxSlots,
             _,
         >(payload.as_slice())?;
         let expected = JobRegistration::<
             <Test as frame_system::Config>::AccountId,
-            <Test as Config<TezosInstance>>::MaxAllowedSources,
+            <Test as pallet_acurast::Config>::MaxAllowedSources,
             _,
         > {
             script: Script::try_from(vec![
@@ -1064,19 +1028,19 @@ mod tests {
             JobIdSequence,
             JobRegistration<
                 <Test as frame_system::Config>::AccountId,
-                <Test as Config<TezosInstance>>::MaxAllowedSources,
+                <Test as pallet_acurast::Config>::MaxAllowedSources,
                 RegistrationExtra<
                     Balance,
                     <Test as frame_system::Config>::AccountId,
-                    <Test as Config<TezosInstance>>::MaxSlots,
+                    <Test as pallet_acurast::Config>::MaxSlots,
                 >,
             >,
         ) = parse_job_registration_payload::<
             _,
             <Test as Config<TezosInstance>>::ParsableAccountId,
             <Test as frame_system::Config>::AccountId,
-            <Test as Config<TezosInstance>>::MaxAllowedSources,
-            <Test as Config<TezosInstance>>::MaxSlots,
+            <Test as pallet_acurast::Config>::MaxAllowedSources,
+            <Test as pallet_acurast::Config>::MaxSlots,
             _,
         >(payload.as_slice())?;
 
@@ -1084,7 +1048,7 @@ mod tests {
 
         let expected = JobRegistration::<
             <Test as frame_system::Config>::AccountId,
-            <Test as Config<TezosInstance>>::MaxAllowedSources,
+            <Test as pallet_acurast::Config>::MaxAllowedSources,
             _,
         > {
             script: Script::try_from(vec![
@@ -1171,8 +1135,6 @@ mod tests {
         let payload: Vec<u8> = (&payload).into();
         let (job_id, environment) = parse_set_job_environment_payload::<
             Test,
-            TezosInstance,
-            <Test as frame_system::Config>::AccountId,
             <Test as Config<TezosInstance>>::ParsableAccountId,
         >(payload.as_slice())?;
 

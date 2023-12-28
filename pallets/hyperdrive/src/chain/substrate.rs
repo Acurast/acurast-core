@@ -17,8 +17,8 @@ use sp_std::vec;
 use ckb_merkle_mountain_range::{Error as MMRError, Merge, MerkleProof as MMRMerkleProof};
 
 use pallet_acurast::{
-    AllowedSources, Environment, JobModule, JobModules, JobRegistration, MultiOrigin,
-    ParameterBound, Schedule, Script, CU32,
+    AllowedSources, Environment, JobModule, JobModules, JobRegistration, MultiOrigin, Schedule,
+    Script, CU32,
 };
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
@@ -78,22 +78,16 @@ pub enum SubstrateValidationError {
     CouldNotConvertAccountId,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    for SubstrateProof<AccountConverter, AccountId>
+impl<T, I: 'static, AccountConverter> traits::Proof<T, I>
+    for SubstrateProof<AccountConverter, T::AccountId>
 where
-    AccountId: Ord + Clone,
-    Balance: From<u128>,
-    MaxAllowedSources: ParameterBound,
-    MaxSlots: ParameterBound,
-    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    T: crate::pallet::Config<I>,
+    T::RegistrationExtra: From<RegistrationExtra<T::Balance, T::AccountId, T::MaxSlots>>,
+    AccountConverter: TryFrom<Vec<u8>> + Into<T::AccountId>,
 {
     type Error = SubstrateValidationError;
 
-    fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
-        self: &Self,
-    ) -> Result<[u8; 32], Self::Error> {
+    fn calculate_root(self: &Self) -> Result<[u8; 32], Self::Error> {
         // Prepare proof instance
         let mmr_proof = MMRMerkleProof::<[u8; 32], MergeKeccak>::new(
             self.mmr_size,
@@ -127,9 +121,7 @@ where
             .ok_or(Self::Error::InvalidMessage)
     }
 
-    fn message<T: crate::pallet::Config<I>, I: 'static>(
-        self: &Self,
-    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error> {
+    fn message(self: &Self) -> Result<ParsedAction<T>, Self::Error> {
         // TODO: Process multiple messages (currently we only process the first leaf from the proof)
         let message_bytes = self
             .leaves
@@ -140,7 +132,7 @@ where
         let action = HyperdriveAction::decode(&message_bytes)
             .map_err(|err| Self::Error::CouldNotDecodeAction(format!("{:?}", err)))?;
 
-        let origin = MultiOrigin::AlephZero(convert_account_id::<AccountId, AccountConverter>(
+        let origin = MultiOrigin::AlephZero(convert_account_id::<T::AccountId, AccountConverter>(
             &action.origin,
         )?);
 
@@ -154,33 +146,31 @@ where
             Ok(parsed.into())
         }
 
-        let parsed_action: ParsedAction<AccountId, T, I, MaxAllowedSources, Extra> = match action
-            .payload
-        {
+        let parsed_action: ParsedAction<T> = match action.payload {
             HyperdriveVersionedActionPauload::V1(action) => match action {
                 ActionPayloadV1::RegisterJob(payload) => {
-                    let executions: PlannedExecutions<AccountId, MaxSlots> =
+                    let executions: PlannedExecutions<T::AccountId, T::MaxSlots> =
                         PlannedExecutions::try_from(
                             payload
                                 .instant_match
                                 .into_iter()
                                 .map(|m| {
                                     Ok(PlannedExecution {
-                                        source: convert_account_id::<AccountId, AccountConverter>(
+                                        source: convert_account_id::<T::AccountId, AccountConverter>(
                                             &m.source,
                                         )?,
                                         start_delay: m.start_delay,
                                     })
                                 })
-                                .collect::<Result<Vec<PlannedExecution<AccountId>>, Self::Error>>(
+                                .collect::<Result<Vec<PlannedExecution<T::AccountId>>, Self::Error>>(
                                 )?,
                         )
                         .map_err(|_| Self::Error::TooManyPlannedExecutions)?;
 
-                    let extra: Extra = RegistrationExtra {
+                    let extra: T::RegistrationExtra = RegistrationExtra {
                         requirements: JobRequirements {
                             slots: payload.slots.into(),
-                            reward: Balance::from(payload.reward),
+                            reward: T::Balance::from(payload.reward),
                             min_reputation: payload.min_reputation,
                             instant_match: Some(executions),
                         },
@@ -194,11 +184,9 @@ where
                                     .allowed_sources
                                     .iter()
                                     .map(|s| {
-                                        convert_account_id::<AccountId, AccountConverter>(
-                                            &s,
-                                        )
+                                        convert_account_id::<T::AccountId, AccountConverter>(&s)
                                     })
-                                    .collect::<Result<Vec<AccountId>, Self::Error>>()?,
+                                    .collect::<Result<Vec<T::AccountId>, Self::Error>>()?,
                             )
                             .map_err(|_| Self::Error::TooManyAllowedSources)?,
                         ),
@@ -248,7 +236,7 @@ where
                         .iter()
                         .map(|processor| {
                             let processor_address =
-                                convert_account_id::<AccountId, AccountConverter>(
+                                convert_account_id::<T::AccountId, AccountConverter>(
                                     &processor.address,
                                 )?;
                             let env = Environment {

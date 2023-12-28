@@ -9,9 +9,7 @@ use sp_std::prelude::*;
 use sp_std::vec;
 use strum_macros::{EnumString, IntoStaticStr};
 
-use pallet_acurast::{Environment, JobId, JobRegistration};
-
-use crate::Config;
+use pallet_acurast::{EnvironmentFor, JobId, JobRegistration};
 
 pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
 pub type StateTransmitterUpdates<T> =
@@ -148,10 +146,8 @@ impl TryFrom<u16> for RawAction {
     }
 }
 
-impl<AccountId, T: crate::pallet::Config<I>, I: 'static, MaxAllowedSources: Get<u32>, Extra>
-    From<&ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>> for RawAction
-{
-    fn from(action: &ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>) -> Self {
+impl<T: pallet_acurast::Config> From<&ParsedAction<T>> for RawAction {
+    fn from(action: &ParsedAction<T>) -> Self {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
@@ -163,28 +159,17 @@ impl<AccountId, T: crate::pallet::Config<I>, I: 'static, MaxAllowedSources: Get<
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<
-    AccountId,
-    T: crate::pallet::Config<I>,
-    I: 'static,
-    MaxAllowedSources: Get<u32>,
-    Extra,
-> {
+#[scale_info(skip_type_params(T))]
+pub enum ParsedAction<T: pallet_acurast::Config> {
     RegisterJob(
-        JobId<AccountId>,
-        JobRegistration<AccountId, MaxAllowedSources, Extra>,
+        JobId<T::AccountId>,
+        JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
     ),
-    DeregisterJob(JobId<AccountId>),
-    FinalizeJob(Vec<JobId<AccountId>>),
+    DeregisterJob(JobId<T::AccountId>),
+    FinalizeJob(Vec<JobId<T::AccountId>>),
     SetJobEnvironment(
-        JobId<AccountId>,
-        BoundedVec<
-            (
-                AccountId,
-                Environment<T::MaxEnvVars, T::EnvKeyMaxSize, T::EnvValueMaxSize>,
-            ),
-            T::MaxSlots,
-        >,
+        JobId<T::AccountId>,
+        BoundedVec<(T::AccountId, EnvironmentFor<T>), T::MaxSlots>,
     ),
     Noop,
 }
@@ -193,23 +178,19 @@ pub type MessageIdentifier = u128;
 
 pub type JobRegistrationFor<T> = JobRegistration<
     <T as frame_system::Config>::AccountId,
-    <T as Config>::RegistrationExtra,
-    <T as Config>::MaxAllowedSources,
+    <T as pallet_acurast::Config>::RegistrationExtra,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
 >;
 
-pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+pub trait MessageParser<T: pallet_acurast::Config> {
     type Error;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
-    fn parse_value<T: crate::pallet::Config<I>, I: 'static>(
-        encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>, Self::Error>;
+    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<T>, Self::Error>;
 }
 
-pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
-    fn execute<T: crate::pallet::Config<I>, I: 'static>(
-        action: ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>,
-    ) -> DispatchResultWithPostInfo;
+pub trait ActionExecutor<T: pallet_acurast::Config> {
+    fn execute(action: ParsedAction<T>) -> DispatchResultWithPostInfo;
 }
 
 /// Tracks the progress during `submit_message`, intended to be included in events.

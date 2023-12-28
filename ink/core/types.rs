@@ -1,9 +1,9 @@
 extern crate alloc;
 
-use scale_info::prelude::cmp::Ordering;
-use scale::{Decode, Encode};
 use alloc::format;
 use alloc::vec::Vec;
+use scale::{Decode, Encode};
+use scale_info::prelude::cmp::Ordering;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Version {
@@ -92,9 +92,7 @@ pub enum VersionedOutgoingActionPayload {
 }
 
 impl VersionedOutgoingActionPayload {
-    fn decode(
-        action: RawOutgoingAction,
-    ) -> Result<VersionedOutgoingActionPayload, scale::Error> {
+    fn decode(action: RawOutgoingAction) -> Result<VersionedOutgoingActionPayload, scale::Error> {
         match action.payload_version {
             v if v == Version::V1 as u16 => {
                 let action = OutgoingActionPayloadV1::decode(&mut action.payload.as_slice())?;
@@ -104,7 +102,7 @@ impl VersionedOutgoingActionPayload {
             v => {
                 let msg: &str = format!("Unknown VersionedOutgoingActionPayload: {:?}", v).leak();
                 Err(scale::Error::from(msg))
-            },
+            }
         }
     }
 }

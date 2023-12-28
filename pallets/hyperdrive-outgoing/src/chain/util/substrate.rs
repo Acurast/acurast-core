@@ -7,7 +7,8 @@ use frame_support::RuntimeDebug;
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
 
 use acurast_core_ink::types::{
-    AssignProcessorPayloadV1, FinalizeJobPayloadV1, IncomingAction, IncomingActionPayloadV1, VersionedIncomingActionPayload,
+    AssignProcessorPayloadV1, FinalizeJobPayloadV1, IncomingAction, IncomingActionPayloadV1,
+    VersionedIncomingActionPayload,
 };
 
 #[derive(RuntimeDebug)]

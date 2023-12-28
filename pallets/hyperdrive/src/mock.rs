@@ -5,7 +5,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::{
     parameter_types,
     traits::{ConstU16, ConstU64},
-    Deserialize, Serialize,
+    Deserialize, PalletId, Serialize,
 };
 use frame_system as system;
 use hex_literal::hex;
@@ -34,12 +34,17 @@ parameter_types! {
     pub TargetChainStateOwner: StateOwner = StateOwner::try_from(hex!("050a0000001600009f7f36d0241d3e6a82254216d7de5780aa67d8f9").to_vec()).unwrap();
     pub const TransmissionRate: u64 = 5;
     pub const TransmissionQuorum: u8 = 2;
+
+    pub const AcurastPalletId: PalletId = PalletId(*b"acrstpid");
+    pub const MinimumPeriod: u64 = 2000;
 }
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
     pub enum Test {
         System: frame_system,
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+        Acurast: pallet_acurast::{Pallet, Call, Storage, Event<T>},
         TezosHyperdrive: crate::<Instance1>,
         EthereumHyperdrive: crate::<Instance2>,
         AlephZeroHyperdrive: crate::<Instance3>,
@@ -72,8 +77,35 @@ impl system::Config for Test {
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+impl pallet_timestamp::Config for Test {
+    type Moment = u64;
+    type OnTimestampSet = ();
+    type MinimumPeriod = MinimumPeriod;
+    type WeightInfo = ();
+}
+
 pub type MaxAllowedSources = CU32<4>;
 pub type MaxSlots = CU32<64>;
+
+impl pallet_acurast::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type RegistrationExtra =
+        RegistrationExtra<Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
+    type MaxAllowedSources = MaxAllowedSources;
+    type MaxCertificateRevocationListUpdates = frame_support::traits::ConstU32<10>;
+    type MaxSlots = MaxSlots;
+    type PalletId = AcurastPalletId;
+    type MaxEnvVars = CU32<10>;
+    type EnvKeyMaxSize = CU32<32>;
+    type EnvValueMaxSize = CU32<1024>;
+    type RevocationListUpdateBarrier = ();
+    type KeyAttestationBarrier = ();
+    type UnixTime = pallet_timestamp::Pallet<Test>;
+    type JobHooks = ();
+    type WeightInfo = pallet_acurast::weights::WeightInfo<Test>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = benchmarking::AcurastBenchmarkHelper;
+}
 
 impl crate::Config<TezosInstance> for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -82,13 +114,6 @@ impl crate::Config<TezosInstance> for Test {
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
-    type RegistrationExtra =
-        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
-    type MaxAllowedSources = MaxAllowedSources;
-    type MaxSlots = MaxSlots;
-    type MaxEnvVars = CU32<10>;
-    type EnvKeyMaxSize = CU32<32>;
-    type EnvValueMaxSize = CU32<1024>;
     type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
@@ -108,22 +133,12 @@ impl crate::Config<EthereumInstance> for Test {
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
-    type RegistrationExtra =
-        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
-    type MaxAllowedSources = MaxAllowedSources;
-    type MaxSlots = MaxSlots;
-    type MaxEnvVars = CU32<10>;
-    type EnvKeyMaxSize = CU32<32>;
-    type EnvValueMaxSize = CU32<1024>;
     type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
     type TransmissionQuorum = TransmissionQuorum;
     type ActionExecutor = ();
-    type Proof = crate::chain::ethereum::EthereumProof<
-        AcurastAccountId,
-        <Self as frame_system::Config>::AccountId,
-    >;
+    type Proof = crate::chain::ethereum::EthereumProof<Self, AcurastAccountId>;
     type WeightInfo = weights::WeightInfo<Test>;
 }
 
@@ -134,13 +149,6 @@ impl crate::Config<AlephZeroInstance> for Test {
     type TargetChainHash = H256;
     type TargetChainBlockNumber = u64;
     type Balance = Balance;
-    type RegistrationExtra =
-        RegistrationExtra<Self::Balance, <Self as frame_system::Config>::AccountId, Self::MaxSlots>;
-    type MaxAllowedSources = MaxAllowedSources;
-    type MaxSlots = MaxSlots;
-    type MaxEnvVars = CU32<10>;
-    type EnvKeyMaxSize = CU32<32>;
-    type EnvValueMaxSize = CU32<1024>;
     type MaxTransmittersPerSnapshot = CU32<64>;
     type TargetChainHashing = Keccak256;
     type TransmissionRate = TransmissionRate;
@@ -179,10 +187,8 @@ pub fn events() -> Vec<RuntimeEvent> {
 
 pub type Balance = u128;
 
-impl<AccountId, Extra> ActionExecutor<AccountId, MaxAllowedSources, Extra> for () {
-    fn execute<T: crate::pallet::Config<I>, I: 'static>(
-        _: ParsedAction<AccountId, T, I, MaxAllowedSources, Extra>,
-    ) -> DispatchResultWithPostInfo {
+impl<T: pallet_acurast::Config> ActionExecutor<T> for () {
+    fn execute(_: ParsedAction<T>) -> DispatchResultWithPostInfo {
         Ok(().into())
     }
 }
