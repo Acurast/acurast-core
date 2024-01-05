@@ -8,7 +8,11 @@ members = [
 	"pallets/acurast/common",
 	"pallets/marketplace/reputation",
 	"p256-crypto",
-	"ink/*",
+	"ink/consumer",
+	"ink/core",
+	"ink/proxy",
+	"ink/state",
+	"ink/validator"
 ]
 exclude = ["pallets/proxy"]
 

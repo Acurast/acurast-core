@@ -1,14 +1,15 @@
-use crate::chain::util::evm::EvmEncoder;
 use crate::instances::AlephZeroInstance;
 use crate::traits::MMRInstance;
 use crate::TargetChainConfig;
 use sp_core::H256;
 use sp_runtime::traits::Keccak256;
 
+use super::util::substrate::SubstrateEncoder;
+
 pub struct AlephZeroConfig;
 
 impl TargetChainConfig for AlephZeroConfig {
-    type TargetChainEncoder = EvmEncoder;
+    type TargetChainEncoder = SubstrateEncoder;
     type Hasher = Keccak256;
     type Hash = H256;
 }
