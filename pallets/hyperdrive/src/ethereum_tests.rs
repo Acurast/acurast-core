@@ -3,7 +3,7 @@
 use frame_support::assert_ok;
 use hex_literal::hex;
 use sp_core::H256;
-use sp_runtime::{bounded_vec, AccountId32};
+use sp_runtime::bounded_vec;
 use std::marker::PhantomData;
 
 use crate::chain::ethereum::{

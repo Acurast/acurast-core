@@ -370,8 +370,11 @@ pub mod state_aggregator {
             }
         }
 
-        fn fail_if_not_owner(&self) {
-            assert!(self.config.owner.eq(&self.env().caller()), "NOT_OWNER");
+        fn fail_if_not_owner(&self) -> Result<(), Error> {
+            if self.config.owner.eq(&self.env().caller()) {
+                return Ok(());
+            }
+            Err(Error::NotAllowed)
         }
 
         fn finalize_snapshot(&mut self, required: bool) {
@@ -385,7 +388,6 @@ pub mod state_aggregator {
 
             if self.snapshot_start_level + self.config.snapshot_duration < current_block_number {
                 // Finalize snapshot
-                self.snapshot_counter += 1;
 
                 // Snapshot previous block level
                 let snapshot_level = current_block_number - 1;
@@ -400,15 +402,17 @@ pub mod state_aggregator {
                     snapshot: self.snapshot_counter,
                     level: snapshot_level,
                 });
+
+                self.snapshot_counter += 1;
             } else {
                 assert!(!required, "CANNOT_SNAPSHOT");
             }
         }
 
         #[ink(message)]
-        pub fn configure(&mut self, configure: Vec<ConfigureArgument>) {
+        pub fn configure(&mut self, configure: Vec<ConfigureArgument>) -> Result<(), Error> {
             // Only the administrator can configure the contract
-            self.fail_if_not_owner();
+            self.fail_if_not_owner()?;
 
             for c in configure {
                 match c {
@@ -421,6 +425,8 @@ pub mod state_aggregator {
                     }
                 }
             }
+
+            Ok(())
         }
 
         #[ink(message)]
@@ -468,8 +474,13 @@ pub mod state_aggregator {
         }
 
         #[ink(message)]
-        pub fn mmr_size(&self) -> u64 {
-            self.mmr_size
+        pub fn next_snapshot(&self) -> u128 {
+            self.snapshot_counter
+        }
+
+        #[ink(message)]
+        pub fn snapshot_level(&self, snapshot: u128) -> u32 {
+            self.snapshot_level.get(snapshot).expect("UNKNOWN_SNAPSHOT")
         }
 
         #[ink(message)]
@@ -477,6 +488,15 @@ pub mod state_aggregator {
             let mmr = super::mmr::MMR::<[u8; 32], MergeKeccak>::new(self.mmr_size);
 
             mmr.get_root(&self.tree).expect("COULD_NOT_GET_ROOT")
+        }
+
+        #[ink(message)]
+        pub fn can_snapshot(&self) -> bool {
+            let current_block = Self::env().block_number();
+
+            let not_empty = self.mmr_size > 0;
+
+            not_empty && (self.snapshot_start_level + self.config.snapshot_duration) < current_block
         }
     }
 
@@ -498,7 +518,6 @@ pub mod state_aggregator {
         }
 
         #[ink::test]
-        #[should_panic(expected = "NOT_OWNER")]
         fn test_unauthorized_configure() {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             let admin = accounts.alice;
@@ -510,9 +529,11 @@ pub mod state_aggregator {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
 
             // (Panic Expected) : Only the admin can call the configure method
-            state_aggregator.configure(vec![ConfigureArgument::SetAuthorizedProvider(
-                data_provider,
-            )]);
+            assert!(state_aggregator
+                .configure(vec![ConfigureArgument::SetAuthorizedProvider(
+                    data_provider,
+                )])
+                .is_err());
         }
 
         #[ink::test]
@@ -531,7 +552,7 @@ pub mod state_aggregator {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(admin);
 
             // (Panic Expected) : Only the admin can call the configure method
-            state_aggregator.configure(vec![ConfigureArgument::SetAuthorizedProvider(
+            let _ = state_aggregator.configure(vec![ConfigureArgument::SetAuthorizedProvider(
                 data_provider,
             )]);
         }
@@ -547,7 +568,7 @@ pub mod state_aggregator {
 
             // Set data provider
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(admin);
-            state_aggregator.configure(vec![ConfigureArgument::SetAuthorizedProvider(
+            let _ = state_aggregator.configure(vec![ConfigureArgument::SetAuthorizedProvider(
                 data_provider,
             )]);
 

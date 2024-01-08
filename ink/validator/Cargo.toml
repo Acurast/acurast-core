@@ -12,6 +12,9 @@ scale-info = { version = "2.6", default-features = false, features = ["derive"],
 
 ckb-merkle-mountain-range = { version = "0.6.0", default-features = false }
 
+[dev-dependencies]
+hex-literal = "0.4.1"
+
 [lib]
 path = "lib.rs"
 

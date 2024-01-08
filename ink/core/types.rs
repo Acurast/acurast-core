@@ -10,7 +10,7 @@ pub enum Version {
     V1 = 1,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct IncomingAction {
     pub id: u64,
     pub payload: VersionedIncomingActionPayload,
@@ -34,25 +34,25 @@ impl PartialOrd for IncomingAction {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum VersionedIncomingActionPayload {
     V1(IncomingActionPayloadV1),
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum IncomingActionPayloadV1 {
     AssignJobProcessor(AssignProcessorPayloadV1),
     FinalizeJob(FinalizeJobPayloadV1),
     Noop,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct AssignProcessorPayloadV1 {
     pub job_id: u128,
     pub processor: [u8; 32],
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizeJobPayloadV1 {
     pub job_id: u128,
     pub unused_reward: u128,

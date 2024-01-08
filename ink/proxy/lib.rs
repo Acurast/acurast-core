@@ -95,28 +95,9 @@ mod proxy {
     }
 
     fn decode_incoming_action(payload: &Vec<u8>) -> Result<IncomingAction, Error> {
-        match RawIncomingAction::decode(&mut payload.as_slice()) {
+        match IncomingAction::decode(&mut payload.as_slice()) {
             Err(err) => Err(Error::InvalidIncomingAction(format!("{:?}", err))),
-            Ok(action) => Ok(IncomingAction {
-                id: action.id,
-                payload: decode_versioned_incoming_action_payload(action)?,
-            }),
-        }
-    }
-
-    fn decode_versioned_incoming_action_payload(
-        action: RawIncomingAction,
-    ) -> Result<VersionedIncomingActionPayload, Error> {
-        match action.payload_version {
-            v if v == Version::V1 as u16 => {
-                let action = IncomingActionPayloadV1::decode(&mut action.payload.as_slice())
-                    .map_err(|err| {
-                        Error::Verbose(format!("Cannot decode incoming action V1 {:?}", err))
-                    })?;
-
-                Ok(VersionedIncomingActionPayload::V1(action))
-            }
-            v => Err(Error::UnknownIncomingActionVersion(v)),
+            Ok(action) => Ok(action),
         }
     }
 
@@ -786,6 +767,11 @@ mod proxy {
         // Views
         //
 
+        #[ink(message)]
+        pub fn is_action_processed(&self, action_id: u64) -> bool {
+            self.processed_incoming_actions.contains(action_id)
+        }
+
         /// The purpose of this method is to generate proofs for outgoing actions
         #[ink(message)]
         pub fn generate_proof(&self, from: u64, to: u64) -> Result<MerkleProof<[u8; 32]>, Error> {
@@ -849,6 +835,30 @@ mod proxy {
                     })
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use hex_literal::hex;
+
+        /// Imports all the definitions from the outer scope so we can use them here.
+        use super::*;
+
+        #[ink::test]
+        fn test_action_encoding() {
+            let encoded_incoming_action = hex!("00000000000000000002");
+
+            let decoded_incoming_action =
+                IncomingAction::decode(&mut encoded_incoming_action.as_slice());
+
+            assert_eq!(
+                decoded_incoming_action.unwrap(),
+                IncomingAction {
+                    id: 0,
+                    payload: VersionedIncomingActionPayload::V1(IncomingActionPayloadV1::Noop)
+                }
+            );
         }
     }
 }
