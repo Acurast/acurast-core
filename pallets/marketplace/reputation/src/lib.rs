@@ -2,10 +2,10 @@
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use core::marker::PhantomData;
-use num::{CheckedDiv, CheckedMul};
 use scale_info::TypeInfo;
 use sp_arithmetic::fixed_point::FixedU128;
 use sp_arithmetic::traits::{CheckedAdd, CheckedSub, Saturating};
+use sp_arithmetic::traits::{CheckedDiv, CheckedMul};
 use sp_arithmetic::{FixedPointNumber, FixedPointOperand, Permill};
 use sp_core::RuntimeDebug;
 

@@ -5,8 +5,8 @@ use crate::{
     UpdateInfo, Version,
 };
 use acurast_common::ListUpdateOperation;
-use frame_support::dispatch::DispatchError;
 use frame_support::error::BadOrigin;
+use frame_support::sp_runtime::DispatchError;
 use frame_support::{assert_err, assert_ok, traits::fungible::Inspect};
 
 fn paired_manager_processor() -> (AccountId, AccountId) {
