@@ -3,10 +3,10 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use sp_core::{crypto::UncheckedFrom, ecdsa, ed25519, sr25519, RuntimeDebug, H256};
+use sp_core::{crypto::UncheckedFrom, ecdsa, ed25519, sr25519, RuntimeDebug, H256, ConstU32};
 use sp_runtime::{
     traits::{IdentifyAccount, Lazy, Verify},
-    AccountId32, MultiSignature as SPMultiSignature, MultiSigner as SPMultiSigner,
+    AccountId32, MultiSignature as SPMultiSignature, MultiSigner as SPMultiSigner, BoundedVec,
 };
 
 use crate::application_crypto::p256::{Public, Signature};
@@ -22,6 +22,8 @@ pub enum MultiSignature {
     Ecdsa(ecdsa::Signature),
     /// An ECDSA/SECP256r1 signature
     P256(Signature),
+    /// An ECDSA/SECP256r1 signature with additional authenticator data
+    P256WithAuthData(Signature, BoundedVec<u8, ConstU32<37>>),
 }
 
 impl From<ed25519::Signature> for MultiSignature {
@@ -246,6 +248,20 @@ impl Verify for MultiSignature {
             (Self::P256(ref sig), who) => {
                 p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
                     .and_then(|signature| signature.recover_verifying_key(msg.get()))
+                    .map(|pubkey| {
+                        &sp_io::hashing::blake2_256(pubkey.to_bytes().as_slice())
+                            == <dyn AsRef<[u8; 32]>>::as_ref(who)
+                    })
+                    .unwrap_or(false)
+            }
+            (Self::P256WithAuthData(sig, auth_data), who) => {
+                p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
+                    .and_then(|signature| {
+                        let msg_bytes = msg.get();
+                        let msg = if msg_bytes.len() != 32 { sp_io::hashing::sha2_256(msg_bytes) } else { msg_bytes.try_into().unwrap() };
+                        let signed_msg = sp_io::hashing::sha2_256(&[auth_data.as_slice(), &msg].concat());
+                        signature.recover_verifying_key(&signed_msg)
+                    })
                     .map(|pubkey| {
                         &sp_io::hashing::blake2_256(pubkey.to_bytes().as_slice())
                             == <dyn AsRef<[u8; 32]>>::as_ref(who)
