@@ -46,7 +46,6 @@ xcm-builder = { package = "staging-xcm-builder", git = "https://github.com/parit
 
 # Acurast
 pallet-acurast = { path = "../acurast", default-features = false}
-pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
 acurast-reputation = { path = "./reputation", default-features = false }
 
 # benchmarks
@@ -76,7 +75,6 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"parachains-common",
 	"pallet-acurast/runtime-benchmarks",
-	"pallet-acurast-assets-manager/runtime-benchmarks",
 	"pallet-acurast-processor-manager/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 ]
@@ -101,7 +99,6 @@ std = [
 	"xcm-executor/std",
 	"xcm/std",
 	"pallet-acurast/std",
-	"pallet-acurast-assets-manager/std",
 	"acurast-reputation/std",
 	"serde",
 	"jsonrpsee",

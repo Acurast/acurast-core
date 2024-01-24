@@ -51,7 +51,6 @@ polkadot-parachain = { git = "https://github.com/paritytech/polkadot-sdk", defau
 parachain-info = { git = "https://github.com/paritytech/polkadot-sdk", default-features = false, tag = "polkadot-v1.1.0" }
 
 pallet-acurast = { path = "../acurast", default-features = false }
-pallet-acurast-assets-manager = { path = "../assets-manager", default-features = false }
 
 hex-literal = "0.3.4"
 
@@ -60,6 +59,7 @@ default = ["std"]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
+	"pallet-acurast/runtime-benchmarks",
 	"pallet-acurast-marketplace/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-xcm/runtime-benchmarks",
@@ -72,6 +72,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"acurast-common/std",
+	"pallet-acurast/std",
 	"pallet-acurast-marketplace/std",
 	"pallet-timestamp/std",
 	"pallet-xcm/std",
