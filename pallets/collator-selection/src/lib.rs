@@ -60,6 +60,8 @@ mod tests;
 mod benchmarking;
 pub mod weights;
 
+extern crate alloc;
+
 #[frame_support::pallet]
 pub mod pallet {
     pub use crate::weights::WeightInfo;
@@ -221,7 +223,7 @@ pub mod pallet {
             let duplicate_invulnerables = self
                 .invulnerables
                 .iter()
-                .collect::<std::collections::BTreeSet<_>>();
+                .collect::<alloc::collections::BTreeSet<_>>();
             assert!(
                 duplicate_invulnerables.len() == self.invulnerables.len(),
                 "duplicate invulnerables in genesis."
