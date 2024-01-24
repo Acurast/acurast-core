@@ -35,7 +35,7 @@ pallet-timestamp = { git = "https://github.com/paritytech/polkadot-sdk", default
 
 # for RPC
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
-serde = { version = "1.0.136", features = ["derive"], optional = true }
+serde = { version = "1.0.188", features = ["derive"], default-features = false }
 thiserror = "1.0"
 log = { version = "0.4.17", default-features = false }
 
@@ -100,7 +100,6 @@ std = [
 	"xcm/std",
 	"pallet-acurast/std",
 	"acurast-reputation/std",
-	"serde",
 	"jsonrpsee",
 	"sp-blockchain",
 	"log/std",

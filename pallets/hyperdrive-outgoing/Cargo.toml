@@ -57,7 +57,7 @@ sp-io = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.1.0", default-features = false }
 
 # for RPC
-serde = { version = "1.0.136", features = ["derive"], optional = true }
+serde = { version = "1.0.188", features = ["derive"], default-features = false }
 thiserror = "1.0"
 log = { version = "0.4.17", default-features = false }
 
@@ -102,7 +102,6 @@ std = [
 	"tezos-core/std",
 	"tezos-michelson/std",
 	"mmr-lib/std",
-	"serde",
 	"jsonrpsee",
 	"sp-blockchain",
 	"log/std",

@@ -6,7 +6,7 @@ version = "3.0.0"
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = "1.0", default-features = false, optional = true }
+serde = { version = "1.0.188", default-features = false }
 derive_more = { version = "0.99.17" }
 
 # Substrate
@@ -40,7 +40,6 @@ std = [
 	"nimbus-primitives/std",
 	"parity-scale-codec/std",
 	"scale-info/std",
-	"serde",
 	"sp-runtime/std",
 	"sp-std/std",
 	"num-traits/std",

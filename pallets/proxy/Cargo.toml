@@ -30,7 +30,7 @@ xcm-executor = { package = "staging-xcm-executor", git = "https://github.com/par
 xcm-builder = {  package = "staging-xcm-builder", git = "https://github.com/paritytech/polkadot-sdk", default-features = false, tag = "polkadot-v1.1.0"}
 
 [dev-dependencies]
-serde = { version = "1.0.132" }
+serde = { version = "1.0.188" }
 # Substrate
 codec = { package = "parity-scale-codec", version = "3.0.0" }
 rand = "0.8.5"

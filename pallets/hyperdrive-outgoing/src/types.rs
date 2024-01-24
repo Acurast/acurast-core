@@ -5,9 +5,6 @@ use codec::alloc::string::String;
 use frame_support::pallet_prelude::*;
 pub use mmr_lib;
 use scale_info::TypeInfo;
-#[cfg(feature = "std")]
-use serde;
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 use sp_core::RuntimeDebug;
 use sp_runtime::traits;
@@ -196,9 +193,18 @@ pub struct Proof<Hash> {
 }
 
 /// A self-contained MMR proof for a group of leaves, containing messages encoded for target chain.
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
+#[derive(
+    codec::Encode,
+    codec::Decode,
+    RuntimeDebug,
+    Clone,
+    PartialEq,
+    Eq,
+    TypeInfo,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct TargetChainProof<Hash> {
     /// The indices of the leaves the proof is for.
     pub leaves: Vec<TargetChainProofLeaf>,
@@ -210,9 +216,18 @@ pub struct TargetChainProof<Hash> {
 }
 
 /// A leaf of a self-contained MMR [`TargetChainProof`].
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(codec::Encode, codec::Decode, RuntimeDebug, Clone, PartialEq, Eq, TypeInfo)]
+#[derive(
+    codec::Encode,
+    codec::Decode,
+    RuntimeDebug,
+    Clone,
+    PartialEq,
+    Eq,
+    TypeInfo,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct TargetChainProofLeaf {
     /// The k-index of this leaf.
     pub k_index: NodeIndex,
