@@ -57,7 +57,6 @@ pub mod pallet {
         pub assets: Vec<(<T as pallet_assets::Config<I>>::AssetId, u32, u8, u128)>,
     }
 
-    #[cfg(feature = "std")]
     impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
         fn default() -> Self {
             Self { assets: vec![] }

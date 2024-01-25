@@ -94,7 +94,6 @@ pub mod pallet {
         pub attestations: Vec<(T::AccountId, Option<Attestation>)>,
     }
 
-    #[cfg(feature = "std")]
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             Self {

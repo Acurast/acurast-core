@@ -74,7 +74,6 @@ pub mod pallet {
         pub vesters: Vec<(T::AccountId, VestingFor<T, I>)>,
     }
 
-    #[cfg(feature = "std")]
     impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
         fn default() -> Self {
             Self {
