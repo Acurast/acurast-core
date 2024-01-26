@@ -631,14 +631,16 @@ pub mod state_aggregator {
             ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
             ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
 
+            let data_hash = [1; 32];
+            let _ = state_aggregator.insert(data_hash);
             let data_hash = [2; 32];
             let _ = state_aggregator.insert(data_hash);
-            assert_eq!(state_aggregator.mmr_size, 4);
+            assert_eq!(state_aggregator.mmr_size, 3);
             assert_eq!(
                 state_aggregator.snapshot_root(),
                 [
-                    159, 146, 79, 136, 82, 0, 125, 15, 177, 253, 13, 245, 231, 50, 185, 188, 98, 1,
-                    49, 137, 247, 85, 232, 173, 225, 190, 54, 50, 234, 171, 110, 143
+                    52, 109, 140, 150, 162, 69, 66, 19, 252, 192, 218, 255, 60, 150, 173, 3, 152,
+                    20, 129, 129, 185, 250, 100, 136, 247, 174, 44, 10, 245, 178, 10, 160
                 ]
             );
             assert_eq!(state_aggregator.snapshot_start_level, 7);
