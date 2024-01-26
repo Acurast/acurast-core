@@ -61,12 +61,7 @@ mod mmr {
 
     impl<T: Clone + PartialEq + Encode + Packed + EncodeLike, M: Merge<Item = T>> MMR<T, M> {
         // find internal MMR elem, the pos must exists, otherwise a error will return
-        fn find_elem<'b>(
-            &self,
-            pos: u64,
-            store: &Map<T>,
-            hashes: &'b [T],
-        ) -> Result<Cow<'b, T>> {
+        fn find_elem<'b>(&self, pos: u64, store: &Map<T>, hashes: &'b [T]) -> Result<Cow<'b, T>> {
             let pos_offset = pos.checked_sub(self.mmr_size);
             if let Some(elem) = pos_offset.and_then(|i| hashes.get(i as usize)) {
                 return Ok(Cow::Borrowed(elem));
@@ -76,11 +71,7 @@ mod mmr {
         }
 
         // push a element and return position
-        pub fn push(
-            &mut self,
-            store: &Map<T>,
-            elem: T,
-        ) -> Result<Vec<(u64, Vec<T>)>> {
+        pub fn push(&mut self, store: &Map<T>, elem: T) -> Result<Vec<(u64, Vec<T>)>> {
             let mut elems = vec![elem];
             let elem_pos = self.mmr_size;
             let peak_map = get_peak_map(self.mmr_size);
@@ -107,11 +98,19 @@ mod mmr {
             if self.mmr_size == 0 {
                 return Err(Error::GetRootOnEmpty);
             } else if self.mmr_size == 1 {
-                return store.get(&0).map(|v| v.clone()).ok_or(Error::InconsistentStore);
+                return store
+                    .get(&0)
+                    .map(|v| v.clone())
+                    .ok_or(Error::InconsistentStore);
             }
             let peaks: Vec<T> = get_peaks(self.mmr_size)
                 .into_iter()
-                .map(|peak_pos| store.get(&peak_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore))
+                .map(|peak_pos| {
+                    store
+                        .get(&peak_pos)
+                        .map(|v| v.clone())
+                        .ok_or(Error::InconsistentStore)
+                })
                 .collect::<Result<Vec<T>>>()?;
             self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
         }
@@ -144,7 +143,12 @@ mod mmr {
             }
             // take peak root from store if no positions need to be proof
             if pos_list.is_empty() {
-                proof.push(store.get(&peak_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore)?);
+                proof.push(
+                    store
+                        .get(&peak_pos)
+                        .map(|v| v.clone())
+                        .ok_or(Error::InconsistentStore)?,
+                );
                 return Ok(());
             }
 
@@ -178,7 +182,12 @@ mod mmr {
                     // drop sibling
                     queue.pop_front();
                 } else {
-                    proof.push(store.get(&sib_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore)?);
+                    proof.push(
+                        store
+                            .get(&sib_pos)
+                            .map(|v| v.clone())
+                            .ok_or(Error::InconsistentStore)?,
+                    );
                 }
                 if parent_pos < peak_pos {
                     // save pos to tree buf
@@ -267,10 +276,10 @@ mod mmr {
 #[ink::contract]
 pub mod state_aggregator {
     use ink::env::hash;
+    use ink::prelude::collections::BTreeMap;
     use ink::prelude::vec;
     use ink::prelude::{format, string::String, vec::Vec};
     use ink::storage::Mapping;
-    use ink::prelude::collections::BTreeMap;
 
     use ckb_merkle_mountain_range::{Merge, Result as MMRResult};
 
@@ -453,7 +462,9 @@ pub mod state_aggregator {
 
             let mut mmr = super::mmr::MMR::<[u8; 32], MergeKeccak>::new(self.mmr_size);
 
-            let mut batch = mmr.push(&self.tree, hash).map_err(|err| Error::CouldNotInsert(format!("{:?}", err)))?;
+            let mut batch = mmr
+                .push(&self.tree, hash)
+                .map_err(|err| Error::CouldNotInsert(format!("{:?}", err)))?;
 
             if batch.len() != 1 {
                 return Err(Error::InvalidBatchDuringInsert);

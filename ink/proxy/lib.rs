@@ -554,8 +554,10 @@ mod proxy {
                     // Successful call result
                     Ok(Ok(Ok((leaf_index, snapshot)))) => {
                         // Store encoded action
-                        self.actions
-                            .insert(self.next_outgoing_action_id, &(leaf_index, snapshot, encoded_action));
+                        self.actions.insert(
+                            self.next_outgoing_action_id,
+                            &(leaf_index, snapshot, encoded_action),
+                        );
 
                         // Increment action id
                         self.next_outgoing_action_id += 1;
@@ -796,13 +798,13 @@ mod proxy {
 
             // Prepare a range of actions for generating the proof
             let positions: Vec<u64> = (from_id..=to_id).collect();
-            let leaf_index: Vec<u64> = positions.iter().map(|action_id| {
-                match self.actions.get(action_id) {
+            let leaf_index: Vec<u64> = positions
+                .iter()
+                .map(|action_id| match self.actions.get(action_id) {
                     None => Err(Error::UnknownActionIndex(*action_id)),
                     Some((leaf_index, _, _)) => Ok(leaf_index),
-                }
-            }).collect::<Result<Vec<u64>, Error>>()?;
-
+                })
+                .collect::<Result<Vec<u64>, Error>>()?;
 
             // Generate proof
             let call_result: OuterError<acurast_state_ink::GenerateProofReturn> =
@@ -827,13 +829,10 @@ mod proxy {
                 Ok(Ok(Ok(proof))) => {
                     let leaves: Vec<LeafProof> = positions
                         .iter()
-                        .map(|action_id| {
-                            match self.actions.get(action_id) {
-                                None => Err(Error::UnknownActionIndex(*action_id)),
-                                Some((leaf_index, _snapshot, data)) => Ok(LeafProof {
-                                    leaf_index,
-                                    data,
-                                }),
+                        .map(|action_id| match self.actions.get(action_id) {
+                            None => Err(Error::UnknownActionIndex(*action_id)),
+                            Some((leaf_index, _snapshot, data)) => {
+                                Ok(LeafProof { leaf_index, data })
                             }
                         })
                         .collect::<Result<Vec<LeafProof>, Error>>()?;

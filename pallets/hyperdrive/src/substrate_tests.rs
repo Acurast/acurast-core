@@ -91,7 +91,6 @@ fn test_send_noop_message() {
     });
 }
 
-
 #[test]
 fn test_send_noop_message2() {
     let mut test = new_test_ext();
@@ -170,7 +169,6 @@ fn test_send_noop_message2() {
         );
     });
 }
-
 
 #[test]
 fn test_send_noop_message3() {
