@@ -245,7 +245,7 @@ mod proxy {
         next_outgoing_action_id: u64,
         processed_incoming_actions: Mapping<u64, ()>,
         next_job_id: u128,
-        actions: Mapping<u64, (u128, Vec<u8>)>,
+        actions: Mapping<u64, (u64, u128, Vec<u8>)>,
         job_info: Mapping<u128, (u16, Vec<u8>)>,
     }
 
@@ -552,10 +552,10 @@ mod proxy {
                     // Errors emitted by the contract being called
                     Ok(Ok(Err(error))) => Err(Error::StateAggregatorError(error)),
                     // Successful call result
-                    Ok(Ok(Ok(snapshot))) => {
+                    Ok(Ok(Ok((leaf_index, snapshot)))) => {
                         // Store encoded action
                         self.actions
-                            .insert(self.next_outgoing_action_id, &(snapshot, encoded_action));
+                            .insert(self.next_outgoing_action_id, &(leaf_index, snapshot, encoded_action));
 
                         // Increment action id
                         self.next_outgoing_action_id += 1;
@@ -768,6 +768,11 @@ mod proxy {
         //
 
         #[ink(message)]
+        pub fn action_info(&self, action_id: u64) -> Option<(u64, u128, Vec<u8>)> {
+            self.actions.get(action_id)
+        }
+
+        #[ink(message)]
         pub fn is_action_processed(&self, action_id: u64) -> bool {
             self.processed_incoming_actions.contains(action_id)
         }
@@ -786,11 +791,18 @@ mod proxy {
             }
 
             // Normalize leaf position: leafs start on position 0, but actions id's start from 1
-            let from_id = from - 1;
-            let to_id = to - 1;
+            let from_id = from;
+            let to_id = to;
 
             // Prepare a range of actions for generating the proof
-            let leaf_index: Vec<u64> = (from_id..=to_id).collect();
+            let positions: Vec<u64> = (from_id..=to_id).collect();
+            let leaf_index: Vec<u64> = positions.iter().map(|action_id| {
+                match self.actions.get(action_id) {
+                    None => Err(Error::UnknownActionIndex(*action_id)),
+                    Some((leaf_index, _, _)) => Ok(leaf_index),
+                }
+            }).collect::<Result<Vec<u64>, Error>>()?;
+
 
             // Generate proof
             let call_result: OuterError<acurast_state_ink::GenerateProofReturn> =
@@ -813,14 +825,13 @@ mod proxy {
                 Ok(Ok(Err(error))) => Err(Error::StateAggregatorError(error)),
                 // Successful call result
                 Ok(Ok(Ok(proof))) => {
-                    let leaves: Vec<LeafProof> = leaf_index
+                    let leaves: Vec<LeafProof> = positions
                         .iter()
-                        .map(|index| {
-                            let action_id = *index + 1;
+                        .map(|action_id| {
                             match self.actions.get(action_id) {
-                                None => Err(Error::UnknownActionIndex(action_id)),
-                                Some((_snapshot, data)) => Ok(LeafProof {
-                                    leaf_index: *index,
+                                None => Err(Error::UnknownActionIndex(*action_id)),
+                                Some((leaf_index, _snapshot, data)) => Ok(LeafProof {
+                                    leaf_index,
                                     data,
                                 }),
                             }

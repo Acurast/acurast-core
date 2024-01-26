@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 use ink::env::call::Selector;
-use ink::storage::Mapping;
+use ink::prelude::collections::BTreeMap;
 
-type Map<SK, T> = Mapping<u64, T, SK>;
+type Map<T> = BTreeMap<u64, T>;
 
 pub use state_aggregator::Error;
 
@@ -14,7 +14,7 @@ pub const GENERATE_PROOF_SELECTOR: Selector = Selector::new(ink::selector_bytes!
 
 // Method types
 
-pub type InsertReturn = Result<u128, state_aggregator::Error>;
+pub type InsertReturn = Result<(u64, u128), state_aggregator::Error>;
 
 pub type GenerateProofReturn =
     Result<state_aggregator::MerkleProof<[u8; 32]>, state_aggregator::Error>;
@@ -30,7 +30,7 @@ mod mmr {
     use ckb_merkle_mountain_range::{Error, Merge, Result};
     use core::fmt::Debug;
     use core::marker::PhantomData;
-    use ink::storage::traits::{Packed, StorageKey};
+    use ink::storage::traits::Packed;
     use scale::{Encode, EncodeLike};
 
     use ink::prelude::vec;
@@ -61,24 +61,24 @@ mod mmr {
 
     impl<T: Clone + PartialEq + Encode + Packed + EncodeLike, M: Merge<Item = T>> MMR<T, M> {
         // find internal MMR elem, the pos must exists, otherwise a error will return
-        fn find_elem<'b, SK: StorageKey>(
+        fn find_elem<'b>(
             &self,
             pos: u64,
-            store: &Map<SK, T>,
+            store: &Map<T>,
             hashes: &'b [T],
         ) -> Result<Cow<'b, T>> {
             let pos_offset = pos.checked_sub(self.mmr_size);
             if let Some(elem) = pos_offset.and_then(|i| hashes.get(i as usize)) {
                 return Ok(Cow::Borrowed(elem));
             }
-            let elem = store.get(pos).ok_or(Error::InconsistentStore)?;
-            Ok(Cow::Owned(elem))
+            let elem = store.get(&pos).ok_or(Error::InconsistentStore)?;
+            Ok(Cow::Owned(elem.clone()))
         }
 
         // push a element and return position
-        pub fn push<SK: StorageKey>(
+        pub fn push(
             &mut self,
-            store: &Map<SK, T>,
+            store: &Map<T>,
             elem: T,
         ) -> Result<Vec<(u64, Vec<T>)>> {
             let mut elems = vec![elem];
@@ -90,7 +90,7 @@ mod mmr {
                 peak <<= 1;
                 pos += 1;
                 let left_pos = pos - peak;
-                let left_elem = self.find_elem(left_pos, store, &elems)?;
+                let left_elem = self.find_elem(left_pos, store, elems.as_slice())?;
                 let right_elem = elems.last().expect("checked");
                 let parent_elem = M::merge(&left_elem, right_elem)?;
                 elems.push(parent_elem);
@@ -103,15 +103,15 @@ mod mmr {
         }
 
         /// get_root
-        pub fn get_root<SK: StorageKey>(&self, store: &Map<SK, T>) -> Result<T> {
+        pub fn get_root(&self, store: &Map<T>) -> Result<T> {
             if self.mmr_size == 0 {
                 return Err(Error::GetRootOnEmpty);
             } else if self.mmr_size == 1 {
-                return store.get(0).ok_or(Error::InconsistentStore);
+                return store.get(&0).map(|v| v.clone()).ok_or(Error::InconsistentStore);
             }
             let peaks: Vec<T> = get_peaks(self.mmr_size)
                 .into_iter()
-                .map(|peak_pos| store.get(peak_pos).ok_or(Error::InconsistentStore))
+                .map(|peak_pos| store.get(&peak_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore))
                 .collect::<Result<Vec<T>>>()?;
             self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
         }
@@ -131,12 +131,12 @@ mod mmr {
         /// 1. find a lower tree in peak that can generate a complete merkle proof for position
         /// 2. find that tree by compare positions
         /// 3. generate proof for each positions
-        fn gen_proof_for_peak<SK: StorageKey>(
+        fn gen_proof_for_peak(
             &self,
             proof: &mut Vec<T>,
             pos_list: Vec<u64>,
             peak_pos: u64,
-            store: &Map<SK, T>,
+            store: &Map<T>,
         ) -> Result<()> {
             // do nothing if position itself is the peak
             if pos_list.len() == 1 && pos_list == [peak_pos] {
@@ -144,7 +144,7 @@ mod mmr {
             }
             // take peak root from store if no positions need to be proof
             if pos_list.is_empty() {
-                proof.push(store.get(peak_pos).ok_or(Error::InconsistentStore)?);
+                proof.push(store.get(&peak_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore)?);
                 return Ok(());
             }
 
@@ -178,7 +178,7 @@ mod mmr {
                     // drop sibling
                     queue.pop_front();
                 } else {
-                    proof.push(store.get(sib_pos).ok_or(Error::InconsistentStore)?);
+                    proof.push(store.get(&sib_pos).map(|v| v.clone()).ok_or(Error::InconsistentStore)?);
                 }
                 if parent_pos < peak_pos {
                     // save pos to tree buf
@@ -192,10 +192,10 @@ mod mmr {
         /// 1. sort positions
         /// 2. push merkle proof to proof by peak from left to right
         /// 3. push bagged right hand side root
-        pub fn gen_proof<SK: StorageKey>(
+        pub fn gen_proof(
             &self,
             mut pos_list: Vec<u64>,
-            store: &Map<SK, T>,
+            store: &Map<T>,
         ) -> Result<MerkleProof<T, M>> {
             if pos_list.is_empty() {
                 return Err(Error::GenProofForInvalidLeaves);
@@ -269,8 +269,8 @@ pub mod state_aggregator {
     use ink::env::hash;
     use ink::prelude::vec;
     use ink::prelude::{format, string::String, vec::Vec};
-    use ink::storage::traits::AutoKey;
     use ink::storage::Mapping;
+    use ink::prelude::collections::BTreeMap;
 
     use ckb_merkle_mountain_range::{Merge, Result as MMRResult};
 
@@ -321,6 +321,9 @@ pub mod state_aggregator {
     pub enum Error {
         NotAllowed,
         CouldNotGenerateProof(String),
+        CouldNotInsert(String),
+        InvalidBatchDuringInsert,
+        CannotSnapshot,
     }
 
     #[ink::storage_item]
@@ -340,7 +343,7 @@ pub mod state_aggregator {
         snapshot_start_level: BlockNumber,
         snapshot_counter: u128,
         mmr_size: u64,
-        tree: Map<AutoKey, [u8; 32]>,
+        tree: Map<[u8; 32]>,
         snapshot_level: Mapping<u128, u32>,
     }
 
@@ -365,7 +368,7 @@ pub mod state_aggregator {
                 snapshot_start_level: 0,
                 snapshot_counter: 1,
                 mmr_size: 0,
-                tree: Mapping::new(),
+                tree: BTreeMap::new(),
                 snapshot_level: Mapping::new(),
             }
         }
@@ -377,13 +380,14 @@ pub mod state_aggregator {
             Err(Error::NotAllowed)
         }
 
-        fn finalize_snapshot(&mut self, required: bool) {
+        fn finalize_snapshot(&mut self, required: bool) -> Result<(), Error> {
             let current_block_number = Self::env().block_number();
 
             if self.snapshot_start_level == 0 {
                 // Start snapshot
                 self.snapshot_start_level = current_block_number;
-                self.tree = Mapping::new();
+                self.tree.clear();
+                self.mmr_size = 0;
             }
 
             if self.snapshot_start_level + self.config.snapshot_duration < current_block_number {
@@ -396,7 +400,8 @@ pub mod state_aggregator {
 
                 // Start new snapshot
                 self.snapshot_start_level = current_block_number;
-                self.tree = Mapping::new();
+                self.tree.clear();
+                self.mmr_size = 0;
 
                 self.env().emit_event(SnapshotFinalized {
                     snapshot: self.snapshot_counter,
@@ -404,9 +409,11 @@ pub mod state_aggregator {
                 });
 
                 self.snapshot_counter += 1;
-            } else {
-                assert!(!required, "CANNOT_SNAPSHOT");
+            } else if required {
+                return Err(Error::CannotSnapshot);
             }
+
+            Ok(())
         }
 
         #[ink(message)]
@@ -430,14 +437,14 @@ pub mod state_aggregator {
         }
 
         #[ink(message)]
-        pub fn snapshot(&mut self) {
-            self.finalize_snapshot(true);
+        pub fn snapshot(&mut self) -> Result<(), Error> {
+            self.finalize_snapshot(true)
         }
 
         #[ink(message)]
         pub fn insert(&mut self, hash: [u8; 32]) -> crate::InsertReturn {
             // Check if the snapshot can be finalized
-            self.finalize_snapshot(false);
+            self.finalize_snapshot(false)?;
 
             // Only the authorized contract can add data
             if self.config.acurast_contract != self.env().caller() {
@@ -446,16 +453,22 @@ pub mod state_aggregator {
 
             let mut mmr = super::mmr::MMR::<[u8; 32], MergeKeccak>::new(self.mmr_size);
 
-            let mut batch = mmr.push(&self.tree, hash).expect("COULD_NOT_INSERT");
+            let mut batch = mmr.push(&self.tree, hash).map_err(|err| Error::CouldNotInsert(format!("{:?}", err)))?;
 
+            if batch.len() != 1 {
+                return Err(Error::InvalidBatchDuringInsert);
+            }
+
+            let mut leaf_index: u64 = 0;
             for (pos, elems) in batch.drain(..) {
+                leaf_index = pos;
                 for (i, elem) in elems.into_iter().enumerate() {
-                    self.tree.insert(pos + i as u64, &elem);
+                    self.tree.insert(pos + i as u64, elem);
                 }
             }
             self.mmr_size = mmr.mmr_size();
 
-            Ok(self.snapshot_counter)
+            Ok((leaf_index, self.snapshot_counter))
         }
 
         #[ink(message)]

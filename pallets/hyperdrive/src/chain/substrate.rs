@@ -99,7 +99,7 @@ where
             .leaves
             .iter()
             .map(|item| {
-                let hash = sp_runtime::traits::Keccak256::hash(&item.data);
+                let hash = sp_runtime::traits::BlakeTwo256::hash(&item.data);
 
                 match <[u8; 32]>::try_from(hash) {
                     Ok(h) => Ok((item.leaf_index, h)),
@@ -115,10 +115,16 @@ where
 
     fn message_id(self: &Self) -> Result<MessageIdentifier, Self::Error> {
         // TODO: Process multiple messages (currently we only process the first leaf from the proof)
-        self.leaves
+        let message_bytes = self
+            .leaves
             .get(0)
-            .map(|leaf| MessageIdentifier::from(leaf.leaf_index + 1))
-            .ok_or(Self::Error::InvalidMessage)
+            .map(|leaf| leaf.data.clone())
+            .ok_or(Self::Error::InvalidMessage)?;
+
+        let action = HyperdriveAction::decode(&message_bytes)
+            .map_err(|err| Self::Error::CouldNotDecodeAction(format!("{:?}", err)))?;
+
+        Ok(MessageIdentifier::from(action.id))
     }
 
     fn message(self: &Self) -> Result<ParsedAction<T>, Self::Error> {
