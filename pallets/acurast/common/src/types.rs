@@ -8,9 +8,6 @@ use frame_support::{pallet_prelude::*, storage::bounded_vec::BoundedVec};
 use sp_std::prelude::*;
 
 use crate::ParameterBound;
-#[cfg(feature = "std")]
-use serde;
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 pub(crate) const SCRIPT_PREFIX: &[u8] = b"ipfs://";
@@ -32,9 +29,19 @@ const SERIAL_NUMBER_MAX_LENGTH: u32 = 20;
 pub type SerialNumber = BoundedVec<u8, ConstU32<SERIAL_NUMBER_MAX_LENGTH>>;
 
 /// A multi origin identifies a given address from a given origin chain.
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub enum MultiOrigin<AcurastAccountId> {
     Acurast(AcurastAccountId),
     Tezos(TezosAddressBytes),
@@ -115,9 +122,20 @@ pub struct Environment<
 
 pub const MAX_JOB_MODULES: u32 = 1;
 
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub enum JobModule {
     DataEncryption,
 }
@@ -147,9 +165,19 @@ pub type JobModules = BoundedVec<JobModule, ConstU32<MAX_JOB_MODULES>>;
 ///   SLOT 2: ■■■□□□□□□□__________■■■□□□□□□□__________■■■□□□□□□□
 ///   SLOT 3: □□■■■□□□□□__________□□■■■□□□□□__________□□■■■□□□□□
 ///   ```
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub struct Schedule {
     /// An upperbound for the duration of one execution of the script in milliseconds.
     pub duration: u64,

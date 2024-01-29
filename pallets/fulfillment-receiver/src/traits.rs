@@ -1,9 +1,7 @@
-use frame_support::{
-    dispatch::{PostDispatchInfo, Weight},
-    sp_runtime::DispatchResultWithInfo,
-};
+use frame_support::{dispatch::PostDispatchInfo, sp_runtime::DispatchResultWithInfo};
 
 use crate::{Config, Fulfillment};
+use frame_support::pallet_prelude::*;
 
 /// Handles an acurast job fulfillment.
 ///

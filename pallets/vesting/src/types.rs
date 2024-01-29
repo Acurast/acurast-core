@@ -1,5 +1,4 @@
 use frame_support::pallet_prelude::*;
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 use crate::Config;
@@ -9,8 +8,19 @@ pub type VesterStateFor<T, I> =
     VesterState<<T as Config<I>>::Balance, <T as Config<I>>::BlockNumber>;
 pub type PoolStateFor<T, I> = PoolState<<T as Config<I>>::Balance>;
 
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 pub struct Vesting<Balance, BlockNumber> {
     pub stake: Balance,
     pub locking_period: BlockNumber,

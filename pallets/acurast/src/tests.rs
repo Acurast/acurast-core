@@ -1,13 +1,15 @@
 #![cfg(test)]
 
+use frame_support::{assert_err, assert_ok, BoundedVec};
+use hex_literal::hex;
+use sp_runtime::{bounded_vec, AccountId32};
+
+use acurast_common::{Environment, MultiOrigin};
+
 use crate::{
     mock::*, utils::validate_and_extract_attestation, AllowedSourcesUpdate, AttestationChain,
     CertificateRevocationListUpdate, Error, ListUpdateOperation, SerialNumber,
 };
-use acurast_common::{Environment, MultiOrigin};
-use frame_support::{assert_err, assert_ok, bounded_vec, BoundedVec};
-use hex_literal::hex;
-use sp_runtime::AccountId32;
 
 #[test]
 fn test_job_registration() {

@@ -1,9 +1,9 @@
 use crate::{chain::ethereum::EthereumValidationError, MessageIdentifier};
 use derive_more::{Display, From};
-use frame_support::RuntimeDebug;
 use rlp::{decode_list, encode, Rlp};
 use sp_core::Hasher;
 use sp_runtime::traits::Keccak256;
+use sp_runtime::RuntimeDebug;
 use sp_std::vec;
 use sp_std::vec::Vec;
 

@@ -16,7 +16,7 @@ fn test_single_vest_no_rewards() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -103,7 +103,7 @@ fn test_single_vest_rewards() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -214,7 +214,7 @@ fn test_single_revest_in_cooldown() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -254,7 +254,7 @@ fn test_single_revest_in_cooldown() {
             // revest the same stake and for same locking_period
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -376,7 +376,7 @@ fn test_single_revest_before_cooldown() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -407,7 +407,7 @@ fn test_single_revest_before_cooldown() {
             // revest the same stake and for same locking_period
             Vesting {
                 stake: 20u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -513,7 +513,7 @@ fn test_multiple_vest_rewards() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -522,7 +522,7 @@ fn test_multiple_vest_rewards() {
             RuntimeOrigin::signed(charlie_account_id()).into(),
             Vesting {
                 stake: 20u128 * UNIT,
-                locking_period: 50u32,
+                locking_period: 50u64,
             }
         ));
 
@@ -684,7 +684,7 @@ fn test_cannot_revest_less() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -695,7 +695,7 @@ fn test_cannot_revest_less() {
                 // revest the same stake and for same locking_period
                 Vesting {
                     stake: 9 * UNIT,
-                    locking_period: 100u32,
+                    locking_period: 100u64,
                 }
             ),
             Error::<Test>::CannotRevestLess
@@ -715,7 +715,7 @@ fn test_cannot_revest_with_shorter_locking_period() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 
@@ -726,7 +726,7 @@ fn test_cannot_revest_with_shorter_locking_period() {
                 // revest the same stake and for same locking_period
                 Vesting {
                     stake: 15 * UNIT,
-                    locking_period: 99u32,
+                    locking_period: 99u64,
                 }
             ),
             Error::<Test>::CannotRevestWithShorterLockingPeriod
@@ -746,7 +746,7 @@ fn test_cannot_revest_with_shorter_locking_period_() {
             RuntimeOrigin::signed(alice_account_id()).into(),
             Vesting {
                 stake: 10u128 * UNIT,
-                locking_period: 100u32,
+                locking_period: 100u64,
             }
         ));
 

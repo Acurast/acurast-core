@@ -18,7 +18,6 @@
 //! An MMR storage implementation.
 
 use codec::Encode;
-use frame_support::log::{debug, trace};
 use mmr_lib;
 use mmr_lib::helper;
 use sp_core::offchain::StorageKind;
@@ -82,7 +81,7 @@ where
         // for proofs for finalized blocks, which should usually be already canonicalized,
         // unless the MMR client gadget has a delay.
         let key = Pallet::<T, I>::node_canon_offchain_key(pos);
-        debug!(
+        log::debug!(
             target: "runtime::mmr::offchain", "offchain db get {}: leaf idx {:?}, canon key {:?}",
             pos, leaf_index, key
         );
@@ -98,7 +97,7 @@ where
                 Pallet::<T, I>::leaf_meta(leaf_index).ok_or(mmr_lib::Error::InconsistentStore)?;
             let temp_key =
                 Pallet::<T, I>::node_temp_offchain_key(pos, ancestor_parent_hash, root_hash);
-            debug!(
+            log::debug!(
                 target: "runtime::mmr::offchain",
                 "offchain db get {}: leaf idx {:?}, hash {:?}, temp key {:?}",
                 pos, leaf_index, ancestor_parent_hash, temp_key
@@ -139,7 +138,7 @@ where
             return Ok(());
         }
 
-        trace!(
+        log::trace!(
             target: "runtime::mmr", "elems: {:?}",
             elems.iter().map(|elem| TargetChainConfigOf::<T,I>::hash_node(elem)).collect::<Vec<_>>()
         );
@@ -218,7 +217,7 @@ where
         // in offchain DB to avoid DB collisions and overwrites in case of forks.
         let parent_hash = <frame_system::Pallet<T>>::parent_hash();
         let temp_key = Pallet::<T, I>::node_temp_offchain_key(pos, parent_hash, unique);
-        debug!(
+        log::debug!(
             target: "runtime::mmr::offchain", "offchain db set: pos {} parent_hash {:?} key {:?}",
             pos, parent_hash, temp_key
         );
@@ -247,8 +246,8 @@ fn peaks_to_prune_and_store(
         helper::get_peaks(old_size)
     };
     let peaks_after = helper::get_peaks(new_size);
-    trace!(target: "runtime::mmr", "peaks_before: {:?}", peaks_before);
-    trace!(target: "runtime::mmr", "peaks_after: {:?}", peaks_after);
+    log::trace!(target: "runtime::mmr", "peaks_before: {:?}", peaks_before);
+    log::trace!(target: "runtime::mmr", "peaks_after: {:?}", peaks_after);
     let mut peaks_before = peaks_before.into_iter().peekable();
     let mut peaks_after = peaks_after.into_iter().peekable();
 

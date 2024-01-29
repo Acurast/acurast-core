@@ -3,9 +3,13 @@
 
 //! Auto-compounding functionality for staking rewards
 
+use crate::pallet::{
+    AutoCompoundingDelegations as AutoCompoundingDelegationsStorage, CandidateInfo, Config,
+    DelegatorState, Error, Event, Pallet, Total,
+};
 use frame_support::ensure;
 use frame_support::traits::Get;
-use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
+use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::RuntimeDebug};
 use num_traits::Saturating;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
@@ -13,10 +17,6 @@ use sp_runtime::Percent;
 use sp_std::prelude::*;
 use sp_std::vec::Vec;
 
-use crate::pallet::{
-    AutoCompoundingDelegations as AutoCompoundingDelegationsStorage, CandidateInfo, Config,
-    DelegatorState, Error, Event, Pallet, Total,
-};
 use crate::types::{Bond, BondAdjust, Delegator};
 use crate::StakeOf;
 

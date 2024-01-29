@@ -4,11 +4,12 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 //! Benchmarking
-use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, vec};
+use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite};
 use frame_support::traits::{Currency, Get, OnFinalize, OnInitialize};
+use frame_system::pallet_prelude::BlockNumberFor;
 use frame_system::RawOrigin;
 use sp_runtime::{Perbill, Percent};
-use sp_std::vec::Vec;
+use sp_std::{vec, vec::Vec};
 
 use crate::{
     AwardedPts, BalanceOf, Call, CandidateBondLessRequest, Config, DelegationAction, Pallet,
@@ -99,9 +100,9 @@ fn parachain_staking_on_finalize<T: Config>(author: T::AccountId) {
 }
 
 /// Run to end block and author
-fn roll_to_and_author<T: Config>(round_delay: u32, author: T::AccountId) {
-    let total_rounds = round_delay + 1u32;
-    let round_length: T::BlockNumber = Pallet::<T>::round().length.into();
+fn roll_to_and_author<T: Config>(round_delay: u64, author: T::AccountId) {
+    let total_rounds = round_delay as u32 + 1u32;
+    let round_length: BlockNumberFor<T> = Pallet::<T>::round().length.into();
     let mut now = <frame_system::Pallet<T>>::block_number() + 1u32.into();
     let end = Pallet::<T>::round().first + (round_length * total_rounds.into());
     while now < end {
@@ -834,8 +835,8 @@ benchmarks! {
     // ON_INITIALIZE
 
     prepare_staking_payouts {
-        let reward_delay = <<T as Config>::RewardPaymentDelay as Get<u32>>::get();
-        let round = reward_delay + 2u32;
+        let reward_delay = <<T as Config>::RewardPaymentDelay as Get<u64>>::get();
+        let round = reward_delay + 2u64;
         let payout_round = round - reward_delay;
         // may need:
         //  <Points<T>>

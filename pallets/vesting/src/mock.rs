@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use frame_support::{
     parameter_types,
     sp_runtime::{
-        generic,
         traits::{AccountIdLookup, BlakeTwo256},
+        BuildStorage,
     },
     traits::Everything,
 };
@@ -15,12 +15,14 @@ use sp_std::prelude::*;
 use crate::stub::*;
 use crate::*;
 
+type Block = frame_system::mocking::MockBlock<Test>;
+
 pub struct ExtBuilder;
 
 impl ExtBuilder {
     pub fn build(self) -> sp_io::TestExternalities {
-        let t = frame_system::GenesisConfig::default()
-            .build_storage::<Test>()
+        let t = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
             .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
@@ -36,12 +38,8 @@ impl Default for ExtBuilder {
 }
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block<Test>,
-        NodeBlock = Block<Test>,
-        UncheckedExtrinsic = UncheckedExtrinsic<Test>,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         AcurastVesting: crate::{Pallet, Call, Storage, Event<T>},
         MockPallet: mock_pallet::{Pallet, Event<T>}
     }
@@ -49,13 +47,12 @@ frame_support::construct_runtime!(
 
 impl frame_system::Config for Test {
     type RuntimeCall = RuntimeCall;
-    type Index = u32;
-    type BlockNumber = BlockNumber;
+    type Nonce = u32;
+    type Block = Block;
     type Hash = sp_core::H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeOrigin = RuntimeOrigin;
     type BlockHashCount = BlockHashCount;

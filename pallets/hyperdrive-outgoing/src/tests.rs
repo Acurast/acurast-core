@@ -6,6 +6,7 @@ use sp_core::{
     offchain::{testing::TestOffchainExt, OffchainDbExt, OffchainWorkerExt},
     H256,
 };
+use sp_runtime::BuildStorage;
 
 use types::Proof;
 use utils;
@@ -15,8 +16,8 @@ use crate::stub::*;
 use crate::{mock::*, *};
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
-    frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
+    frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
         .unwrap()
         .into()
 }

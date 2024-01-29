@@ -5,7 +5,7 @@ use codec::{Decode, Encode};
 use core::marker::PhantomData;
 use derive_more::{Display, From};
 use frame_support::pallet_prelude::ConstU32;
-use frame_support::{BoundedVec, RuntimeDebug};
+use frame_support::BoundedVec;
 use pallet_acurast::{
     AllowedSources, EthereumAddressBytes, JobModule, JobModules, JobRegistration, MultiOrigin,
     ParameterBound, Schedule, Script,
@@ -17,6 +17,7 @@ use rlp::Rlp;
 use scale_info::TypeInfo;
 use sp_core::Hasher;
 use sp_runtime::traits::Keccak256;
+use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
 
 const STORAGE_INDEX: u8 = 7u8;

@@ -1,11 +1,11 @@
+use frame_support::weights::Weight;
 use frame_support::{
-    dispatch::Weight, parameter_types, traits::ConstU32,
-    weights::constants::RocksDbWeight as DbWeight,
+    parameter_types, traits::ConstU32, weights::constants::RocksDbWeight as DbWeight,
 };
 use pallet_acurast_hyperdrive::instances::TezosInstance;
 use sp_core::H256;
 use sp_runtime::traits::AccountIdLookup;
-use sp_runtime::{generic, traits::BlakeTwo256};
+use sp_runtime::traits::BlakeTwo256;
 
 use stub::*;
 
@@ -13,12 +13,8 @@ use crate::chain::tezos::DefaultTezosConfig;
 use crate::*;
 
 frame_support::construct_runtime!(
-    pub enum Test where
-        Block = Block<Test>,
-        NodeBlock = Block<Test>,
-        UncheckedExtrinsic = UncheckedExtrinsic<Test>,
-    {
-        System: frame_system::{Pallet, Call, Config, Storage, Event<T>} = 0,
+    pub enum Test {
+        System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>} = 0,
         HyperdriveOutgoing: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -29,13 +25,12 @@ impl frame_system::Config for Test {
     type BlockLength = ();
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
-    type Index = u64;
-    type BlockNumber = BlockNumber;
+    type Nonce = u64;
+    type Block = Block<Test>;
     type Hash = H256;
     type Hashing = BlakeTwo256;
     type AccountId = AccountId;
     type Lookup = AccountIdLookup<AccountId, ()>;
-    type Header = generic::Header<BlockNumber, BlakeTwo256>;
     type RuntimeEvent = RuntimeEvent;
     type BlockHashCount = BlockHashCount;
     type DbWeight = ();

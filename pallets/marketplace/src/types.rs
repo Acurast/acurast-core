@@ -6,9 +6,6 @@ use pallet_acurast::{
 };
 
 use core::fmt::Debug;
-#[cfg(feature = "std")]
-use serde;
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 use crate::Config;
@@ -219,9 +216,8 @@ pub struct Match<AccountId, MaxSlots: ParameterBound> {
 /// Structure representing a job registration partially specified.
 ///
 /// Useful for frontend to filter for processors that would match.
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
-#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>> {
     /// An optional array of the [AccountId]s allowed to fulfill the job. If the array is [None], then all sources are allowed.
     pub allowed_sources: Option<AllowedSources<AccountId, MaxAllowedSources>>,

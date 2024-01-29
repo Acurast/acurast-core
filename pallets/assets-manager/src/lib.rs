@@ -18,7 +18,6 @@ pub mod weights;
 use sp_runtime::traits::StaticLookup;
 
 pub use pallet::*;
-use sp_std::borrow::Borrow;
 use sp_std::prelude::*;
 pub use weights::WeightInfo;
 
@@ -30,8 +29,7 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use xcm::latest::MultiLocation;
-    use xcm::prelude::{Abstract, AssetId, Concrete, GeneralIndex, PalletInstance, Parachain, X3};
-    use xcm_executor::traits::Convert;
+    use xcm::prelude::{AssetId, GeneralIndex, PalletInstance, Parachain, X3};
 
     pub(crate) const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
@@ -59,7 +57,6 @@ pub mod pallet {
         pub assets: Vec<(<T as pallet_assets::Config<I>>::AssetId, u32, u8, u128)>,
     }
 
-    #[cfg(feature = "std")]
     impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
         fn default() -> Self {
             Self { assets: vec![] }
@@ -67,7 +64,7 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config<I>, I: 'static> GenesisBuild<T, I> for GenesisConfig<T, I> {
+    impl<T: Config<I>, I: 'static> BuildGenesisConfig for GenesisConfig<T, I> {
         fn build(&self) {
             for (internal_asset_id, parachain, pallet_instance, general_index) in
                 self.assets.clone()
@@ -247,20 +244,6 @@ pub mod pallet {
             }
 
             Ok(true)
-        }
-    }
-
-    impl<T: Config<I> + pallet_assets::Config<I>, I: 'static> Convert<MultiLocation, T::AssetId>
-        for Pallet<T, I>
-    {
-        fn convert_ref(id: impl Borrow<MultiLocation>) -> Result<T::AssetId, ()> {
-            Ok(Self::reverse_asset_index(Concrete(id.borrow().clone())).ok_or(())?)
-        }
-        fn reverse_ref(id: impl Borrow<T::AssetId>) -> Result<MultiLocation, ()> {
-            match Self::asset_index(id.borrow()).ok_or(())? {
-                Concrete(location) => Ok(location),
-                Abstract(_) => Err(()),
-            }
         }
     }
 }

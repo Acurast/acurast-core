@@ -60,13 +60,14 @@ mod tests;
 mod benchmarking;
 pub mod weights;
 
+extern crate alloc;
+
 #[frame_support::pallet]
 pub mod pallet {
     pub use crate::weights::WeightInfo;
     use core::ops::Div;
     use frame_support::{
         dispatch::{DispatchClass, DispatchResultWithPostInfo},
-        inherent::Vec,
         pallet_prelude::*,
         sp_runtime::{
             traits::{AccountIdConversion, CheckedSub, Saturating, Zero},
@@ -83,6 +84,7 @@ pub mod pallet {
     use pallet_session::SessionManager;
     use sp_runtime::traits::Convert;
     use sp_staking::SessionIndex;
+    use sp_std::vec::Vec;
 
     type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as SystemConfig>::AccountId>>::Balance;
@@ -130,7 +132,7 @@ pub mod pallet {
         type MaxInvulnerables: Get<u32>;
 
         // Will be kicked if block is not produced in threshold.
-        type KickThreshold: Get<Self::BlockNumber>;
+        type KickThreshold: Get<BlockNumberFor<Self>>;
 
         /// A stable ID for a validator.
         type ValidatorId: Member + Parameter;
@@ -181,7 +183,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn last_authored_block)]
     pub type LastAuthoredBlock<T: Config> =
-        StorageMap<_, Twox64Concat, T::AccountId, T::BlockNumber, ValueQuery>;
+        StorageMap<_, Twox64Concat, T::AccountId, BlockNumberFor<T>, ValueQuery>;
 
     /// Desired number of candidates.
     ///
@@ -204,7 +206,6 @@ pub mod pallet {
         pub desired_candidates: u32,
     }
 
-    #[cfg(feature = "std")]
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             Self {
@@ -216,12 +217,12 @@ pub mod pallet {
     }
 
     #[pallet::genesis_build]
-    impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             let duplicate_invulnerables = self
                 .invulnerables
                 .iter()
-                .collect::<std::collections::BTreeSet<_>>();
+                .collect::<alloc::collections::BTreeSet<_>>();
             assert!(
                 duplicate_invulnerables.len() == self.invulnerables.len(),
                 "duplicate invulnerables in genesis."
@@ -502,7 +503,7 @@ pub mod pallet {
     /// Keep track of number of authored blocks per authority, uncles are counted as well since
     /// they're a valid proof of being online.
     impl<T: Config + pallet_authorship::Config>
-        pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
+        pallet_authorship::EventHandler<T::AccountId, BlockNumberFor<T>> for Pallet<T>
     {
         fn note_author(author: T::AccountId) {
             let pot = Self::account_id();

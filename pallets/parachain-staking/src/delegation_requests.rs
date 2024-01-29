@@ -7,7 +7,7 @@ use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::DispatchError;
 use frame_support::traits::Get;
-use frame_support::{dispatch::DispatchResultWithPostInfo, RuntimeDebug};
+use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::RuntimeDebug};
 use num_traits::Saturating;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
