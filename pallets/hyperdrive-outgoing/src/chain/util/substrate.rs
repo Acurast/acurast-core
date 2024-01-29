@@ -1,10 +1,10 @@
 use crate::{Action, Leaf, LeafEncoder};
 use codec::Encode;
-use frame_support::inherent::Vec;
 use sp_io::hashing::blake2_256;
+use sp_std::vec::Vec;
 
-use frame_support::RuntimeDebug;
 use pallet_acurast_marketplace::{PubKey, PubKeyBytes};
+use sp_runtime::RuntimeDebug;
 
 use acurast_core_ink::types::{
     AssignProcessorPayloadV1, FinalizeJobPayloadV1, IncomingAction, IncomingActionPayloadV1,
