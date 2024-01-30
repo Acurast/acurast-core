@@ -8,13 +8,18 @@ members = [
 	"pallets/acurast/common",
 	"pallets/marketplace/reputation",
 	"p256-crypto",
+	"ink/consumer",
+	"ink/core",
+	"ink/proxy",
+	"ink/state",
+	"ink/validator"
 ]
 exclude = ["pallets/proxy"]
 
 [workspace.package]
 authors = [ "Papers AG" ]
 repository = "https://github.com/Acurast/acurast-core"
-version = "0.3.0"
+version = "0.3.1"
 
 # TODO: Temporary workaround (https://substrate.stackexchange.com/questions/9870)
 [patch.crates-io]

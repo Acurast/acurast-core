@@ -110,7 +110,7 @@ where
                     Preservation::Preserve,
                 )?;
             }
-            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
+            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) | MultiOrigin::AlephZero(_) => {
                 // The availability of these funds was ensured on the target chain side
                 Currency::transfer(
                     &hyperdrive_pallet_account,
@@ -222,7 +222,7 @@ where
                     Preservation::Preserve,
                 )?;
             }
-            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) => {
+            MultiOrigin::Tezos(_) | MultiOrigin::Ethereum(_) | MultiOrigin::AlephZero(_) => {
                 Currency::transfer(
                     &pallet_account,
                     &hyperdrive_pallet_account,

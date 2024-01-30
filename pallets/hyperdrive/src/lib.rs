@@ -13,6 +13,8 @@ mod mock;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
 mod stub;
 #[cfg(test)]
+mod substrate_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -46,8 +48,6 @@ pub mod pallet {
     use sp_std::prelude::*;
     use sp_std::vec;
 
-    use pallet_acurast_marketplace::types::RegistrationExtra;
-
     use super::*;
 
     /// A instantiable pallet for receiving secure state synchronizations into Acurast.
@@ -56,7 +56,7 @@ pub mod pallet {
 
     /// Configures the pallet instance for a specific target chain from which we synchronize state into Acurast.
     #[pallet::config]
-    pub trait Config<I: 'static = ()>: frame_system::Config {
+    pub trait Config<I: 'static = ()>: frame_system::Config + pallet_acurast::Config {
         type RuntimeEvent: From<Event<Self, I>>
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -105,25 +105,8 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + MaxEncodedLen
             + TypeInfo;
-        type Proof: Parameter
-            + Member
-            + TypeInfo
-            + Proof<
-                Self::Balance,
-                Self::AccountId,
-                Self::MaxAllowedSources,
-                Self::MaxSlots,
-                Self::RegistrationExtra,
-            >;
-        type RegistrationExtra: From<
-            RegistrationExtra<Self::Balance, Self::AccountId, Self::MaxSlots>,
-        >;
-        /// The max length of the allowed sources list for a registration.
-        #[pallet::constant]
-        type MaxAllowedSources: Get<u32> + ParameterBound;
-        /// The maximum allowed slots and therefore maximum length of the planned executions per job.
-        #[pallet::constant]
-        type MaxSlots: Get<u32> + ParameterBound;
+        type Proof: Parameter + Member + TypeInfo + Proof<Self, I>;
+
         /// The maximum transmitters accepted to submit a state root per snapshot.
         #[pallet::constant]
         type MaxTransmittersPerSnapshot: Get<u32> + ParameterBound;
@@ -137,11 +120,7 @@ pub mod pallet {
         /// **NOTE**: the quorum size must be larger than `ceil(number of transmitters / 2)`, otherwise multiple root hashes could become valid in terms of [`Pallet::validate_state_merkle_root`].
         type TransmissionQuorum: Get<u8>;
 
-        type ActionExecutor: ActionExecutor<
-            Self::AccountId,
-            Self::MaxAllowedSources,
-            Self::RegistrationExtra,
-        >;
+        type ActionExecutor: ActionExecutor<Self>;
 
         type WeightInfo: WeightInfo;
     }
@@ -378,7 +357,7 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             let _ = ensure_signed(origin)?;
 
-            let derived_root = proof.calculate_root::<T, I>().map_err(|err| {
+            let derived_root = proof.calculate_root().map_err(|err| {
                 log::debug!("Failed to validate proof: {:?}", &err);
 
                 Error::<T, I>::ProofInvalid
@@ -443,7 +422,7 @@ pub mod pallet {
             <CurrentTargetChainOwner<T, I>>::set(owner);
         }
 
-        /// Processes a message with `key and `payload`.
+        /// Processes a message with `key` and `payload`.
         ///
         /// **When action processing fails, the message sequence increment above is still persisted, only side-effects produced by the action should be reverted**.
         /// See [`Self::process_action()`].

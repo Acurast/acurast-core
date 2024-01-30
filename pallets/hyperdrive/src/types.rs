@@ -9,9 +9,7 @@ use sp_std::prelude::*;
 use sp_std::vec;
 use strum_macros::{EnumString, IntoStaticStr};
 
-use pallet_acurast::{JobId, JobRegistration};
-
-use crate::Config;
+use pallet_acurast::{EnvironmentFor, JobId, JobRegistration};
 
 pub const STATE_TRANSMITTER_UPDATES_MAX_LENGTH: u32 = 50;
 pub type StateTransmitterUpdates<T> =
@@ -126,6 +124,8 @@ pub enum RawAction {
     DeregisterJob,
     #[strum(serialize = "FINALIZE_JOB")]
     FinalizeJob,
+    #[strum(serialize = "SET_JOB_ENVIRONMENT")]
+    SetJobEnvironment,
     #[strum(serialize = "NOOP")]
     Noop = 255,
 }
@@ -136,36 +136,41 @@ impl TryFrom<u16> for RawAction {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(RawAction::RegisterJob),
-            1 => Ok(RawAction::DeregisterJob),
-            2 => Ok(RawAction::FinalizeJob),
-            255 => Ok(RawAction::Noop),
+            o if o == RawAction::RegisterJob as u16 => Ok(RawAction::RegisterJob),
+            o if o == RawAction::DeregisterJob as u16 => Ok(RawAction::DeregisterJob),
+            o if o == RawAction::FinalizeJob as u16 => Ok(RawAction::FinalizeJob),
+            o if o == RawAction::SetJobEnvironment as u16 => Ok(RawAction::SetJobEnvironment),
+            o if o == RawAction::Noop as u16 => Ok(RawAction::Noop),
             _ => Err(b"Unknown action index".to_vec()),
         }
     }
 }
 
-impl<AccountId, MaxAllowedSources: Get<u32>, Extra>
-    From<&ParsedAction<AccountId, MaxAllowedSources, Extra>> for RawAction
-{
-    fn from(action: &ParsedAction<AccountId, MaxAllowedSources, Extra>) -> Self {
+impl<T: pallet_acurast::Config> From<&ParsedAction<T>> for RawAction {
+    fn from(action: &ParsedAction<T>) -> Self {
         match action {
             ParsedAction::RegisterJob(_, _) => RawAction::RegisterJob,
             ParsedAction::DeregisterJob(_) => RawAction::DeregisterJob,
             ParsedAction::FinalizeJob(_) => RawAction::FinalizeJob,
+            ParsedAction::SetJobEnvironment(_, _) => RawAction::SetJobEnvironment,
             ParsedAction::Noop => RawAction::Noop,
         }
     }
 }
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
-pub enum ParsedAction<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+#[scale_info(skip_type_params(T))]
+pub enum ParsedAction<T: pallet_acurast::Config> {
     RegisterJob(
-        JobId<AccountId>,
-        JobRegistration<AccountId, MaxAllowedSources, Extra>,
+        JobId<T::AccountId>,
+        JobRegistration<T::AccountId, T::MaxAllowedSources, T::RegistrationExtra>,
     ),
-    DeregisterJob(JobId<AccountId>),
-    FinalizeJob(Vec<JobId<AccountId>>),
+    DeregisterJob(JobId<T::AccountId>),
+    FinalizeJob(Vec<JobId<T::AccountId>>),
+    SetJobEnvironment(
+        JobId<T::AccountId>,
+        BoundedVec<(T::AccountId, EnvironmentFor<T>), T::MaxSlots>,
+    ),
     Noop,
 }
 
@@ -173,23 +178,19 @@ pub type MessageIdentifier = u128;
 
 pub type JobRegistrationFor<T> = JobRegistration<
     <T as frame_system::Config>::AccountId,
-    <T as Config>::RegistrationExtra,
-    <T as Config>::MaxAllowedSources,
+    <T as pallet_acurast::Config>::RegistrationExtra,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
 >;
 
-pub trait MessageParser<AccountId, MaxAllowedSources: Get<u32>, Extra> {
+pub trait MessageParser<T: pallet_acurast::Config> {
     type Error;
 
     fn parse_key(encoded: &[u8]) -> Result<MessageIdentifier, Self::Error>;
-    fn parse_value(
-        encoded: &[u8],
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error>;
+    fn parse_value(encoded: &[u8]) -> Result<ParsedAction<T>, Self::Error>;
 }
 
-pub trait ActionExecutor<AccountId, MaxAllowedSources: Get<u32>, Extra> {
-    fn execute(
-        action: ParsedAction<AccountId, MaxAllowedSources, Extra>,
-    ) -> DispatchResultWithPostInfo;
+pub trait ActionExecutor<T: pallet_acurast::Config> {
+    fn execute(action: ParsedAction<T>) -> DispatchResultWithPostInfo;
 }
 
 /// Tracks the progress during `submit_message`, intended to be included in events.

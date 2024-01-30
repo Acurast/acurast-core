@@ -8,7 +8,7 @@ use frame_support::pallet_prelude::ConstU32;
 use frame_support::BoundedVec;
 use pallet_acurast::{
     AllowedSources, EthereumAddressBytes, JobModule, JobModules, JobRegistration, MultiOrigin,
-    ParameterBound, Schedule, Script,
+    Schedule, Script,
 };
 use pallet_acurast_marketplace::{
     JobRequirements, PlannedExecution, PlannedExecutions, RegistrationExtra,
@@ -64,6 +64,22 @@ sol! {
         uint32 networkRequests;
         uint32 storageCapacity;
     }
+
+    struct EthEnvironmentVariable {
+        bytes key;
+        bytes value;
+    }
+
+    struct EthProcessorEnvironmentVariables {
+        bytes32 source;
+        EthEnvironmentVariable[] variables;
+    }
+
+    struct EthEnvironmentVariablesPayload {
+        uint128 jobId;
+        bytes publicKey;
+        EthProcessorEnvironmentVariables[] processors;
+    }
 }
 
 /// Errors specific to the Ethereum instance
@@ -74,6 +90,7 @@ pub enum EthereumValidationError {
     UnknownAction(u16),
     IllFormattedMessage,
     IllFormattedJobRegistration,
+    IllFormattedEnvironmentVariablesPayload,
     InvalidOriginAddress,
     InvalidJobModule,
     CouldNotParseAcurastAddress,
@@ -91,33 +108,27 @@ pub type EthereumProofItems = BoundedVec<EthereumProofItem, ConstU32<32>>;
 pub type EthereumProofValue = BoundedVec<u8, ConstU32<1024>>;
 
 #[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, Eq, PartialEq)]
-#[scale_info(skip_type_params(AccountConverter))]
-pub struct EthereumProof<AccountConverter, AccountId> {
+#[scale_info(skip_type_params(T, AccountConverter))]
+pub struct EthereumProof<T, AccountConverter> {
     pub account_proof: EthereumProofItems,
     pub storage_proof: EthereumProofItems,
     pub message_id: MessageIdentifier,
     pub value: EthereumProofValue,
     #[cfg(any(test, feature = "runtime-benchmarks"))]
-    pub marker: PhantomData<(AccountConverter, AccountId)>,
+    pub marker: PhantomData<(T, AccountConverter)>,
     #[cfg(not(any(test, feature = "runtime-benchmarks")))]
-    marker: PhantomData<(AccountConverter, AccountId)>,
+    marker: PhantomData<(T, AccountConverter)>,
 }
 
-impl<Balance, AccountConverter, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    traits::Proof<Balance, AccountId, MaxAllowedSources, MaxSlots, Extra>
-    for EthereumProof<AccountConverter, AccountId>
+impl<T, I: 'static, AccountConverter> traits::Proof<T, I> for EthereumProof<T, AccountConverter>
 where
-    Balance: From<u128>,
-    MaxAllowedSources: ParameterBound,
-    MaxSlots: ParameterBound,
-    AccountConverter: TryFrom<Vec<u8>> + Into<AccountId>,
-    Extra: From<RegistrationExtra<Balance, AccountId, MaxSlots>>,
+    T: crate::pallet::Config<I>,
+    T::RegistrationExtra: From<RegistrationExtra<T::Balance, T::AccountId, T::MaxSlots>>,
+    AccountConverter: TryFrom<Vec<u8>> + Into<T::AccountId>,
 {
     type Error = EthereumValidationError;
 
-    fn calculate_root<T: crate::pallet::Config<I>, I: 'static>(
-        self: &Self,
-    ) -> Result<[u8; 32], Self::Error> {
+    fn calculate_root(self: &Self) -> Result<[u8; 32], Self::Error> {
         let account_proof: Vec<Vec<u8>> = self
             .account_proof
             .iter()
@@ -168,9 +179,7 @@ where
         Ok(self.message_id)
     }
 
-    fn message(
-        self: &Self,
-    ) -> Result<ParsedAction<AccountId, MaxAllowedSources, Extra>, Self::Error> {
+    fn message(self: &Self) -> Result<ParsedAction<T>, Self::Error> {
         // EVM storage is divided in slots of 32 bytes. If the data is longer than 32 bytes,
         // the first slot will contain the length of the data.
         let value = if self.value.len() > 32 {
@@ -190,20 +199,17 @@ where
             .map_err(|_| EthereumValidationError::InvalidOriginAddress)?;
         let origin = MultiOrigin::Ethereum(origin_address.clone());
 
+        fn convert_account_id<Account, AccountConverter: TryFrom<Vec<u8>> + Into<Account>>(
+            bytes: Vec<u8>,
+        ) -> Result<Account, EthereumValidationError> {
+            let parsed: AccountConverter = bytes
+                .try_into()
+                .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
+            Ok(parsed.into())
+        }
+
         match action {
             RawAction::RegisterJob => {
-                fn convert_account_id<
-                    Account,
-                    AccountConverter: TryFrom<Vec<u8>> + Into<Account>,
-                >(
-                    bytes: Vec<u8>,
-                ) -> Result<Account, EthereumValidationError> {
-                    let parsed: AccountConverter = bytes
-                        .try_into()
-                        .map_err(|_| EthereumValidationError::CouldNotParseAcurastAddress)?;
-                    Ok(parsed.into())
-                }
-
                 let job_registration: AcurastJobRegistration =
                     AcurastJobRegistration::decode_single(&decoded.payload, true)
                         .map_err(|_| EthereumValidationError::IllFormattedJobRegistration)?;
@@ -223,33 +229,33 @@ where
                         start_delay: m.startDelay,
                     })
                 }
-                let executions: PlannedExecutions<AccountId, MaxSlots> =
+                let executions: PlannedExecutions<T::AccountId, T::MaxSlots> =
                     PlannedExecutions::try_from(
                         job_registration
                             .requirements
                             .instantMatch
                             .into_iter()
-                            .map(convert_job_match::<AccountId, AccountConverter>)
+                            .map(convert_job_match::<T::AccountId, AccountConverter>)
                             .collect::<Result<Vec<_>, Self::Error>>()?,
                     )
                     .map_err(|_| EthereumValidationError::TooManyPlannedExecutions)?;
 
-                let extra: Extra = RegistrationExtra {
+                let extra: T::RegistrationExtra = RegistrationExtra {
                     requirements: JobRequirements {
                         slots: job_registration.requirements.slots.into(),
-                        reward: Balance::from(job_registration.requirements.reward),
+                        reward: T::Balance::from(job_registration.requirements.reward),
                         min_reputation: Some(job_registration.requirements.minReputation),
                         instant_match: Some(executions),
                     },
                 }
                 .into();
-                let allowed_sources: AllowedSources<AccountId, MaxAllowedSources> =
+                let allowed_sources: AllowedSources<T::AccountId, T::MaxAllowedSources> =
                     AllowedSources::try_from(
                         job_registration
                             .allowedSources
                             .into_iter()
                             .map(|item| {
-                                convert_account_id::<AccountId, AccountConverter>(item.to_vec())
+                                convert_account_id::<T::AccountId, AccountConverter>(item.to_vec())
                             })
                             .collect::<Result<Vec<_>, Self::Error>>()?,
                     )
@@ -299,6 +305,53 @@ where
                     .collect();
 
                 Ok(ParsedAction::FinalizeJob(jobs))
+            }
+            RawAction::SetJobEnvironment => {
+                let set_job_environments: EthEnvironmentVariablesPayload =
+                    EthEnvironmentVariablesPayload::decode_single(&decoded.payload, true).map_err(
+                        |_| EthereumValidationError::IllFormattedEnvironmentVariablesPayload,
+                    )?;
+
+                let job_id = (
+                    MultiOrigin::Ethereum(origin_address.clone()),
+                    set_job_environments.jobId,
+                );
+
+                let public_key = BoundedVec::truncate_from(set_job_environments.publicKey);
+
+                let variables = set_job_environments
+                    .processors
+                    .iter()
+                    .map(|entry| {
+                        let processor = convert_account_id::<T::AccountId, AccountConverter>(
+                            entry.source.to_vec(),
+                        )?;
+
+                        Ok((
+                            processor,
+                            pallet_acurast::Environment {
+                                public_key: public_key.clone(),
+                                variables: BoundedVec::truncate_from(
+                                    entry
+                                        .variables
+                                        .iter()
+                                        .map(|v| {
+                                            let key = BoundedVec::truncate_from(v.key.clone());
+                                            let value = BoundedVec::truncate_from(v.value.clone());
+
+                                            (key, value)
+                                        })
+                                        .collect(),
+                                ),
+                            },
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, Self::Error>>()?;
+
+                Ok(ParsedAction::SetJobEnvironment(
+                    job_id,
+                    BoundedVec::truncate_from(variables),
+                ))
             }
             RawAction::Noop => Ok(ParsedAction::Noop),
         }

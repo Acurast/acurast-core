@@ -46,6 +46,7 @@ pub enum MultiOrigin<AcurastAccountId> {
     Acurast(AcurastAccountId),
     Tezos(TezosAddressBytes),
     Ethereum(EthereumAddressBytes),
+    AlephZero(AcurastAccountId),
 }
 
 pub type TezosAddressBytes = BoundedVec<u8, CU32<36>>;

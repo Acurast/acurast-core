@@ -27,6 +27,8 @@ acurast-common = { path = "../acurast/common", default-features = false }
 pallet-acurast-hyperdrive = {path = "../hyperdrive", default-features = false }
 mmr-lib = { package = "acurast-merkle-mountain-range",  git = "https://github.com/Acurast/merkle-mountain-range", default-features = false }
 
+acurast-core-ink = { path = "../../ink/core", default-features = false }
+
 # EVM
 rlp = { version = "0.5.2", default-features = false }
 alloy-sol-types = { version = "0.3.1", default-features = false }
@@ -106,6 +108,7 @@ std = [
 	"sp-blockchain",
 	"log/std",
 	"mmr-gadget",
+	"acurast-core-ink/std"
 ]
 mmr-gadget = [
 	"futures",
