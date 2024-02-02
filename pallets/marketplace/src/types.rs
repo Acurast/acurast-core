@@ -35,7 +35,18 @@ pub type MatchFor<T> =
     Match<<T as frame_system::Config>::AccountId, <T as pallet_acurast::Config>::MaxSlots>;
 
 /// Struct defining the extra fields for a `JobRegistration`.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 pub struct RegistrationExtra<Reward, AccountId, MaxSlots: ParameterBound> {
     pub requirements: JobRequirements<Reward, AccountId, MaxSlots>,
 }
@@ -122,6 +133,8 @@ pub type PricingFor<T> = Pricing<<T as Config>::Balance>;
 ///
 /// The pricing agreed at the time of matching is stored along with an assignment.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct Assignment<Reward> {
     /// The 0-based slot index assigned to the source.
     pub slot: u8,
@@ -137,6 +150,14 @@ pub struct Assignment<Reward> {
     pub pub_keys: PubKeys,
 }
 
+#[derive(RuntimeDebug, Encode, Decode, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
+pub struct JobAssignment<Reward, AccountId, MaxAllowedSources: Get<u32>, Extra> {
+    pub job: JobRegistration<AccountId, MaxAllowedSources, Extra>,
+    pub assignment: Assignment<Reward>,
+}
+
 pub const NUMBER_OF_PUB_KEYS: u32 = 3;
 pub const PUB_KEYS_MAX_LENGTH: u32 = 33;
 
@@ -147,6 +168,8 @@ pub type PubKeys = BoundedVec<PubKey, ConstU32<NUMBER_OF_PUB_KEYS>>;
 
 /// The public key revealed by a processor.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub enum PubKey {
     SECP256r1(PubKeyBytes),
     SECP256k1(PubKeyBytes),
@@ -154,6 +177,13 @@ pub enum PubKey {
 }
 
 pub type AssignmentFor<T> = Assignment<<T as Config>::Balance>;
+
+pub type JobAssignmentFor<T> = JobAssignment<
+    <T as Config>::Balance,
+    <T as frame_system::Config>::AccountId,
+    <T as pallet_acurast::Config>::MaxAllowedSources,
+    <T as pallet_acurast::Config>::RegistrationExtra,
+>;
 
 /// The allowed sources update operation.
 #[derive(
@@ -179,6 +209,8 @@ impl Default for JobStatus {
 ///
 /// Also used to ensure that Acurast does not accept more than the expected number of reports (and pays out no more rewards).
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Copy)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct SLA {
     pub total: u64,
     pub met: u64,
@@ -191,7 +223,18 @@ pub type JobRequirementsFor<T> = JobRequirements<
 >;
 
 /// Structure representing a job registration.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
 pub struct JobRequirements<Reward, AccountId, MaxSlots: ParameterBound> {
     /// The number of execution slots to be assigned to distinct sources. Either all or no slot get assigned by matching.
     pub slots: u8,
@@ -242,7 +285,18 @@ pub struct PartialJobRegistration<Reward, AccountId, MaxAllowedSources: Get<u32>
 }
 
 /// The details for a single planned slot execution with the delay.
-#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, Eq, PartialEq)]
+#[derive(
+    RuntimeDebug,
+    Encode,
+    Decode,
+    MaxEncodedLen,
+    TypeInfo,
+    Clone,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
 pub struct PlannedExecution<AccountId> {
     /// The source.
     pub source: AccountId,
@@ -294,6 +348,9 @@ pub enum RuntimeApiError {
     /// Error when filtering matching sources failed.
     #[cfg_attr(feature = "std", error("Filtering matching sources failed."))]
     FilterMatchingSources,
+    /// Error when retrieving matched jobs.
+    #[cfg_attr(feature = "std", error("Retriving matched jobs failed."))]
+    MatchedJobs,
 }
 
 impl RuntimeApiError {

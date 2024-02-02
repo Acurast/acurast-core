@@ -1,5 +1,6 @@
 use core::marker::PhantomData;
 
+use frame_support::sp_runtime::SaturatedConversion;
 use frame_support::traits::tokens::Preservation;
 use frame_support::{
     pallet_prelude::Member,
@@ -10,7 +11,6 @@ use frame_support::{
     traits::tokens::fungible,
     PalletId,
 };
-use sp_runtime::SaturatedConversion;
 use sp_std::prelude::*;
 use xcm::prelude::AssetId;
 

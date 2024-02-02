@@ -6,6 +6,8 @@ mod types;
 
 #[cfg(test)]
 pub mod mock;
+#[cfg(feature = "std")]
+pub mod rpc;
 #[cfg(any(test, feature = "runtime-benchmarks"))]
 mod stub;
 #[cfg(test)]
@@ -421,5 +423,18 @@ pub mod pallet {
 
             Ok(().into())
         }
+    }
+}
+
+sp_api::decl_runtime_apis! {
+    /// API to interact with Acurast marketplace pallet.
+    pub trait ProcessorManagerRuntimeApi<AccountId: codec::Codec, ManagerId: codec::Codec> {
+         fn processor_update_infos(
+            source: AccountId,
+        ) -> Result<UpdateInfos, RuntimeApiError>;
+
+        fn manager_id_for_processor(
+            source: AccountId,
+        ) -> Result<ManagerId, RuntimeApiError>;
     }
 }

@@ -28,8 +28,7 @@ pub mod weights;
 
 pub(crate) use pallet::STORAGE_VERSION;
 
-use frame_support::pallet_prelude::Get;
-use pallet_acurast::MultiOrigin;
+use pallet_acurast::{Attestation, Environment, JobId, MultiOrigin, ParameterBound};
 use sp_std::prelude::*;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -37,6 +36,8 @@ pub use benchmarking::BenchmarkHelper;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use frame_support::sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
+    use frame_support::sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use frame_support::traits::tokens::Balance;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, ensure, pallet_prelude::*, traits::UnixTime,
@@ -45,8 +46,6 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use itertools::Itertools;
     use reputation::{BetaParameters, BetaReputation, ReputationEngine};
-    use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
-    use sp_runtime::{FixedPointOperand, FixedU128, Permill, SaturatedConversion};
     use sp_std::iter::once;
     use sp_std::prelude::*;
 
@@ -1175,6 +1174,8 @@ pub mod pallet {
 
         /// Filters the given `sources` by those recently seen and matching partially specified `registration`
         /// and whitelisting `consumer` if specifying a whitelist.
+        ///
+        /// Intended to be called for providing runtime API, might return corresponding error.
         pub fn filter_matching_sources(
             registration: PartialJobRegistration<T::Balance, T::AccountId, T::MaxAllowedSources>,
             sources: Vec<T::AccountId>,
@@ -1488,6 +1489,21 @@ pub mod pallet {
             Ok(().into())
         }
 
+        /// Returns the stored matches for a source.
+        ///
+        /// Intended to be called for providing runtime API, might return corresponding error.
+        pub fn stored_matches_for_source(
+            source: T::AccountId,
+        ) -> Result<Vec<JobAssignmentFor<T>>, RuntimeApiError> {
+            <StoredMatches<T>>::iter_prefix(source)
+                .map(|(job_id, assignment)| {
+                    let job = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
+                        .ok_or(RuntimeApiError::MatchedJobs)?;
+                    Ok(JobAssignment { job, assignment })
+                })
+                .collect()
+        }
+
         /// Returns the current timestamp.
         pub fn now() -> Result<u64, Error<T>> {
             Ok(<T as pallet_acurast::Config>::UnixTime::now()
@@ -1500,12 +1516,25 @@ pub mod pallet {
 
 sp_api::decl_runtime_apis! {
     /// API to interact with Acurast marketplace pallet.
-    pub trait MarketplaceRuntimeApi<R: codec::Codec, AccountId: codec::Codec, MaxAllowedSources: Get<u32>> {
+    pub trait MarketplaceRuntimeApi<Reward: codec::Codec, AccountId: codec::Codec, Extra: codec::Codec, MaxAllowedSources: ParameterBound, MaxEnvVars: ParameterBound, EnvKeyMaxSize: ParameterBound, EnvValueMaxSize: ParameterBound> {
          fn filter_matching_sources(
-            registration: PartialJobRegistration<R, AccountId, MaxAllowedSources>,
+            registration: PartialJobRegistration<Reward, AccountId, MaxAllowedSources>,
             sources: Vec<AccountId>,
             consumer: Option<MultiOrigin<AccountId>>,
             latest_seen_after: Option<u128>,
         ) -> Result<Vec<AccountId>, RuntimeApiError>;
+
+        fn job_environment(
+            job_id: JobId<AccountId>,
+            source: AccountId,
+        ) -> Result<Option<Environment<MaxEnvVars, EnvKeyMaxSize, EnvValueMaxSize>>, RuntimeApiError>;
+
+        fn matched_jobs(
+            source: AccountId,
+        ) -> Result<Vec<JobAssignment<Reward, AccountId, MaxAllowedSources, Extra>>, RuntimeApiError>;
+
+        fn attestation(
+            source: AccountId,
+        ) -> Result<Option<Attestation>, RuntimeApiError>;
     }
 }

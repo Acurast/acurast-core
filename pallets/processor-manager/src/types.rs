@@ -1,11 +1,13 @@
+use acurast_common::ListUpdate;
+use core::fmt::Debug;
 use frame_support::{
     pallet_prelude::*,
     sp_runtime::traits::{IdentifyAccount, MaybeDisplay, Verify},
     traits::{IsType, UnixTime},
 };
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
 use sp_core::H256;
-
-use acurast_common::ListUpdate;
 
 use crate::Config;
 
@@ -94,6 +96,8 @@ pub type ProcessorPairingUpdate<AccountId, Signature> =
     ListUpdate<ProcessorPairing<AccountId, Signature>>;
 
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct Version {
     /// Number representing the device's platform:
     /// 0: Android
@@ -105,7 +109,50 @@ pub type BinaryHash = H256;
 pub(crate) const MAX_LOCATION_LENGTH: u32 = 200;
 pub type BinaryLocation = BoundedVec<u8, ConstU32<MAX_LOCATION_LENGTH>>;
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct UpdateInfo {
     pub version: Version,
     pub binary_location: BinaryLocation,
+}
+
+#[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
+pub struct UpdateInfos {
+    pub udpate_info: UpdateInfo,
+    pub binary_hash: BinaryHash,
+}
+
+/// Runtime API error.
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(RuntimeDebug, codec::Encode, codec::Decode, PartialEq, Eq, TypeInfo)]
+pub enum RuntimeApiError {
+    /// Error when retrieving processor update infos.
+    #[cfg_attr(feature = "std", error("Retrieving processor update infos failed."))]
+    ProcessorUpdateInfos,
+}
+
+impl RuntimeApiError {
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_error(self, e: impl Debug) -> Self {
+        log::error!(
+            target: "runtime::acurast_processor_manager",
+            "[{:?}] error: {:?}",
+            self,
+            e,
+        );
+        self
+    }
+
+    /// Consume given error `e` with `self` and generate a native log entry with error details.
+    pub fn log_debug(self, e: impl Debug) -> Self {
+        log::debug!(
+            target: "runtime::acurast_processor_manager",
+            "[{:?}] error: {:?}",
+            self,
+            e,
+        );
+        self
+    }
 }
