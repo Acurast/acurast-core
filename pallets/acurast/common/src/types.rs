@@ -83,6 +83,8 @@ pub type CertificateRevocationListUpdate = ListUpdate<SerialNumber>;
 
 /// Structure representing a job registration.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct JobRegistration<AccountId, MaxAllowedSources: Get<u32>, Extra> {
     /// The script to execute. It is a vector of bytes representing a utf8 string. The string needs to be a ipfs url that points to the script.
     pub script: Script,
@@ -109,6 +111,8 @@ pub type PubKeyBytes = BoundedVec<u8, ConstU32<PUB_KEYS_MAX_LENGTH>>;
 
 /// Structure representing execution environment variables encrypted for a specific processor.
 #[derive(RuntimeDebug, Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct Environment<
     MaxEnvVars: ParameterBound,
     KeyMaxSize: ParameterBound,
@@ -328,6 +332,16 @@ impl<const T: u32> TypedGet for CU32<T> {
     type Type = u32;
     fn get() -> u32 {
         T
+    }
+}
+
+#[cfg(feature = "std")]
+impl<const T: u32> Serialize for CU32<T> {
+    fn serialize<D>(&self, serializer: D) -> Result<D::Ok, D::Error>
+    where
+        D: serde::Serializer,
+    {
+        serializer.serialize_u32(<Self as TypedGet>::get())
     }
 }
 

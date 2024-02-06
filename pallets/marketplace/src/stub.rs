@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use frame_support::sp_runtime::AccountId32;
 use hex_literal::hex;
-use sp_runtime::AccountId32;
 
 use pallet_acurast::{AttestationChain, Script, SerialNumber};
 

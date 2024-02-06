@@ -1,7 +1,7 @@
 #![cfg(test)]
 
+use frame_support::sp_runtime::{bounded_vec, MultiAddress, Permill};
 use frame_support::{assert_err, assert_ok, traits::Hooks};
-use sp_runtime::{bounded_vec, MultiAddress, Permill};
 
 use pallet_acurast::{
     utils::validate_and_extract_attestation, JobModules, JobRegistrationFor, Schedule,

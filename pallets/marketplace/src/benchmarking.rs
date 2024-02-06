@@ -1,11 +1,11 @@
 use frame_benchmarking::{benchmarks, whitelist_account};
-use frame_support::{assert_ok, traits::IsType};
-use frame_system::RawOrigin;
-use sp_core::*;
-use sp_runtime::{
+use frame_support::sp_runtime::{
     traits::{IdentifyAccount, Verify},
     DispatchError,
 };
+use frame_support::{assert_ok, traits::IsType};
+use frame_system::RawOrigin;
+use sp_core::*;
 use sp_std::prelude::*;
 
 use crate::Config;
