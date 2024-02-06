@@ -3,10 +3,10 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use sp_core::{crypto::UncheckedFrom, ecdsa, ed25519, sr25519, RuntimeDebug, H256, ConstU32};
+use sp_core::{crypto::UncheckedFrom, ecdsa, ed25519, sr25519, ConstU32, RuntimeDebug, H256};
 use sp_runtime::{
     traits::{IdentifyAccount, Lazy, Verify},
-    AccountId32, MultiSignature as SPMultiSignature, MultiSigner as SPMultiSigner, BoundedVec,
+    AccountId32, BoundedVec, MultiSignature as SPMultiSignature, MultiSigner as SPMultiSigner,
 };
 
 use crate::application_crypto::p256::{Public, Signature};
@@ -263,8 +263,13 @@ impl Verify for MultiSignature {
                 p256::ecdsa::recoverable::Signature::try_from(sig.as_ref())
                     .and_then(|signature| {
                         let msg_bytes = msg.get();
-                        let msg = if msg_bytes.len() != 32 { sp_io::hashing::sha2_256(msg_bytes) } else { msg_bytes.try_into().unwrap() };
-                        let signed_msg = sp_io::hashing::sha2_256(&[auth_data.as_slice(), &msg].concat());
+                        let msg = if msg_bytes.len() != 32 {
+                            sp_io::hashing::sha2_256(msg_bytes)
+                        } else {
+                            msg_bytes.try_into().unwrap()
+                        };
+                        let signed_msg =
+                            sp_io::hashing::sha2_256(&[auth_data.as_slice(), &msg].concat());
                         signature.recover_verifying_key(&signed_msg)
                     })
                     .map(|pubkey| {
