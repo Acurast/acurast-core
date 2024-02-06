@@ -11,6 +11,9 @@ use sp_runtime::{
 
 use crate::application_crypto::p256::{Public, Signature};
 
+pub type AuthenticatorData = BoundedVec<u8, ConstU32<37>>;
+pub type MessagePrefix = BoundedVec<u8, ConstU32<100>>;
+
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Eq, PartialEq, Clone, Encode, Decode, MaxEncodedLen, RuntimeDebug, TypeInfo)]
 pub enum MultiSignature {
@@ -23,7 +26,9 @@ pub enum MultiSignature {
     /// An ECDSA/SECP256r1 signature
     P256(Signature),
     /// An ECDSA/SECP256r1 signature with additional authenticator data
-    P256WithAuthData(Signature, BoundedVec<u8, ConstU32<37>>),
+    P256WithAuthData(Signature, AuthenticatorData),
+    /// An Ed25519 signature with message prefix.
+    Ed25519WithPrefix(ed25519::Signature, MessagePrefix),
 }
 
 impl From<ed25519::Signature> for MultiSignature {
@@ -267,6 +272,11 @@ impl Verify for MultiSignature {
                             == <dyn AsRef<[u8; 32]>>::as_ref(who)
                     })
                     .unwrap_or(false)
+            }
+            (Self::Ed25519WithPrefix(sig, prefix), _) => {
+                let msig: SPMultiSignature = sig.clone().into();
+                let message = sp_io::hashing::blake2_256(&[prefix.as_slice(), msg.get()].concat());
+                msig.verify(&message[..], signer)
             }
         }
     }
