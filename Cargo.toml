@@ -19,7 +19,7 @@ exclude = ["pallets/proxy"]
 [workspace.package]
 authors = [ "Papers AG" ]
 repository = "https://github.com/Acurast/acurast-core"
-version = "0.3.2"
+version = "0.3.3"
 
 # TODO: Temporary workaround (https://substrate.stackexchange.com/questions/9870)
 [patch.crates-io]
