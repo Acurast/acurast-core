@@ -154,6 +154,7 @@ pub struct Assignment<Reward> {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
 pub struct JobAssignment<Reward, AccountId, MaxAllowedSources: Get<u32>, Extra> {
+    pub job_id: JobId<AccountId>,
     pub job: JobRegistration<AccountId, MaxAllowedSources, Extra>,
     pub assignment: Assignment<Reward>,
 }

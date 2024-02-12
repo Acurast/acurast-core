@@ -1499,7 +1499,11 @@ pub mod pallet {
                 .map(|(job_id, assignment)| {
                     let job = <StoredJobRegistration<T>>::get(&job_id.0, &job_id.1)
                         .ok_or(RuntimeApiError::MatchedJobs)?;
-                    Ok(JobAssignment { job, assignment })
+                    Ok(JobAssignment {
+                        job_id,
+                        job,
+                        assignment,
+                    })
                 })
                 .collect()
         }
