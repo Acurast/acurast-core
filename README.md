@@ -1,3 +1,5 @@
+This repository has been archived and the code was moved to [acurast-substrate](https://github.com/Acurast/acurast-substrate).
+
 # Acurast
 ## 🚧🚧🚧 The project is still a work in progress 🚧🚧🚧
 
